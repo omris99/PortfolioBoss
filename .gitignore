@@ -1,0 +1,14 @@
+# build output
+out/
+target/
+*.class
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+
+# local secrets / config (never commit real keys)
+config/local.env
