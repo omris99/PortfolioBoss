@@ -5,8 +5,11 @@ import com.ib.client.Decimal;
 import com.ib.client.DefaultEWrapper;
 import com.ib.client.EClientSocket;
 import portfolioboss.model.Holding;
+import portfolioboss.model.PortfolioSnapshot;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -33,9 +36,15 @@ public class PortfolioWrapper extends DefaultEWrapper {
     private final Map<String, Holding> holdings = new LinkedHashMap<>();
     private final CountDownLatch portfolioDownloaded = new CountDownLatch(1);
     private volatile boolean connectionFailed = false;
+    private volatile PortfolioSnapshot snapshot;
 
     void setClient(EClientSocket client) {
         this.client = client;
+    }
+
+    /** The finished download, or {@code null} until {@code accountDownloadEnd} has fired. */
+    PortfolioSnapshot snapshot() {
+        return snapshot;
     }
 
     /** Blocks until the initial portfolio download finishes or the timeout elapses. */
@@ -94,6 +103,8 @@ public class PortfolioWrapper extends DefaultEWrapper {
 
     @Override
     public void accountDownloadEnd(String accountName) {
+        snapshot = new PortfolioSnapshot(
+                account, Instant.now(), netLiquidation, totalCashValue, List.copyOf(holdings.values()));
         printReport();
         if (client != null && client.isConnected()) {
             client.reqAccountUpdates(false, account);   // stop the subscription; we only wanted a snapshot

@@ -3,6 +3,7 @@ package portfolioboss.ib;
 import com.ib.client.EClientSocket;
 import com.ib.client.EJavaSignal;
 import com.ib.client.EReader;
+import portfolioboss.model.PortfolioSnapshot;
 
 import java.util.concurrent.TimeUnit;
 
@@ -65,6 +66,11 @@ public class IbGateway {
 
     public boolean connectionFailed() {
         return wrapper.connectionFailed();
+    }
+
+    /** The downloaded portfolio, or {@code null} if {@link #awaitPortfolio} did not succeed. */
+    public PortfolioSnapshot snapshot() {
+        return wrapper.snapshot();
     }
 
     public void disconnect() {

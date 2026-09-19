@@ -34,4 +34,5 @@ find "${HERE}/src/main/java" -name '*.java' > "${OUT}/sources.txt"
 javac -d "${OUT}" -cp "${CP}" @"${OUT}/sources.txt"
 
 echo "› running…"
+cd "${HERE}"   # Main looks for ui/ relative to the working directory
 java -cp "${OUT}:${CP}" portfolioboss.Main "$@"
