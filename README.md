@@ -19,7 +19,7 @@ from the broker via `reqAccountUpdates`. It connects, prints the portfolio, and 
 snapshot to a small React UI that shows the positions table.
 
 ```
-PortfolioBoss v0.2.0 (RunID: 190920261035) · read-only portfolio reader
+PortfolioBoss v0.3.0 (RunID: 190920261035) · read-only portfolio reader
 [ib] connecting to 127.0.0.1:7496 (clientId=101, read-only)
 [ib] connection ready
 [ib] account: U1234567
@@ -38,10 +38,12 @@ TOTAL                                              104,159.00      +5,731.00
 ## Prerequisites
 
 - **JDK 21+** (matches IBBot).
+- **Maven 3.9+** (`brew install maven`) — the build; `run.sh` calls it.
 - **Node 20.19+** to run the UI in `ui/`.
 - **IB TWS or Gateway running and logged in**, with *Configure → API → Enable ActiveX and Socket
   Clients* turned on.
-- The TWS API jar at `~/DevTools/twsapi/TwsApi.jar` (the same one IBBot uses).
+- The TWS API jar at `~/DevTools/twsapi/TwsApi.jar` (the same one IBBot uses). It is not on Maven
+  Central, so `run.sh` registers it in your local Maven repository (`~/.m2`) the first time.
 
 ## Run
 
@@ -53,6 +55,8 @@ TOTAL                                              104,159.00      +5,731.00
 
 > **Client id:** the trading bot connects as client id `0`. PortfolioBoss defaults to `101` so both
 > can be connected to TWS at the same time. If you change it, keep it distinct from the bot's.
+
+Tests need no TWS: `mvn test`.
 
 ## UI
 
@@ -79,7 +83,7 @@ run it again. The UI is styled after IBBot's (React, Vite, Tailwind, dark slate 
 | Milestone | Goal |
 |---|---|
 | **0** ✅ | Read-only connect to IB, print real holdings + average cost. |
-| 1 | Persist holdings + a **written thesis and status** per holding (Postgres/JPA); expose over REST. |
+| 1 | Persist holdings + a **written thesis and status** per holding (Postgres/JPA); expose over REST. *Started: Maven + Spring Boot; the local API is Spring MVC.* |
 | 2 | React/TypeScript UI on real data (the "Horizon" demo is the visual target). *Started: the positions table.* |
 | 3 | Analytics — concentration, sector exposure, benchmark vs. SPY, averaging-down calculator on real cost basis. |
 | 4 | Fundamentals / earnings / dividends (Finnhub), rule-based alerts, decision journal. |
@@ -87,12 +91,18 @@ run it again. The UI is styled after IBBot's (React, Vite, Tailwind, dark slate 
 ## Layout
 
 ```
+pom.xml                    # Maven build: Java 21, Spring Boot 4.1.1, JUnit 5
 src/main/java/portfolioboss/
-├── Main.java              # entry point: read the portfolio, print it, serve it to the UI
+├── Main.java              # Spring Boot entry point
+├── TwsPortfolioRunner.java  # startup flow: read the portfolio from TWS, hand it to the API, open the UI
 ├── AppMetadata.java       # version, startup signature, and the changelog (newest entry first)
 ├── api/
-│   ├── ApiServer.java     # GET /api/portfolio on localhost (JDK HttpServer)
-│   └── PortfolioJson.java # hand-written JSON for the snapshot
+│   ├── PortfolioController.java  # GET /api/portfolio on localhost (Spring MVC)
+│   ├── SnapshotStore.java        # holds the snapshot for the controller (temporary, until the database)
+│   └── response/                 # what the UI receives
+│       ├── PortfolioResponse.java  # the body of GET /api/portfolio
+│       ├── HoldingResponse.java    # one holding, with cost basis and P&L %
+│       └── JsonNumbers.java        # NaN / infinity become null
 ├── ib/
 │   ├── IbGateway.java     # IB socket connection + reader loop (read-only)
 │   └── PortfolioWrapper.java  # EWrapper callbacks: reads holdings, prints, unsubscribes
@@ -101,9 +111,10 @@ src/main/java/portfolioboss/
 │   └── PortfolioSnapshot.java  # account, timestamp, net liquidation, cash, holdings
 └── ui/
     └── UiLauncher.java    # starts the UI dev server and opens it in the browser
+src/main/resources/application.properties  # loopback address, port 8080
+src/test/java/portfolioboss/               # JUnit: HoldingTest, api/PortfolioControllerTest
 
 ui/                        # React 19 + Vite + Tailwind; the positions table and account summary
 ```
 
-The directory layout is Maven-standard so Milestone 1 can add a build tool without moving files.
-Milestone 0 builds with plain `javac` via `run.sh` — no build tool required yet.
+Built with Maven (`pom.xml`); `./run.sh` wraps `mvn spring-boot:run`.

@@ -30,16 +30,18 @@ Stage and commit the current changes.
 (`docs: ...`, `chore: ...`). Never invent a scope that isn't on this list; if nothing
 fits, leave it out.
 
-*In the code today (Milestone 0 + the first UI slice):*
+*In the code today (Milestone 0 + the first UI slice, built with Maven and Spring Boot):*
 
 | Scope | Covers |
 |---|---|
-| `ib` | `IbGateway`, `PortfolioWrapper` — socket, reader loop, EWrapper callbacks |
+| `ib` | `IbGateway`, `PortfolioWrapper`, `TwsPortfolioRunner` — socket, reader loop, EWrapper callbacks, and the startup read from TWS |
 | `model` | `Holding`, `PortfolioSnapshot` and the derived portfolio math |
 | `report` | the console snapshot report and its formatting |
-| `api` | `ApiServer`, `PortfolioJson` — the local HTTP API (`GET /api/portfolio`); becomes Spring Boot REST in M1 |
+| `api` | `PortfolioController`, `SnapshotStore` and the `api/response/` records — the local Spring MVC API (`GET /api/portfolio`) |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
-| `config` | `run.sh`, build setup, `.claude/`, tooling |
+| `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
+
+Tests (`src/test/`) take the scope of the code they cover.
 
 *Planned — add as each milestone lands (see [TODO.md](../../../TODO.md)):*
 
