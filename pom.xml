@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Spring Boot's tested-together dependency versions: Spring libraries need no <version> below. -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>portfolioboss</groupId>
+    <artifactId>portfolioboss</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+
+    <properties>
+        <java.version>21</java.version>
+    </properties>
+
+    <dependencies>
+        <!-- Spring MVC controllers + embedded Tomcat + Jackson (JSON). Spring Boot 4 name; not spring-boot-starter-web. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+        <!-- JUnit 5, MockMvc, AssertJ, Mockito -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- IB's TWS API is not on Maven Central: run.sh installs ~/DevTools/twsapi/TwsApi.jar into the
+             local Maven repository. "local" is only a label, not a real version. -->
+        <dependency>
+            <groupId>com.interactivebrokers</groupId>
+            <artifactId>tws-api</artifactId>
+            <version>local</version>
+        </dependency>
+        <!-- Same version the TWS API's own pom declares. -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>4.29.3</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Adds `mvn spring-boot:run` and packages a runnable jar. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

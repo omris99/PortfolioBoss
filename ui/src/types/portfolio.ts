@@ -1,4 +1,4 @@
-/** Mirrors the JSON served by `GET /api/portfolio` (see PortfolioJson.java). */
+/** Mirrors the JSON served by `GET /api/portfolio` (see PortfolioResponse and HoldingResponse in api/response/). */
 
 export interface Holding {
   symbol: string;

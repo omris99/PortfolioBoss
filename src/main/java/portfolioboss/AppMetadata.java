@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.2.0";
+    public static final String VERSION = "0.3.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,15 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.3.0: [Maven and Spring Boot: Spring MVC API, first tests]
+ * pom.xml added: Maven build (Java 21, Spring Boot 4.1.1, JUnit 5) replaces the javac build; protobuf-java is now an ordinary dependency instead of a jar directory on the classpath.
+ * run.sh now wraps mvn spring-boot:run and registers the TWS API jar in the local Maven repository once, since the jar is not on Maven Central; usage (./run.sh 7497 102) is unchanged.
+ * Main is now a Spring Boot application: TwsPortfolioRunner reads TWS after the web server is up, then stores the snapshot and opens the UI; it still exits at once when TWS is unreachable or silent.
+ * PortfolioController / SnapshotStore replace ApiServer / PortfolioJson (deleted): Spring MVC serves the same GET /api/portfolio, now answering 503 until the snapshot has been read from TWS.
+ * application.properties added: the API stays bound to 127.0.0.1:8080 and Spring's startup banner is turned off so it does not mix with the [ib] console lines.
+ * PortfolioResponse / HoldingResponse added: Jackson writes the same JSON field names as before, so the UI is unchanged; JsonNumbers turns IB's NaN and infinity into null rather than the string NaN.
+ * HoldingTest / PortfolioControllerTest added: the first JUnit tests — derived cost basis and P&L percent, and the UI's JSON contract (field names, null figures, 503, GET only); no TWS needed.
+ *
  * VERSION 0.2.0: [First UI slice: local API, positions table, automatic launch]
  * PortfolioSnapshot added: account, timestamp, net liquidation, cash and holdings of one IB download; PortfolioWrapper stores it and IbGateway.snapshot() exposes it.
  * ApiServer / PortfolioJson added: GET /api/portfolio on the loopback interface only (JDK HttpServer, hand-written JSON, NaN becomes null); one read-only endpoint, other methods get 405.

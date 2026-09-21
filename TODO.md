@@ -106,7 +106,7 @@ Compiles clean against the real IB jar; **not yet run against live TWS** — nee
 
 ### Milestone 1 — Persist holdings + thesis (the new core)
 This is where the actual product begins: the **written thesis**, which exists nowhere today.
-- [ ] `brew install maven`; convert the build to Maven (layout is already Maven-standard)
+- [x] `brew install maven`; convert the build to Maven (layout is already Maven-standard)
 - [ ] Postgres + JPA: `holding` (snapshot from IB) and `thesis` (why / expectation / **sell trigger** / status: valid·review·weakened·broken / weight_limit / last_reviewed_at)
 - [ ] Spring Boot REST: `GET /portfolio` (live holdings joined with stored thesis), `PUT /thesis/{symbol}`
 - [ ] A daily NAV snapshot row (feeds TWR later)
