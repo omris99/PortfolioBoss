@@ -30,7 +30,7 @@ Stage and commit the current changes.
 (`docs: ...`, `chore: ...`). Never invent a scope that isn't on this list; if nothing
 fits, leave it out.
 
-*In the code today (Milestone 0 + the first UI slice, built with Maven and Spring Boot):*
+*In the code today (Milestone 0 + the first UI slice + the database schema, built with Maven and Spring Boot):*
 
 | Scope | Covers |
 |---|---|
@@ -38,6 +38,7 @@ fits, leave it out.
 | `model` | `Holding`, `PortfolioSnapshot` and the derived portfolio math |
 | `report` | the console snapshot report and its formatting |
 | `api` | `PortfolioController`, `SnapshotStore` and the `api/response/` records — the local Spring MVC API (`GET /api/portfolio`) |
+| `db` | `portfolioboss.db` (entities, repositories, and later the sync and the daily NAV snapshot), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 
@@ -48,7 +49,6 @@ Tests (`src/test/`) take the scope of the code they cover.
 | Scope | Arrives |
 |---|---|
 | `thesis` | M1 — the written thesis per holding (the actual product) |
-| `persistence` | M1 — Postgres / JPA, `holding` + `thesis` tables, daily NAV snapshot |
 | `analytics` | M3 — concentration, correlated clusters, TWR, SPY benchmark |
 | `averaging` | M3 — the averaging-down calculator and its verdict ladder |
 | `alerts` | M4 — rule-based alerts |

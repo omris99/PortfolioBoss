@@ -66,7 +66,7 @@ src/main/java/portfolioboss/
 ├── Main.java                # @SpringBootApplication בלבד
 ├── TwsPortfolioRunner.java  # ApplicationRunner (TWS → sync → UI). הבעלים של host/port/clientId
 ├── ib/  model/  ui/         # IbGateway, PortfolioWrapper, Holding(+conId), PortfolioSnapshot, UiLauncher — תפקיד זהה
-├── persistence/             # *Entity, *Repository, PortfolioSyncService            (סשנים 1–2)
+├── db/                      # *Entity, *Repository, PortfolioSyncService            (סשנים 1–2)
 ├── domain/                  # HoldingHistory — חישובים טהורים, בלי Spring          (סשן 3)
 └── api/                     # PortfolioController, HoldingWriteController, *Request, ApiErrors   (סשנים 0, 2–4)
     └── response/            # *Response — מה שה-UI מקבל                                           (סשנים 0, 2–3)
@@ -83,7 +83,7 @@ src/main/resources/          # application.properties, db/migration/V1__portfoli
 > **תנאי מוקדם:** אין. **המטרה:** אותה התנהגות ואותו JSON כמו היום, אבל נבנה ב-Maven ורץ כאפליקציית
 > Spring Boot. **עדיין אין DB.** מומלץ לעבוד על branch ייעודי — זה משנה את שיטת הבנייה כולה (המשתמש מחליט).
 >
-> **סטטוס (21.09.2026):** 0.1–0.6 ✅ בוצעו על branch `maven-spring-boot` (עדיין לא committed). נשארו פתוחים: ה-diff החי מול TWS ובדיקת ה-UI מול נתונים חיים (ב"בדיקת אימות סשן 0" למטה).
+> **סטטוס (21.09.2026):** 0.1–0.6 ✅ בוצעו על branch `maven-spring-boot` (commit 8427918). הבדיקה החיה מול TWS דלוק ✅ — המשתמש הריץ ואישר שהכול עובד.
 
 ### ✅ 0.1 🟡 `brew install maven` + `pom.xml`
 
@@ -298,7 +298,7 @@ mvn -q spring-boot:run -Dspring-boot.run.arguments="$*"
 **בדיקת אימות סשן 0:**
 1. **לפני** שמתחילים: כש-`run.sh` הישן רץ מול TWS — `curl -s localhost:8080/api/portfolio > before.json`.
 2. אחרי הסשן: `after.json` באותה דרך; `diff <(jq -S . before.json) <(jq -S . after.json)` — רק `asOf` רשאי להיות שונה.
-3. ✅ `mvn -q test` ירוק; ✅ `cd ui && npm run build` ירוק; ה-UI מציג אותה טבלה — עדיין לא נבדק (דורש TWS).
+3. ✅ `mvn -q test` ירוק; ✅ `cd ui && npm run build` ירוק; ✅ ה-UI מציג אותה טבלה — נבדק מול TWS דלוק ב-21.09.2026 (אישור המשתמש; ה-diff הפורמלי של before/after לא תועד).
 4. ✅ **בלי TWS:** אותן הודעות שגיאה ויציאה נקייה (קוד 0) — נבדק ב-21.09.2026. נוספו שורות לוג של Spring (עלייה וכיבוי של Tomcat) סביב הודעות השגיאה.
 
 ---
@@ -306,8 +306,17 @@ mvn -q spring-boot:run -Dspring-boot.run.arguments="$*"
 ## סשן 1 — PostgreSQL + Flyway + סכמה + ישויות JPA
 
 > **תנאי מוקדם:** סשן 0. **המטרה:** DB אמיתי עם סכמה, שהאפליקציה מתחברת אליו ומאמתת. **עדיין אין סנכרון.**
+>
+> **סטטוס (21.09.2026):** 1.1–1.5 ✅ בוצעו על branch `maven-spring-boot` (עדיין לא committed). סטיות מהתוכנית שמופיעה למטה:
+> - **עמודות IB הן `DOUBLE PRECISION`**, לא `NUMERIC(20,6)` (גם ב-`account_state`); `NUMERIC` נשאר רק ל-`trade.quantity` / `price`.
+>   נבדק: `ddl-auto=validate` נכשל על שדה `Double` מול עמודת `NUMERIC` (`wrong column type encountered in column [average_cost]`).
+> - **החבילה היא `portfolioboss.db`**, לא `persistence` — עקבית עם `ib` / `api` / `ui` ועם תגית הלוג `[db]`.
+> - `HoldingEntity.position` הוא `double` (העמודה `NOT NULL`), לא `Double`. `trade.created_at` לא ממופה ב-`TradeEntity` (ברירת המחדל של ה-DB ממלאת אותו).
+> - נוצר רק `HoldingRepository`; `TradeRepository` ו-`AccountStateRepository` ייווצרו כשיהיה להם שימוש (סשנים 2 ו-4).
+> - **נדחו:** `spring-boot-starter-validation` — לסשן 4 (`@Valid`); סטארטרי ה-`*-test` של JPA ו-Flyway — לסשן 2 (`@DataJpaTest`).
+> - `psql` לא ב-PATH (הנוסחה `postgresql@17` היא keg-only): לקרוא לו ב-`/opt/homebrew/opt/postgresql@17/bin/`, או להוסיף את התיקייה ל-PATH.
 
-### 1.1 🟢 התקנת PostgreSQL והקמת מסדי נתונים
+### ✅ 1.1 🟢 התקנת PostgreSQL והקמת מסדי נתונים
 
 **המימוש:**
 ```bash
@@ -322,7 +331,7 @@ createdb portfolioboss_test              # לבדיקות בלבד — לעול�
 
 ---
 
-### 1.2 🟡 מיגרציית Flyway `V1__portfolio_schema.sql`
+### ✅ 1.2 🟡 מיגרציית Flyway `V1__portfolio_schema.sql`
 
 **קובץ חדש:** `src/main/resources/db/migration/V1__portfolio_schema.sql`
 
@@ -383,7 +392,7 @@ CREATE TABLE account_state (
 
 ---
 
-### 1.3 🟡 ישויות JPA ו-repositories (`portfolioboss.persistence`)
+### ✅ 1.3 🟡 ישויות JPA ו-repositories (`portfolioboss.db`)
 
 **המימוש:** `HoldingEntity`, `TradeEntity`, `AccountStateEntity`, `enum HoldingStatus { OPEN, CLOSED }`, `enum TradeSide { BUY, SELL }`
 (`@Enumerated(EnumType.STRING)`). תבנית:
@@ -421,7 +430,7 @@ public interface HoldingRepository extends JpaRepository<HoldingEntity, Long> {
 
 ---
 
-### 1.4 🟢 `application.properties`
+### ✅ 1.4 🟢 `application.properties`
 
 ```properties
 spring.application.name=portfolioboss
@@ -445,7 +454,7 @@ spring.jpa.open-in-view=false
 
 ---
 
-### 1.5 🟢 גיבוי — `scripts/backup-db.sh`
+### ✅ 1.5 🟢 גיבוי — `scripts/backup-db.sh`
 
 **הבעיה:** הנתונים הידניים הם המוצר ואי אפשר לשחזר אותם מ-IB.
 
@@ -461,6 +470,12 @@ pg_dump portfolioboss | gzip > "${HOME}/PortfolioBossBackups/portfolioboss-$(dat
 **בדיקת אימות סשן 1:** `./run.sh` עולה; בלוג `Successfully applied 1 migration`; `psql portfolioboss -c '\dt'` מציג `holding`, `trade`,
 `account_state`, `flyway_schema_history`. עם Postgres כבוי (`brew services stop postgresql@17`) — האפליקציה נכשלת מהר עם שגיאה ברורה.
 ה-UI והתנהגות ה-TWS — ללא שינוי.
+
+**סטטוס הבדיקה (21.09.2026):**
+1. ✅ `./run.sh` עולה; `Successfully applied 1 migration ... now at version v1`; `\dt` מציג `holding`, `trade`, `account_state`, `flyway_schema_history`; `mvn -q test` ירוק. הורץ עם פורט TWS שלא קיים (`./run.sh 7599`), כדי שהחזקות אמיתיות לא יודפסו לשיחה.
+2. ✅ DB לא זמין → נכשל תוך 3 שניות, קוד יציאה 1, `Connection to localhost:5999 refused`. נבדק בהפניית ה-datasource לפורט שלא מאזין (`SPRING_DATASOURCE_URL=... ./run.sh`), לא בכיבוי השירות. הפלט הוא stack trace של Spring (~105 שורות) וההודעה בראשו.
+3. ✅ `validate` נבדק שלילית על `portfolioboss_test` (עמודה ששונתה ל-`NUMERIC` → כשל בעלייה); מסד הבדיקות נוצר מחדש נקי. ✅ גיבוי ושחזור ל-`portfolioboss_test` נבדקו.
+4. ⬜ **פתוח:** ריצה רגילה של `./run.sh` מול TWS דלוק, כדי לראות שה-UI מציג אותה טבלה כמו קודם.
 
 ---
 
@@ -491,7 +506,7 @@ holdings.put(contract.symbol(), new Holding(contract.symbol(), ...));
 
 ### 2.2 🔴 `PortfolioSyncService` — הליבה של הסנכרון
 
-**קובץ חדש:** `src/main/java/portfolioboss/persistence/PortfolioSyncService.java`
+**קובץ חדש:** `src/main/java/portfolioboss/db/PortfolioSyncService.java`
 
 **המימוש:**
 ```java

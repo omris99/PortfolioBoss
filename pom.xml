@@ -25,6 +25,27 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
+        <!-- Hibernate (maps classes to tables), Spring Data repositories, and HikariCP (the connection pool). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <!-- Runs the SQL files in src/main/resources/db/migration when the app starts. The database-specific
+             module is separate since Flyway 10. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <!-- The JDBC driver: the code that actually talks to PostgreSQL. Needed only at run time. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
         <!-- JUnit 5, MockMvc, AssertJ, Mockito -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

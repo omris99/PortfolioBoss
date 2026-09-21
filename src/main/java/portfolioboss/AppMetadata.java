@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.3.0";
+    public static final String VERSION = "0.4.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,13 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.4.0: [PostgreSQL, Flyway and the database schema]
+ * pom.xml / application.properties: JPA, Flyway and the PostgreSQL driver added; at startup the app now connects to the portfolioboss database, and exits with code 1 before reading TWS if PostgreSQL is down.
+ * V1__portfolio_schema.sql added: the holding, trade and account_state tables, created by Flyway at startup; a migration that has run is never edited, a later change is a new V2__ file.
+ * HoldingEntity / TradeEntity / AccountStateEntity added (portfolioboss.db): JPA mappings that Hibernate checks against the schema at startup; IB figures are DOUBLE PRECISION, hand-entered trade amounts NUMERIC.
+ * HoldingRepository added: finds a holding by account and IB contract id, or by account and status; nothing reads or writes the tables yet, so the API and the console report are unchanged.
+ * scripts/backup-db.sh added: dumps the database to ~/PortfolioBossBackups, outside the repo, through a .partial file so a failed dump never leaves a file that looks like a good backup.
+ *
  * VERSION 0.3.0: [Maven and Spring Boot: Spring MVC API, first tests]
  * pom.xml added: Maven build (Java 21, Spring Boot 4.1.1, JUnit 5) replaces the javac build; protobuf-java is now an ordinary dependency instead of a jar directory on the classpath.
  * run.sh now wraps mvn spring-boot:run and registers the TWS API jar in the local Maven repository once, since the jar is not on Maven Central; usage (./run.sh 7497 102) is unchanged.

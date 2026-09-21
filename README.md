@@ -42,6 +42,10 @@ TOTAL                                              104,159.00      +5,731.00
 - **Node 20.19+** to run the UI in `ui/`.
 - **IB TWS or Gateway running and logged in**, with *Configure → API → Enable ActiveX and Socket
   Clients* turned on.
+- **PostgreSQL 17**, running: `brew install postgresql@17`, `brew services start postgresql@17`, then
+  create two databases, `portfolioboss` and `portfolioboss_test` (tests only). Homebrew leaves the tools
+  (`createdb`, `psql`) off the PATH; they are in `/opt/homebrew/opt/postgresql@17/bin`. Its default setup
+  needs no password, and Flyway creates the tables when the app first starts.
 - The TWS API jar at `~/DevTools/twsapi/TwsApi.jar` (the same one IBBot uses). It is not on Maven
   Central, so `run.sh` registers it in your local Maven repository (`~/.m2`) the first time.
 
@@ -56,7 +60,7 @@ TOTAL                                              104,159.00      +5,731.00
 > **Client id:** the trading bot connects as client id `0`. PortfolioBoss defaults to `101` so both
 > can be connected to TWS at the same time. If you change it, keep it distinct from the bot's.
 
-Tests need no TWS: `mvn test`.
+Tests need neither TWS nor PostgreSQL (yet): `mvn test`.
 
 ## UI
 
@@ -71,7 +75,8 @@ cd ui && npm install
 
 The dev server's output goes to `ui/dev-server.log`. If `npm run dev` is already running, `run.sh`
 reuses it instead of starting another. The browser step uses macOS `open`. If TWS can't be reached
-the program exits before any of this happens.
+the program exits before any of this happens, and if PostgreSQL isn't running it exits even earlier —
+within seconds, without trying TWS.
 
 The page shows the snapshot taken when `run.sh` started — to refresh it, stop `run.sh` (Ctrl+C) and
 run it again. The UI is styled after IBBot's (React, Vite, Tailwind, dark slate theme).
@@ -83,7 +88,7 @@ run it again. The UI is styled after IBBot's (React, Vite, Tailwind, dark slate 
 | Milestone | Goal |
 |---|---|
 | **0** ✅ | Read-only connect to IB, print real holdings + average cost. |
-| 1 | Persist holdings + a **written thesis and status** per holding (Postgres/JPA); expose over REST. *Started: Maven + Spring Boot; the local API is Spring MVC.* |
+| 1 | Persist holdings + a **written thesis and status** per holding (Postgres/JPA); expose over REST. *Started: Maven + Spring Boot (the local API is Spring MVC); the PostgreSQL schema and JPA entities exist, the sync into them is next.* |
 | 2 | React/TypeScript UI on real data (the "Horizon" demo is the visual target). *Started: the positions table.* |
 | 3 | Analytics — concentration, sector exposure, benchmark vs. SPY, averaging-down calculator on real cost basis. |
 | 4 | Fundamentals / earnings / dividends (Finnhub), rule-based alerts, decision journal. |
@@ -91,7 +96,7 @@ run it again. The UI is styled after IBBot's (React, Vite, Tailwind, dark slate 
 ## Layout
 
 ```
-pom.xml                    # Maven build: Java 21, Spring Boot 4.1.1, JUnit 5
+pom.xml                    # Maven build: Java 21, Spring Boot 4.1.1 (MVC, JPA, Flyway), PostgreSQL driver, JUnit 5
 src/main/java/portfolioboss/
 ├── Main.java              # Spring Boot entry point
 ├── TwsPortfolioRunner.java  # startup flow: read the portfolio from TWS, hand it to the API, open the UI
@@ -103,6 +108,10 @@ src/main/java/portfolioboss/
 │       ├── PortfolioResponse.java  # the body of GET /api/portfolio
 │       ├── HoldingResponse.java    # one holding, with cost basis and P&L %
 │       └── JsonNumbers.java        # NaN / infinity become null
+├── db/
+│   ├── HoldingEntity.java, TradeEntity.java, AccountStateEntity.java  # JPA mappings of the tables
+│   ├── HoldingStatus.java, TradeSide.java  # enums, stored by name
+│   └── HoldingRepository.java  # find a holding by account + contract id, or by status
 ├── ib/
 │   ├── IbGateway.java     # IB socket connection + reader loop (read-only)
 │   └── PortfolioWrapper.java  # EWrapper callbacks: reads holdings, prints, unsubscribes
@@ -111,8 +120,10 @@ src/main/java/portfolioboss/
 │   └── PortfolioSnapshot.java  # account, timestamp, net liquidation, cash, holdings
 └── ui/
     └── UiLauncher.java    # starts the UI dev server and opens it in the browser
-src/main/resources/application.properties  # loopback address, port 8080
+src/main/resources/application.properties  # loopback address, port 8080, database connection
+src/main/resources/db/migration/           # Flyway migrations (V1__portfolio_schema.sql)
 src/test/java/portfolioboss/               # JUnit: HoldingTest, api/PortfolioControllerTest
+scripts/backup-db.sh                       # dumps the database to ~/PortfolioBossBackups
 
 ui/                        # React 19 + Vite + Tailwind; the positions table and account summary
 ```
