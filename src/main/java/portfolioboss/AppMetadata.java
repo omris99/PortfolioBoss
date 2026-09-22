@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.5.0";
+    public static final String VERSION = "0.6.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,14 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.6.0: [Derived buy/sell dates and holding period]
+ * HoldingHistory and TradeFact added (portfolioboss.domain, pure computation, no Spring): derive a holding's buy/sell dates and holding period from its trade rows instead of storing them.
+ * The derivation resets on every full sell followed by a rebuy of the same holding (a new "episode"), so a stock sold and bought again later doesn't inherit an unrelated first-buy date.
+ * A sell entered with nothing left to sell is ignored rather than rejected, on the assumption the matching buy just hasn't been entered yet.
+ * HoldingRepository.findByAccountOrderById now loads a holding's trades in the same query (@EntityGraph) instead of one extra query per holding.
+ * TradeResponse added; HoldingResponse gains firstBuyDate, lastSellDate, holdingDays and trades — the UI does not read them yet.
+ * New tests: HoldingHistoryTest (pure, no Spring or database) and two PortfolioReadServiceTest scenarios that insert real trade rows and check the derived fields end to end.
+ *
  * VERSION 0.5.0: [Sync at connection; the API reads from the database]
  * PortfolioSyncService added (portfolioboss.db): on every TWS connection, upserts holdings by (account, conId), refreshing IB's figures without touching sector or trades.
  * A holding TWS no longer reports is marked CLOSED instead of deleted (reversible if it reappears), so manually-entered sector and trades survive; one account_state row is replaced per sync.

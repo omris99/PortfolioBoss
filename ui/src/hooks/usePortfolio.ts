@@ -7,22 +7,22 @@ const API_UNREACHABLE_MESSAGE =
 /** Loads the portfolio snapshot once on mount; `retry` loads it again (e.g. after starting the API). */
 export function usePortfolio() {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const loadSnapshot = useCallback(async () => {
-    setLoading(true);
+    setIsLoading(true);
     try {
       const response = await fetch('/api/portfolio');
       if (!response.ok) {
         throw new Error(`The API answered HTTP ${response.status}`);
       }
       setSnapshot((await response.json()) as PortfolioSnapshot);
-      setError(null);
+      setErrorMessage(null);
     } catch {
-      setError(API_UNREACHABLE_MESSAGE);
+      setErrorMessage(API_UNREACHABLE_MESSAGE);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }, []);
 
@@ -30,5 +30,5 @@ export function usePortfolio() {
     void loadSnapshot();
   }, [loadSnapshot]);
 
-  return { snapshot, error, loading, retry: loadSnapshot };
+  return { snapshot, errorMessage, isLoading, retry: loadSnapshot };
 }

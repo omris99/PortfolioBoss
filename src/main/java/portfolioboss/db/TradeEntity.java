@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import portfolioboss.domain.TradeFact;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -45,5 +46,34 @@ public class TradeEntity {
 
     /** Required by JPA, which creates entities by reflection. */
     protected TradeEntity() {
+    }
+
+    public Long id() {
+        return id;
+    }
+
+    public LocalDate tradeDate() {
+        return tradeDate;
+    }
+
+    public TradeSide side() {
+        return side;
+    }
+
+    public BigDecimal quantity() {
+        return quantity;
+    }
+
+    public BigDecimal price() {
+        return price;
+    }
+
+    public String note() {
+        return note;
+    }
+
+    /** Reduced to just the date, side and quantity that {@link portfolioboss.domain.HoldingHistory} needs. */
+    public TradeFact toTradeFact() {
+        return new TradeFact(tradeDate, side, quantity);
     }
 }

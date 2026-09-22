@@ -628,8 +628,13 @@ public class PortfolioSyncService {
 ## סשן 3 — נגזרות: תאריך קנייה, תאריך מכירה, זמן החזקה
 
 > **תנאי מוקדם:** סשן 2. **המטרה:** לחשב מהעסקאות ולהגיש ב-API. **עדיין אין כתיבה ולא UI** — עסקאות נכנסות כרגע רק דרך `psql`.
+>
+> **סטטוס (22.09.2026):** 3.1–3.4 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית:
+> - האלגוריתם וההגדרות זהים לתוכנית; נוספה בדיקה עשירית ל"SELL בלי BUY בכלל מעולם" (מקרה קצה של הכלל בסעיף האחרון).
+> - `snapshotDate` ל-`OPEN` מחושב מ-`account_state.as_of` (`Instant`) דרך `ZoneId.systemDefault()` — פרט שהתוכנית לא פירטה; זו החלטה שלי, לא אושרה או נדחתה במפורש.
+> - **שינוי חיצוני שבוצע בקוד אחרי הכתיבה הראשונית שלי (22.09.2026, לא על ידי):** `HoldingEntity.firstSeen(...)` ו-`AccountStateEntity.of(...)` (factory-ים סטטיים) הפכו לבנאים (`new HoldingEntity(...)`, `new AccountStateEntity(...)`); `TradeResponse.from(...)` ו-`HoldingResponse.from(...)` עברו לאותו דפוס (`TradeResponse::new`). כל מה שהיה package-private (`refreshFromIb`, `markClosed`, הבנאים, ה-`from`) הפך ל-`protected` — החלטה מכוונת של עומרי לטובת קריאות (מילת מפתח מפורשת עדיפה על "העדר מילה" ש-package-private הוא בפועל), אושרה ונשארת ככה. ראו CLAUDE.md (Conventions) לניסוח המלא. שמות משתנים ופרמטרים רבים שופרו לקריאות (`reading`→`holdingFromIb`, `entity`→`holdingEntity`, `context`→`applicationContext` וכו').
 
-### 3.1 🟡 `HoldingHistory` — חישוב טהור בלי Spring (`portfolioboss.domain`)
+### ✅ 3.1 🟡 `HoldingHistory` — חישוב טהור בלי Spring (`portfolioboss.domain`)
 
 **הבעיה:** "זמן החזקה" הוא המדד המרכזי, והוא נשבר בשקט במקרה נפוץ אצל משקיע ארוך-טווח: **מכירה מלאה וקנייה מחדש** של אותה מניה.
 תאריך הקנייה הראשון הוא אז של פוזיציה אחרת.
@@ -650,13 +655,13 @@ public class PortfolioSyncService {
 
 ---
 
-### 3.2 🟡 טעינת עסקאות בלי N+1
+### ✅ 3.2 🟡 טעינת עסקאות בלי N+1
 
-**המימוש:** ב-`HoldingRepository`: `@EntityGraph(attributePaths = "trades")` על השאילתה ש-`PortfolioQueryService` משתמש בה (שאילתה אחת עם join fetch).
+**המימוש:** ב-`HoldingRepository`: `@EntityGraph(attributePaths = "trades")` על `findByAccountOrderById`, השאילתה ש-`PortfolioReadService` (בתוכנית: `PortfolioQueryService`) משתמש בה (שאילתה אחת עם join fetch).
 
 ---
 
-### 3.3 🟡 הרחבת `HoldingResponse`
+### ✅ 3.3 🟡 הרחבת `HoldingResponse`
 
 **המימוש (תוספות בלבד):**
 ```java
@@ -670,7 +675,7 @@ List<TradeResponse> trades     // מסודר לפי תאריך ואז id
 
 ---
 
-### 3.4 🟢 `HoldingHistoryTest` (טהור — בלי Spring, בלי DB)
+### ✅ 3.4 🟢 `HoldingHistoryTest` (טהור — בלי Spring, בלי DB)
 
 1. אין עסקאות → הכול `null`
 2. קנייה אחת → `firstBuyDate` נכון, `lastSellDate = null`, `holdingDays` = הפרש הימים
@@ -686,6 +691,11 @@ List<TradeResponse> trades     // מסודר לפי תאריך ואז id
 
 **בדיקת אימות סשן 3:** `insert into trade (holding_id, trade_date, side, quantity) values (...)` דרך `psql` →
 `curl -s localhost:8080/api/portfolio | jq '.holdings[] | select(.symbol=="X") | {firstBuyDate, lastSellDate, holdingDays, trades}'`.
+
+**סטטוס הבדיקה (22.09.2026):** ✅ הוחלף בכיסוי אוטומטי — `PortfolioReadServiceTest` מכניס עסקאות אמיתיות ל-DB
+של הבדיקות דרך `JdbcTemplate` ובודק בדיוק את השרשרת הזו (עד ל-response, כולל `CLOSED` עם `lastSellDate`).
+עומרי סירב במפורש לבדיקה חיה מול ה-`portfolioboss` האמיתי ("הבדיקות האוטומטיות מספיקות") — לא בוצעה בכוונה,
+לא נשכחה. גם בדיקת חבלה (ניטרול איפוס ה-episode) בוצעה ידנית וחזרה — לא נשמרה כבדיקה קבועה.
 
 ---
 

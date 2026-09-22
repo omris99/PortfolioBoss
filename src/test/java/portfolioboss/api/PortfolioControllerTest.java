@@ -7,13 +7,18 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.PortfolioResponse;
+import portfolioboss.api.response.TradeResponse;
 import portfolioboss.db.HoldingStatus;
+import portfolioboss.db.TradeSide;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
 import static org.hamcrest.Matchers.closeTo;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -28,8 +33,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Pins the JSON contract the UI depends on ({@code ui/src/types/portfolio.ts}) using made-up responses, so it
  * needs neither TWS nor a database. {@code @WebMvcTest} starts only Spring's web layer; {@code MockMvc} sends
  * it fake HTTP requests without a real server; {@code @MockitoBean} replaces {@link PortfolioReadService} with
- * a stand-in whose answers each test chooses. The path from the database to the response is tested in
- * {@code PortfolioReadServiceTest}.
+ * a stand-in whose answers each test chooses. The path from the database to the response — including how
+ * {@code firstBuyDate} / {@code lastSellDate} / {@code holdingDays} are actually derived — is tested in
+ * {@code PortfolioReadServiceTest}; here the values are just made up to pin the JSON shape.
  */
 @WebMvcTest(PortfolioController.class)
 class PortfolioControllerTest {
@@ -76,7 +82,16 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].id").value(7))
                 .andExpect(jsonPath("$.holdings[0].conId").value(265598))
                 .andExpect(jsonPath("$.holdings[0].sector").value("Technology"))
-                .andExpect(jsonPath("$.holdings[0].status").value("OPEN"));
+                .andExpect(jsonPath("$.holdings[0].status").value("OPEN"))
+                .andExpect(jsonPath("$.holdings[0].firstBuyDate").value("2024-03-14"))
+                .andExpect(jsonPath("$.holdings[0].lastSellDate").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].holdingDays").value(920))
+                .andExpect(jsonPath("$.holdings[0].trades[0].id").value(1))
+                .andExpect(jsonPath("$.holdings[0].trades[0].tradeDate").value("2024-03-14"))
+                .andExpect(jsonPath("$.holdings[0].trades[0].side").value("BUY"))
+                .andExpect(jsonPath("$.holdings[0].trades[0].quantity").value(10))
+                .andExpect(jsonPath("$.holdings[0].trades[0].price").value(150.0))
+                .andExpect(jsonPath("$.holdings[0].trades[0].note").value("Initial position"));
     }
 
     @Test
@@ -99,7 +114,10 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].averageCost").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].costBasis").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].unrealizedPnlPercent").value(nullValue()))
-                .andExpect(jsonPath("$.holdings[0].sector").value(nullValue()));
+                .andExpect(jsonPath("$.holdings[0].sector").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].firstBuyDate").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].holdingDays").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].trades").value(empty()));
     }
 
     @Test
@@ -109,18 +127,22 @@ class PortfolioControllerTest {
         mockMvc.perform(delete("/api/portfolio")).andExpect(status().isMethodNotAllowed());
     }
 
-    private static PortfolioResponse portfolioWith(HoldingResponse... holdings) {
+    private PortfolioResponse portfolioWith(HoldingResponse... holdings) {
         return new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(holdings));
     }
 
-    private static HoldingResponse apple() {
+    /** Bought once, never sold — still OPEN, so holdingDays counts to a made-up snapshot date. */
+    private HoldingResponse apple() {
+        TradeResponse buy = new TradeResponse(1, LocalDate.of(2024, 3, 14), TradeSide.BUY,
+                new BigDecimal("10"), new BigDecimal("150.00"), "Initial position");
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
-                1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN);
+                1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
+                LocalDate.of(2024, 3, 14), null, 920L, List.of(buy));
     }
 
-    /** IB sent a position but no cost or price figures for it, and no sector has been entered. */
-    private static HoldingResponse withoutCostData() {
+    /** IB sent a position but no cost or price figures for it, no sector and no trades entered. */
+    private HoldingResponse withoutCostData() {
         return new HoldingResponse("MSFT", "STK", "USD", 5.0, null, null, null, null, 0.0, ACCOUNT,
-                null, null, 8, 272093, null, HoldingStatus.OPEN);
+                null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of());
     }
 }

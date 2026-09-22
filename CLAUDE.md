@@ -16,7 +16,8 @@ decisions, and the milestone breakdown. Read it before proposing features or str
 a feature that doesn't trace back to one of the six principles probably belongs in IBBot, not here.
 [HOLDING_DETAILS_TODO.md](HOLDING_DETAILS_TODO.md) is the session-by-session plan for the next stretch
 of Milestone 1 (Postgres, trades, holding details); its sessions 0 (Maven + Spring Boot), 1
-(PostgreSQL, Flyway, schema, entities) and 2 (sync at connection, API reads from the database) are done.
+(PostgreSQL, Flyway, schema, entities), 2 (sync at connection, API reads from the database) and 3
+(derived buy/sell dates and holding period) are done.
 
 ## Hard invariant: read-only
 
@@ -117,7 +118,8 @@ Main (Spring Boot: brings the web server up, then Spring runs the runner)
         └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser
 
 PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
-        │                     (api/response/*Response)                     driven by HTTP requests, not by TWS)
+        │                     (api/response/*Response,                    driven by HTTP requests, not by TWS)
+        │                      +domain/HoldingHistory)
         └──JSON──> ui/ (React; the dev server proxies /api to :8080)
 ```
 
@@ -137,8 +139,8 @@ The sync-at-connection lifecycle, which is the part worth knowing:
    it hands it to `PortfolioSyncService.sync`, which upserts it into the database (see below). Either
    way — synced or not — it then launches the UI and returns; Tomcat's non-daemon threads keep the
    JVM alive until Ctrl+C. If the sync itself throws (a database problem, not a TWS problem) it prints
-   `[db error]` and calls `System.exit(SpringApplication.exit(context, () -> 1))`: the database is
-   required, TWS is not.
+   `[db error]` and calls `System.exit(SpringApplication.exit(applicationContext, () -> 1))`: the database
+   is required, TWS is not.
 
 `TwsPortfolioRunner` is an `ApplicationRunner`, so Spring runs it once, **after the web server is
 already listening** — a request that arrives while TWS is still being read (up to 15s) gets a 503 from
@@ -163,12 +165,13 @@ The database layer, `portfolioboss.db`, is now connected to the flow: `Portfolio
 once per connection (called from `TwsPortfolioRunner`, step 5 above), and the API reads only from the
 database, never straight from TWS. `HoldingEntity`, `TradeEntity` and `AccountStateEntity` map the tables
 `holding`, `trade` and `account_state`, created by `src/main/resources/db/migration/V1__portfolio_schema.sql`.
-`sync` upserts by `(account, conId)`: a holding reported by IB is created (`HoldingEntity.firstSeen`) or
-refreshed (`refreshFromIb` — IB's figures only, `status = OPEN`; it never touches `sector` or `trades`); an
-open holding IB no longer reports is marked `CLOSED` (`markClosed`), never deleted, so the sector and trades
-typed in by hand survive; a `CLOSED` holding that reappears is reopened automatically. `AccountStateEntity`
-holds one row overwritten on every sync. All of this runs in one `@Transactional` method, so a snapshot is
-stored whole or not at all. `HoldingRepository` and `AccountStateRepository` are the repositories.
+`sync` upserts by `(account, conId)`: a holding reported by IB is created (`new HoldingEntity(account,
+holding, syncedAt)`) or refreshed (`refreshFromIb` — IB's figures only, `status = OPEN`; it never touches
+`sector` or `trades`); an open holding IB no longer reports is marked `CLOSED` (`markClosed`), never deleted,
+so the sector and trades typed in by hand survive; a `CLOSED` holding that reappears is reopened
+automatically. `AccountStateEntity` holds one row, replaced by a new instance (`new AccountStateEntity(snapshot)`)
+on every sync. All of this runs in one `@Transactional` method, so a snapshot is stored whole or not at all.
+`HoldingRepository` and `AccountStateRepository` are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
   checksum): a schema change is a new `V2__….sql`.
@@ -184,6 +187,19 @@ Things that are easy to break:
 - Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`) are `@DataJpaTest`s against the
   real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 
+`portfolioboss.domain` holds `HoldingHistory` and `TradeFact` — pure computation, no Spring and no
+database, so it is unit tested directly. A holding's `firstBuyDate`, `lastSellDate` and `holdingDays` are
+derived from its `trade` rows, never stored: `HoldingHistory.of(List<TradeFact>)` walks them in
+chronological order (a buy before a sell on the same date) tracking a running quantity, and starts a fresh
+**episode** every time a sell brings that quantity back to (near) zero — a long-term holding is often sold in
+full and bought again later, and without this the first-ever buy date would belong to an unrelated stretch of
+ownership. A sell entered while already flat is treated as a data-entry mistake and silently ignored, never
+rejected. `holdingDays` counts to `lastSellDate` when `CLOSED`, or to the last sync's date (`account_state.as_of`,
+not the system clock, so the number doesn't drift between page loads) when `OPEN`. `HoldingRepository
+.findByAccountOrderById`'s `@EntityGraph(attributePaths = "trades")` loads a holding's trades in the same
+query instead of one extra query per holding; `TradeEntity.toTradeFact()` reduces a row to what the
+computation needs.
+
 `PortfolioController` (Spring MVC) serves `GET /api/portfolio` through `PortfolioReadService`
 (`@Transactional(readOnly = true)`, since `open-in-view=false` means entities must be read inside the
 transaction): 503 until a sync has ever stored an `account_state` row, then 200 with `Cache-Control:
@@ -191,7 +207,9 @@ no-store` and a `PortfolioResponse` built from the latest sync — including clo
 filters. The response records (`PortfolioResponse`, `HoldingResponse`) live in `api/response/`; Jackson
 turns them into JSON, so their component names **are** the JSON keys and must stay stable
 (`ui/src/types/portfolio.ts` mirrors them) — add fields, don't rename or remove. Beyond the original IB
-fields, `HoldingResponse` also carries `id`, `conId`, `sector` and `status` (the UI does not read them yet).
+fields, `HoldingResponse` also carries `id`, `conId`, `sector`, `status`, and — derived via
+`domain.HoldingHistory`, see above — `firstBuyDate`, `lastSellDate`, `holdingDays` and `trades`
+(a `List<TradeResponse>`, one entry per `trade` row); none of these are read by the UI yet.
 `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
@@ -224,9 +242,16 @@ Things that are easy to break:
 - One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` owns the TWS
   host/port/client id and the single `IbGateway`. Don't add a second entry point or a second place
   that connects to TWS.
-- API response types go in `portfolioboss.api.response`; visibility stays as narrow as it can (the
-  `from(...)` factories are the only `public` surface most of these records need). A helper used by more
-  than one layer — `portfolioboss.utils.Utils`, shared by `api.response` and `db` — is the one exception,
+- API response types go in `portfolioboss.api.response`; the accessors and derived-math methods every other
+  layer needs (`Holding.costBasis()`, `HoldingEntity.id()`/`sector()`/`trades()`/`toIbHolding()`, …) are
+  `public`. Everything internal to a class's own package — `HoldingEntity`'s and `AccountStateEntity`'s
+  from-a-snapshot constructors, `refreshFromIb`, `markClosed`, `TradeResponse`'s and `HoldingResponse.from`'s
+  entity-to-response conversions, `TwsPortfolioRunner`'s own constructor — is marked `protected` rather than
+  left as the unmarked package-private default: an explicit keyword is easier to spot while reading than the
+  *absence* of one. (On a `record`, always `final`, or on a package-private top-level class, `protected` is
+  exactly as reachable as package-private in practice — nothing outside the package can subclass either — so
+  this is a readability choice, not a wider one.) A helper used by more than one layer —
+  `portfolioboss.utils.Utils`, shared by `api.response` and `db` — is the one exception to "narrow package,"
   and lives in its own package rather than being duplicated per layer.
 - Changelog: a notable change bumps `AppMetadata.VERSION` and adds an entry at the top of the
   changelog comment below the class in `AppMetadata.java` (copied from IBBot). Format:
@@ -238,7 +263,7 @@ Things that are easy to break:
 - Reuse from IBBot happens by **copying self-contained pieces** (the Finnhub `NewsProvider`
   abstraction, its `ui/` React stack), not by shared modules — see the architecture decisions in
   TODO.md.
-- Milestone 1 direction: Maven, Spring Boot REST, the PostgreSQL schema and entities, and the sync at
-  connection are in; the API reads only from the database. Next is deriving buy/sell dates and holding
-  period from `trade` rows, then the write endpoints and the UI forms — see HOLDING_DETAILS_TODO.md. The
+- Milestone 1 direction: Maven, Spring Boot REST, the PostgreSQL schema and entities, the sync at connection,
+  and deriving buy/sell dates and holding period from `trade` rows are in; the API reads only from the
+  database. Next is the write endpoints (sector, trades) and the UI forms — see HOLDING_DETAILS_TODO.md. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

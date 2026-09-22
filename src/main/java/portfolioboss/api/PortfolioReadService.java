@@ -18,12 +18,12 @@ import java.util.Optional;
 @Service
 public class PortfolioReadService {
 
-    private final HoldingRepository holdings;
-    private final AccountStateRepository accountStates;
+    private final HoldingRepository holdingRepository;
+    private final AccountStateRepository accountStateRepository;
 
-    public PortfolioReadService(HoldingRepository holdings, AccountStateRepository accountStates) {
-        this.holdings = holdings;
-        this.accountStates = accountStates;
+    public PortfolioReadService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository) {
+        this.holdingRepository = holdingRepository;
+        this.accountStateRepository = accountStateRepository;
     }
 
     /**
@@ -32,11 +32,11 @@ public class PortfolioReadService {
      */
     @Transactional(readOnly = true)
     public Optional<PortfolioResponse> currentPortfolio() {
-        return accountStates.findFirstByOrderByAsOfDesc().map(this::toResponse);
+        return accountStateRepository.findFirstByOrderByAsOfDesc().map(this::toResponse);
     }
 
     private PortfolioResponse toResponse(AccountStateEntity accountState) {
-        List<HoldingEntity> storedHoldings = holdings.findByAccountOrderById(accountState.account());
+        List<HoldingEntity> storedHoldings = holdingRepository.findByAccountOrderById(accountState.account());
         return PortfolioResponse.from(accountState, storedHoldings);
     }
 }

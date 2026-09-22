@@ -65,29 +65,27 @@ public class HoldingEntity {
     }
 
     /** A position seen for the first time: open, with no sector and no trades yet. */
-    static HoldingEntity firstSeen(String account, Holding reading, Instant syncedAt) {
-        HoldingEntity holding = new HoldingEntity();
-        holding.account = account;
-        holding.conId = reading.conId();
-        holding.secType = reading.secType();      // fixed for a conId, so set only here
-        holding.currency = reading.currency();
-        holding.firstSeenAt = syncedAt;
-        holding.refreshFromIb(reading, syncedAt);
-        return holding;
+    protected HoldingEntity(String account, Holding holdingFromIb, Instant syncedAt) {
+        this.account = account;
+        this.conId = holdingFromIb.conId();
+        this.secType = holdingFromIb.secType();      // fixed for a conId, so set only here
+        this.currency = holdingFromIb.currency();
+        this.firstSeenAt = syncedAt;
+        refreshFromIb(holdingFromIb, syncedAt);
     }
 
     /**
      * Takes the broker's latest figures and reopens the holding if it was closed. It never touches
      * {@code sector} or {@code trades}: those are entered by hand.
      */
-    void refreshFromIb(Holding reading, Instant syncedAt) {
-        symbol = reading.symbol();
-        position = reading.position();
-        averageCost = Utils.finiteOrNull(reading.averageCost());
-        marketPrice = Utils.finiteOrNull(reading.marketPrice());
-        marketValue = Utils.finiteOrNull(reading.marketValue());
-        unrealizedPnl = Utils.finiteOrNull(reading.unrealizedPnl());
-        realizedPnl = Utils.finiteOrNull(reading.realizedPnl());
+    protected void refreshFromIb(Holding holdingFromIb, Instant syncedAt) {
+        symbol = holdingFromIb.symbol();
+        position = holdingFromIb.position();
+        averageCost = Utils.finiteOrNull(holdingFromIb.averageCost());
+        marketPrice = Utils.finiteOrNull(holdingFromIb.marketPrice());
+        marketValue = Utils.finiteOrNull(holdingFromIb.marketValue());
+        unrealizedPnl = Utils.finiteOrNull(holdingFromIb.unrealizedPnl());
+        realizedPnl = Utils.finiteOrNull(holdingFromIb.realizedPnl());
         status = HoldingStatus.OPEN;
         lastSyncedAt = syncedAt;
         closedDetectedAt = null;
@@ -97,7 +95,7 @@ public class HoldingEntity {
      * The holding is no longer in the portfolio TWS reported. What is held now is zero; the last average cost,
      * price and realized P&amp;L stay as last seen, and {@code lastSyncedAt} stays the last time IB reported it.
      */
-    void markClosed(Instant syncedAt) {
+    protected void markClosed(Instant syncedAt) {
         status = HoldingStatus.CLOSED;
         position = 0;
         marketValue = 0.0;
@@ -119,6 +117,11 @@ public class HoldingEntity {
 
     public HoldingStatus status() {
         return status;
+    }
+
+    /** Ordered by trade date then id ({@code @OrderBy} on the field below). */
+    public List<TradeEntity> trades() {
+        return List.copyOf(trades);
     }
 
     /**

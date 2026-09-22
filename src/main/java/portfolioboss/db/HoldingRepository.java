@@ -1,5 +1,6 @@
 package portfolioboss.db;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -17,6 +18,11 @@ public interface HoldingRepository extends JpaRepository<HoldingEntity, Long> {
 
     List<HoldingEntity> findByAccountAndStatus(String account, HoldingStatus status);
 
-    /** Open and closed holdings alike, in the order they were first seen. */
+    /**
+     * Open and closed holdings alike, in the order they were first seen, with their trades loaded in the
+     * same query ({@code LEFT JOIN FETCH}) instead of one extra query per holding when something reads
+     * {@code trades()}.
+     */
+    @EntityGraph(attributePaths = "trades")
     List<HoldingEntity> findByAccountOrderById(String account);
 }

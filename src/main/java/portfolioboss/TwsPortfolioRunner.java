@@ -32,31 +32,31 @@ import java.util.concurrent.TimeUnit;
 @Component
 class TwsPortfolioRunner implements ApplicationRunner {
 
-    private static final String HOST = "127.0.0.1";
-    private static final int DEFAULT_PORT = 7496;      // live TWS; use 7497 for paper
-    private static final int DEFAULT_CLIENT_ID = 101;  // must differ from the trading bot (id 0)
-    private static final int TIMEOUT_SECONDS = 15;
-    private static final int UI_PORT = 5174;           // ui/vite.config.ts serves the dev UI here
+    private static final String TWS_HOST = "127.0.0.1";
+    private static final int DEFAULT_TWS_PORT = 7496;      // live TWS; use 7497 for paper
+    private static final int DEFAULT_TWS_CLIENT_ID = 101;  // must differ from the trading bot (id 0)
+    private static final int PORTFOLIO_DOWNLOAD_TIMEOUT_SECONDS = 15;
+    private static final int UI_PORT = 5174;               // ui/vite.config.ts serves the dev UI here
 
     private final PortfolioSyncService syncService;
-    private final ApplicationContext context;
+    private final ApplicationContext applicationContext;
     private final int apiPort;
 
-    TwsPortfolioRunner(PortfolioSyncService syncService,
-                       ApplicationContext context,
-                       @Value("${server.port}") int apiPort) {
+    protected TwsPortfolioRunner(PortfolioSyncService syncService,
+                                 ApplicationContext applicationContext,
+                                 @Value("${server.port}") int apiPort) {
         this.syncService = syncService;
-        this.context = context;
+        this.applicationContext = applicationContext;
         this.apiPort = apiPort;
     }
 
     @Override
     public void run(ApplicationArguments arguments) throws InterruptedException {
         List<String> positionalArguments = arguments.getNonOptionArgs();
-        int port = argumentOrDefault(positionalArguments, 0, DEFAULT_PORT);
-        int clientId = argumentOrDefault(positionalArguments, 1, DEFAULT_CLIENT_ID);
+        int twsPort = intArgumentOrDefault(positionalArguments, 0, DEFAULT_TWS_PORT);
+        int twsClientId = intArgumentOrDefault(positionalArguments, 1, DEFAULT_TWS_CLIENT_ID);
 
-        PortfolioSnapshot snapshot = readSnapshotFromTws(port, clientId);
+        PortfolioSnapshot snapshot = readSnapshotFromTws(twsPort, twsClientId);
         if (snapshot != null) {
             storeInDatabase(snapshot);
         } else {
@@ -75,25 +75,25 @@ class TwsPortfolioRunner implements ApplicationRunner {
             syncService.sync(snapshot);
         } catch (DataAccessException | TransactionException e) {
             System.err.println("[db error] could not store the portfolio: " + e.getMessage());
-            System.exit(SpringApplication.exit(context, () -> 1));
+            System.exit(SpringApplication.exit(applicationContext, () -> 1));
         }
     }
 
-    private static int argumentOrDefault(List<String> positionalArguments, int index, int defaultValue) {
+    private int intArgumentOrDefault(List<String> positionalArguments, int index, int defaultValue) {
         return positionalArguments.size() > index ? Integer.parseInt(positionalArguments.get(index)) : defaultValue;
     }
 
-    private static PortfolioSnapshot readSnapshotFromTws(int port, int clientId) throws InterruptedException {
+    private PortfolioSnapshot readSnapshotFromTws(int twsPort, int twsClientId) throws InterruptedException {
         PortfolioSnapshot snapshot = null;
         IbGateway gateway = new IbGateway();
         try {
-            gateway.connect(HOST, port, clientId);
-            boolean portfolioReceived = gateway.awaitPortfolio(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            gateway.connect(TWS_HOST, twsPort, twsClientId);
+            boolean portfolioReceived = gateway.awaitPortfolio(PORTFOLIO_DOWNLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (gateway.connectionFailed()) {
                 System.err.println("Connection was refused by TWS. Check the port and that API access is enabled.");
             } else if (!portfolioReceived) {
-                System.err.println("Timed out after " + TIMEOUT_SECONDS + "s waiting for portfolio data. " +
-                        "Is TWS running and logged in on port " + port + "?");
+                System.err.println("Timed out after " + PORTFOLIO_DOWNLOAD_TIMEOUT_SECONDS + "s waiting for " +
+                        "portfolio data. Is TWS running and logged in on port " + twsPort + "?");
             } else {
                 snapshot = gateway.snapshot();
             }

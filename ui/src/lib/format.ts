@@ -1,16 +1,16 @@
-const twoDecimalNumber = new Intl.NumberFormat('en-US', {
+const twoDecimalFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
 export function formatMoney(amount: number): string {
-  return twoDecimalNumber.format(amount);
+  return twoDecimalFormatter.format(amount);
 }
 
 /** Always shows the sign, e.g. "+1,250.00" or "-310.50". */
 export function formatSignedMoney(amount: number): string {
   const sign = amount >= 0 ? '+' : '-';
-  return `${sign}${twoDecimalNumber.format(Math.abs(amount))}`;
+  return `${sign}${twoDecimalFormatter.format(Math.abs(amount))}`;
 }
 
 /** Always shows the sign, with one decimal place, e.g. "+45.9%". */

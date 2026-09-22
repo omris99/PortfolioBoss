@@ -34,8 +34,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PortfolioSyncServiceTest {
 
     private static final String ACCOUNT = "U1234567";
-    private static final int APPLE = 265598;
-    private static final int MICROSOFT = 272093;
+    private static final int APPLE_CON_ID = 265598;
+    private static final int MICROSOFT_CON_ID = 272093;
     private static final Instant FIRST_RUN = Instant.parse("2026-09-21T08:00:00Z");
     private static final Instant SECOND_RUN = Instant.parse("2026-09-22T08:00:00Z");
     private static final Instant THIRD_RUN = Instant.parse("2026-09-23T08:00:00Z");
@@ -54,7 +54,7 @@ class PortfolioSyncServiceTest {
         SyncResult result = syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)));
 
         assertThat(result).isEqualTo(new SyncResult(1, 0, 0));
-        assertThat(rowOf(APPLE))
+        assertThat(rowOf(APPLE_CON_ID))
                 .containsEntry("symbol", "AAPL")
                 .containsEntry("status", "OPEN")
                 .containsEntry("position", 10.0)
@@ -65,32 +65,32 @@ class PortfolioSyncServiceTest {
     @Test
     void refreshesIbFiguresButNeverTheSectorOrTheTrades() {
         syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)));
-        long appleId = holdingIdOf(APPLE);
-        jdbc.update("update holding set sector = 'Technology' where id = ?", appleId);
-        insertTrade(appleId);
+        long appleHoldingId = holdingIdOf(APPLE_CON_ID);
+        jdbc.update("update holding set sector = 'Technology' where id = ?", appleHoldingId);
+        insertTrade(appleHoldingId);
         startNextRun();
 
         SyncResult result = syncService.sync(snapshotOf(SECOND_RUN, apple(12, 160.0)));
 
         assertThat(result).isEqualTo(new SyncResult(0, 1, 0));
-        assertThat(rowOf(APPLE))
+        assertThat(rowOf(APPLE_CON_ID))
                 .containsEntry("position", 12.0)
                 .containsEntry("average_cost", 160.0)
                 .containsEntry("sector", "Technology");
-        assertThat(tradeCountOf(appleId)).isEqualTo(1);
+        assertThat(tradeCountOf(appleHoldingId)).isEqualTo(1);
     }
 
     @Test
     void marksAHoldingThatLeftTwsAsClosedAndKeepsItsRowAndTrades() {
         syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0), microsoft(5, 300.0)));
-        long appleId = holdingIdOf(APPLE);
-        insertTrade(appleId);
+        long appleHoldingId = holdingIdOf(APPLE_CON_ID);
+        insertTrade(appleHoldingId);
         startNextRun();
 
         SyncResult result = syncService.sync(snapshotOf(SECOND_RUN, microsoft(5, 300.0)));
 
         assertThat(result).isEqualTo(new SyncResult(0, 1, 1));
-        Map<String, Object> row = rowOf(APPLE);
+        Map<String, Object> row = rowOf(APPLE_CON_ID);
         assertThat(row)
                 .containsEntry("status", "CLOSED")
                 .containsEntry("position", 0.0)
@@ -99,7 +99,7 @@ class PortfolioSyncServiceTest {
                 .containsEntry("average_cost", 150.0);
         assertThat(instantOf(row, "closed_detected_at")).isEqualTo(SECOND_RUN);
         assertThat(instantOf(row, "last_synced_at")).isEqualTo(FIRST_RUN);
-        assertThat(tradeCountOf(appleId)).isEqualTo(1);
+        assertThat(tradeCountOf(appleHoldingId)).isEqualTo(1);
     }
 
     @Test
@@ -112,7 +112,7 @@ class PortfolioSyncServiceTest {
         SyncResult result = syncService.sync(snapshotOf(THIRD_RUN, apple(8, 155.0)));
 
         assertThat(result).isEqualTo(new SyncResult(0, 1, 0));
-        assertThat(rowOf(APPLE))
+        assertThat(rowOf(APPLE_CON_ID))
                 .containsEntry("status", "OPEN")
                 .containsEntry("position", 8.0)
                 .containsEntry("closed_detected_at", null);
@@ -121,11 +121,11 @@ class PortfolioSyncServiceTest {
     @Test
     void storesFiguresIbDidNotReportAsNull() {
         Holding withoutCostData = new Holding(
-                "MSFT", MICROSOFT, "STK", "USD", 5.0, Double.NaN, Double.NaN, Double.NaN, Double.NaN, 0.0, ACCOUNT);
+                "MSFT", MICROSOFT_CON_ID, "STK", "USD", 5.0, Double.NaN, Double.NaN, Double.NaN, Double.NaN, 0.0, ACCOUNT);
 
         syncService.sync(snapshotOf(FIRST_RUN, withoutCostData));
 
-        assertThat(rowOf(MICROSOFT))
+        assertThat(rowOf(MICROSOFT_CON_ID))
                 .containsEntry("position", 5.0)
                 .containsEntry("average_cost", null)
                 .containsEntry("market_price", null)
@@ -190,23 +190,23 @@ class PortfolioSyncServiceTest {
         return jdbc.queryForObject(countQuery, Integer.class);
     }
 
-    private static Instant instantOf(Map<String, Object> row, String column) {
+    private Instant instantOf(Map<String, Object> row, String column) {
         return ((Timestamp) row.get(column)).toInstant();
     }
 
-    private static PortfolioSnapshot snapshotOf(Instant asOf, Holding... holdings) {
+    private PortfolioSnapshot snapshotOf(Instant asOf, Holding... holdings) {
         return new PortfolioSnapshot(ACCOUNT, asOf, 100_000.0, 25_000.0, List.of(holdings));
     }
 
-    private static Holding apple(double position, double averageCost) {
-        return holding("AAPL", APPLE, position, averageCost);
+    private Holding apple(double position, double averageCost) {
+        return holding("AAPL", APPLE_CON_ID, position, averageCost);
     }
 
-    private static Holding microsoft(double position, double averageCost) {
-        return holding("MSFT", MICROSOFT, position, averageCost);
+    private Holding microsoft(double position, double averageCost) {
+        return holding("MSFT", MICROSOFT_CON_ID, position, averageCost);
     }
 
-    private static Holding holding(String symbol, int conId, double position, double averageCost) {
+    private Holding holding(String symbol, int conId, double position, double averageCost) {
         double marketPrice = 200.0;
         return new Holding(symbol, conId, "STK", "USD", position, averageCost, marketPrice,
                 position * marketPrice, position * (marketPrice - averageCost), 0.0, ACCOUNT);

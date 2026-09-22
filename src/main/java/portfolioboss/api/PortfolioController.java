@@ -20,20 +20,20 @@ class PortfolioController {
 
     private final PortfolioReadService portfolioReadService;
 
-    PortfolioController(PortfolioReadService portfolioReadService) {
+    protected PortfolioController(PortfolioReadService portfolioReadService) {
         this.portfolioReadService = portfolioReadService;
     }
 
     @GetMapping("/api/portfolio")
-    ResponseEntity<PortfolioResponse> portfolio() {
-        Optional<PortfolioResponse> portfolio = portfolioReadService.currentPortfolio();
-        if (portfolio.isEmpty()) {
+    protected ResponseEntity<PortfolioResponse> portfolio() {
+        Optional<PortfolioResponse> storedPortfolio = portfolioReadService.currentPortfolio();
+        if (storedPortfolio.isEmpty()) {
             // Only on the very first run: the web server is already up while TwsPortfolioRunner is still
             // reading TWS (up to ~15s), and nothing has been synced yet.
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(portfolio.get());
+                .body(storedPortfolio.get());
     }
 }

@@ -33,7 +33,7 @@ public record Holding(
 
     /** Unrealized P&L as a percentage of the cost basis. */
     public double unrealizedPnlPercent() {
-        double basis = Math.abs(costBasis());
-        return basis == 0.0 ? 0.0 : (unrealizedPnl / basis) * 100.0;
+        double absoluteCostBasis = Math.abs(costBasis());
+        return absoluteCostBasis == 0.0 ? 0.0 : (unrealizedPnl / absoluteCostBasis) * 100.0;
     }
 }

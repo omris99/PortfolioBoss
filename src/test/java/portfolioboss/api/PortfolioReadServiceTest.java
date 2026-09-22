@@ -6,15 +6,22 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.PortfolioResponse;
+import portfolioboss.api.response.TradeResponse;
 import portfolioboss.db.HoldingStatus;
 import portfolioboss.db.PortfolioSyncService;
+import portfolioboss.db.TradeSide;
 import portfolioboss.model.Holding;
 import portfolioboss.model.PortfolioSnapshot;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,8 +41,8 @@ import static org.assertj.core.api.Assertions.within;
 class PortfolioReadServiceTest {
 
     private static final String ACCOUNT = "U1234567";
-    private static final int APPLE = 265598;
-    private static final int MICROSOFT = 272093;
+    private static final int APPLE_CON_ID = 265598;
+    private static final int MICROSOFT_CON_ID = 272093;
     private static final Instant FIRST_RUN = Instant.parse("2026-09-21T08:00:00Z");
     private static final Instant SECOND_RUN = Instant.parse("2026-09-22T08:00:00Z");
 
@@ -47,6 +54,9 @@ class PortfolioReadServiceTest {
 
     @Autowired
     private TestEntityManager entityManager;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Test
     void hasNothingToServeBeforeTheFirstSync() {
@@ -78,15 +88,59 @@ class PortfolioReadServiceTest {
         assertThat(holding.costBasis()).isEqualTo(1500.0);
         assertThat(holding.unrealizedPnlPercent()).isCloseTo(33.333, within(0.001));
         assertThat(holding.id()).isPositive();
-        assertThat(holding.conId()).isEqualTo(APPLE);
+        assertThat(holding.conId()).isEqualTo(APPLE_CON_ID);
         assertThat(holding.sector()).isNull();
         assertThat(holding.status()).isEqualTo(HoldingStatus.OPEN);
+        assertThat(holding.firstBuyDate()).isNull();
+        assertThat(holding.lastSellDate()).isNull();
+        assertThat(holding.holdingDays()).isNull();
+        assertThat(holding.trades()).isEmpty();
+    }
+
+    @Test
+    void derivesBuySellDatesAndHoldingDaysFromTheTradesTable() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0)));
+        long appleHoldingId = holdingIdOf(APPLE_CON_ID);
+        insertTrade(appleHoldingId, LocalDate.of(2024, 3, 14), TradeSide.BUY, "10", "150.00", "Initial position");
+
+        HoldingResponse holding = readPortfolio().orElseThrow().holdings().get(0);
+
+        LocalDate snapshotDate = FIRST_RUN.atZone(ZoneId.systemDefault()).toLocalDate();
+        assertThat(holding.firstBuyDate()).isEqualTo(LocalDate.of(2024, 3, 14));
+        assertThat(holding.lastSellDate()).isNull();
+        assertThat(holding.holdingDays()).isEqualTo(ChronoUnit.DAYS.between(LocalDate.of(2024, 3, 14), snapshotDate));
+        assertThat(holding.trades()).hasSize(1);
+        TradeResponse trade = holding.trades().get(0);
+        assertThat(trade.tradeDate()).isEqualTo(LocalDate.of(2024, 3, 14));
+        assertThat(trade.side()).isEqualTo(TradeSide.BUY);
+        assertThat(trade.quantity()).isEqualByComparingTo("10");
+        assertThat(trade.price()).isEqualByComparingTo("150.00");
+        assertThat(trade.note()).isEqualTo("Initial position");
+    }
+
+    @Test
+    void aFullSellClosesTheEpisodeSoHoldingDaysRunsToTheSellDateNotTheSnapshot() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0)));
+        long appleHoldingId = holdingIdOf(APPLE_CON_ID);
+        insertTrade(appleHoldingId, LocalDate.of(2024, 1, 1), TradeSide.BUY, "10", "150.00", null);
+        insertTrade(appleHoldingId, LocalDate.of(2024, 6, 1), TradeSide.SELL, "10", "180.00", null);
+        forgetWhatHibernateLoaded();
+        syncService.sync(snapshotOf(SECOND_RUN, 100_000.0, 25_000.0));   // Apple is gone: CLOSED
+
+        HoldingResponse holding = readPortfolio().orElseThrow().holdings().get(0);
+
+        assertThat(holding.status()).isEqualTo(HoldingStatus.CLOSED);
+        assertThat(holding.firstBuyDate()).isEqualTo(LocalDate.of(2024, 1, 1));
+        assertThat(holding.lastSellDate()).isEqualTo(LocalDate.of(2024, 6, 1));
+        assertThat(holding.holdingDays())
+                .isEqualTo(ChronoUnit.DAYS.between(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 6, 1)));
+        assertThat(holding.trades()).hasSize(2);
     }
 
     @Test
     void writesFiguresIbDidNotReportAsNull() {
         Holding withoutCostData = new Holding(
-                "MSFT", MICROSOFT, "STK", "USD", 5.0, Double.NaN, Double.NaN, Double.NaN, Double.NaN, 0.0, ACCOUNT);
+                "MSFT", MICROSOFT_CON_ID, "STK", "USD", 5.0, Double.NaN, Double.NaN, Double.NaN, Double.NaN, 0.0, ACCOUNT);
         syncService.sync(snapshotOf(FIRST_RUN, Double.NaN, Double.NaN, withoutCostData));
 
         PortfolioResponse portfolio = readPortfolio().orElseThrow();
@@ -143,20 +197,35 @@ class PortfolioReadServiceTest {
         entityManager.clear();
     }
 
-    private static PortfolioSnapshot snapshotOf(Instant asOf, double netLiquidation, double totalCashValue,
+    private PortfolioSnapshot snapshotOf(Instant asOf, double netLiquidation, double totalCashValue,
                                                 Holding... holdings) {
         return new PortfolioSnapshot(ACCOUNT, asOf, netLiquidation, totalCashValue, List.of(holdings));
     }
 
-    private static Holding apple(double position, double averageCost) {
-        return holding("AAPL", APPLE, position, averageCost);
+    private long holdingIdOf(int conId) {
+        entityManager.flush();
+        return jdbc.queryForObject(
+                "select id from holding where account = ? and con_id = ?", Long.class, ACCOUNT, conId);
     }
 
-    private static Holding microsoft(double position, double averageCost) {
-        return holding("MSFT", MICROSOFT, position, averageCost);
+    private void insertTrade(long holdingId, LocalDate tradeDate, TradeSide side, String quantity, String price,
+                             String note) {
+        // Bound as BigDecimal, not String: the driver would otherwise send them as varchar, and
+        // Postgres refuses to insert a varchar into a numeric column without an explicit cast.
+        jdbc.update("insert into trade (holding_id, trade_date, side, quantity, price, note) values (?, ?, ?, ?, ?, ?)",
+                holdingId, tradeDate, side.name(), new BigDecimal(quantity), price == null ? null : new BigDecimal(price), note);
+        forgetWhatHibernateLoaded();   // the sync's session must not overwrite what was just inserted with SQL
     }
 
-    private static Holding holding(String symbol, int conId, double position, double averageCost) {
+    private Holding apple(double position, double averageCost) {
+        return holding("AAPL", APPLE_CON_ID, position, averageCost);
+    }
+
+    private Holding microsoft(double position, double averageCost) {
+        return holding("MSFT", MICROSOFT_CON_ID, position, averageCost);
+    }
+
+    private Holding holding(String symbol, int conId, double position, double averageCost) {
         double marketPrice = 200.0;
         return new Holding(symbol, conId, "STK", "USD", position, averageCost, marketPrice,
                 position * marketPrice, position * (marketPrice - averageCost), 0.0, ACCOUNT);

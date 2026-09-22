@@ -12,9 +12,9 @@ const STATUS_DOT_COLORS: Record<LoadStatus, string> = {
   error: 'bg-rose-400',
 };
 
-function loadStatusOf(error: string | null, loading: boolean): LoadStatus {
-  if (error) return 'error';
-  if (loading) return 'loading';
+function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStatus {
+  if (errorMessage) return 'error';
+  if (isLoading) return 'loading';
   return 'ready';
 }
 
@@ -48,9 +48,9 @@ function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => voi
   );
 }
 
-function PositionsContent({ snapshot, loading }: { snapshot: PortfolioSnapshot | null; loading: boolean }) {
+function PositionsContent({ snapshot, isLoading }: { snapshot: PortfolioSnapshot | null; isLoading: boolean }) {
   if (snapshot === null) {
-    return <EmptyBox message={loading ? 'Loading holdings…' : 'No data.'} />;
+    return <EmptyBox message={isLoading ? 'Loading holdings…' : 'No data.'} />;
   }
   if (snapshot.holdings.length === 0) {
     return <EmptyBox message="No open positions reported." />;
@@ -59,9 +59,9 @@ function PositionsContent({ snapshot, loading }: { snapshot: PortfolioSnapshot |
 }
 
 function App() {
-  const { snapshot, error, loading, retry } = usePortfolio();
+  const { snapshot, errorMessage, isLoading, retry } = usePortfolio();
 
-  const loadStatus = loadStatusOf(error, loading);
+  const loadStatus = loadStatusOf(errorMessage, isLoading);
   const sectionSubtitle = snapshot
     ? `Account ${snapshot.account} · snapshot taken ${new Date(snapshot.asOf).toLocaleString()}`
     : 'Snapshot read from TWS when the API started.';
@@ -74,7 +74,7 @@ function App() {
           <p className="mt-1 text-xs text-slate-400">Read-only view of your Interactive Brokers holdings.</p>
         </header>
 
-        {error && <ErrorBanner message={error} onRetry={() => void retry()} />}
+        {errorMessage && <ErrorBanner message={errorMessage} onRetry={() => void retry()} />}
 
         {snapshot && <SummaryBar snapshot={snapshot} />}
 
@@ -91,7 +91,7 @@ function App() {
           </div>
 
           <div className="mt-4">
-            <PositionsContent snapshot={snapshot} loading={loading} />
+            <PositionsContent snapshot={snapshot} isLoading={isLoading} />
           </div>
         </section>
       </main>

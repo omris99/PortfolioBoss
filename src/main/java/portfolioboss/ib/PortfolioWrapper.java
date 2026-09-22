@@ -39,21 +39,21 @@ public class PortfolioWrapper extends DefaultEWrapper {
     private volatile boolean connectionFailed = false;
     private volatile PortfolioSnapshot snapshot;
 
-    void setClient(EClientSocket client) {
+    protected void setClient(EClientSocket client) {
         this.client = client;
     }
 
     /** The finished download, or {@code null} until {@code accountDownloadEnd} has fired. */
-    PortfolioSnapshot snapshot() {
+    protected PortfolioSnapshot snapshot() {
         return snapshot;
     }
 
     /** Blocks until the initial portfolio download finishes or the timeout elapses. */
-    boolean awaitDownload(long timeout, TimeUnit unit) throws InterruptedException {
+    protected boolean awaitDownload(long timeout, TimeUnit unit) throws InterruptedException {
         return portfolioDownloaded.await(timeout, unit);
     }
 
-    boolean connectionFailed() {
+    protected boolean connectionFailed() {
         return connectionFailed;
     }
 
@@ -97,9 +97,9 @@ public class PortfolioWrapper extends DefaultEWrapper {
     @Override
     public void updateAccountValue(String key, String value, String currency, String accountName) {
         if ("NetLiquidation".equals(key)) {
-            netLiquidation = parseOrNaN(value);
+            netLiquidation = parseDoubleOrNaN(value);
         } else if ("TotalCashValue".equals(key)) {
-            totalCashValue = parseOrNaN(value);
+            totalCashValue = parseDoubleOrNaN(value);
         }
     }
 
@@ -117,12 +117,12 @@ public class PortfolioWrapper extends DefaultEWrapper {
     // ── errors ──────────────────────────────────────────────────────────────────────────────────
 
     @Override
-    public void error(int requestId, long errorTime, int errorCode, String errorMsg, String advancedOrderRejectJson) {
+    public void error(int requestId, long errorTime, int errorCode, String errorMessage, String advancedOrderRejectJson) {
         if (INFO_CODES.contains(errorCode)) {
-            System.out.println("[ib] " + errorMsg);
+            System.out.println("[ib] " + errorMessage);
             return;
         }
-        System.err.println("[ib error] code=" + errorCode + " id=" + requestId + " — " + errorMsg);
+        System.err.println("[ib error] code=" + errorCode + " id=" + requestId + " — " + errorMessage);
         if (errorCode == 502 || errorCode == 504) {   // couldn't connect / not connected
             connectionFailed = true;
             portfolioDownloaded.countDown();
@@ -154,11 +154,13 @@ public class PortfolioWrapper extends DefaultEWrapper {
                     "SYMBOL", "QTY", "AVG COST", "LAST", "MKT VALUE", "UNREAL P&L", "%");
             System.out.println("────────────────────────────────────────────────────────────────────────────────────");
 
-            double totalValue = 0, totalPnl = 0;
-            var largestFirst = holdings.values().stream()
-                    .sorted((a, b) -> Double.compare(b.marketValue(), a.marketValue()))
+            double totalMarketValue = 0;
+            double totalUnrealizedPnl = 0;
+            var holdingsLargestFirst = holdings.values().stream()
+                    .sorted((firstHolding, secondHolding) ->
+                            Double.compare(secondHolding.marketValue(), firstHolding.marketValue()))
                     .toList();
-            for (Holding holding : largestFirst) {
+            for (Holding holding : holdingsLargestFirst) {
                 System.out.printf("%-8s %12s %12s %12s %14s %14s %7.1f%%%n",
                         holding.symbol(),
                         formatQuantity(holding.position()),
@@ -167,12 +169,12 @@ public class PortfolioWrapper extends DefaultEWrapper {
                         formatMoney(holding.marketValue()),
                         formatSignedMoney(holding.unrealizedPnl()),
                         holding.unrealizedPnlPercent());
-                totalValue += holding.marketValue();
-                totalPnl += holding.unrealizedPnl();
+                totalMarketValue += holding.marketValue();
+                totalUnrealizedPnl += holding.unrealizedPnl();
             }
             System.out.println("────────────────────────────────────────────────────────────────────────────────────");
             System.out.printf("%-8s %12s %12s %12s %14s %14s%n",
-                    "TOTAL", "", "", "", formatMoney(totalValue), formatSignedMoney(totalPnl));
+                    "TOTAL", "", "", "", formatMoney(totalMarketValue), formatSignedMoney(totalUnrealizedPnl));
         }
 
         System.out.println();
@@ -186,7 +188,7 @@ public class PortfolioWrapper extends DefaultEWrapper {
         System.out.println();
     }
 
-    private static double parseOrNaN(String value) {
+    private double parseDoubleOrNaN(String value) {
         try {
             return Double.parseDouble(value);
         } catch (NumberFormatException e) {
@@ -194,16 +196,16 @@ public class PortfolioWrapper extends DefaultEWrapper {
         }
     }
 
-    private static String formatMoney(double amount) {
+    private String formatMoney(double amount) {
         return String.format("%,.2f", amount);
     }
 
-    private static String formatSignedMoney(double amount) {
+    private String formatSignedMoney(double amount) {
         return (amount >= 0 ? "+" : "-") + String.format("%,.2f", Math.abs(amount));
     }
 
     /** Whole share counts print without decimals; fractional shares keep 4 places. */
-    private static String formatQuantity(double quantity) {
+    private String formatQuantity(double quantity) {
         return quantity == Math.floor(quantity)
                 ? String.format("%.0f", quantity)
                 : String.format("%.4f", quantity);

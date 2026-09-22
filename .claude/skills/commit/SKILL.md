@@ -30,7 +30,8 @@ Stage and commit the current changes.
 (`docs: ...`, `chore: ...`). Never invent a scope that isn't on this list; if nothing
 fits, leave it out.
 
-*In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection, the first UI slice):*
+*In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection, derived buy/sell dates,
+the first UI slice):*
 
 | Scope | Covers |
 |---|---|
@@ -39,6 +40,7 @@ fits, leave it out.
 | `report` | the console snapshot report and its formatting |
 | `api` | `PortfolioController`, `PortfolioReadService` and the `api/response/` records — the local Spring MVC API (`GET /api/portfolio`), which always reads from the database |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
+| `domain` | `portfolioboss.domain` (`HoldingHistory`, `TradeFact`) — pure computation over trades, no Spring |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 

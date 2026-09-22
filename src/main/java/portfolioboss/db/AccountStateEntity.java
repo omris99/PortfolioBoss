@@ -28,13 +28,11 @@ public class AccountStateEntity {
     protected AccountStateEntity() {
     }
 
-    static AccountStateEntity of(PortfolioSnapshot snapshot) {
-        AccountStateEntity state = new AccountStateEntity();
-        state.account = snapshot.account();
-        state.asOf = snapshot.asOf();
-        state.netLiquidation = Utils.finiteOrNull(snapshot.netLiquidation());
-        state.totalCashValue = Utils.finiteOrNull(snapshot.totalCashValue());
-        return state;
+    protected AccountStateEntity(PortfolioSnapshot snapshot) {
+        this.account = snapshot.account();
+        this.asOf = snapshot.asOf();
+        this.netLiquidation = Utils.finiteOrNull(snapshot.netLiquidation());
+        this.totalCashValue = Utils.finiteOrNull(snapshot.totalCashValue());
     }
 
     public String account() {

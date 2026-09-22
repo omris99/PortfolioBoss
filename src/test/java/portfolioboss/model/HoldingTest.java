@@ -45,7 +45,7 @@ class HoldingTest {
         assertThat(shortHolding.unrealizedPnlPercent()).isCloseTo(10.0, within(TOLERANCE));
     }
 
-    private static Holding holdingWith(double position, double averageCost, double unrealizedPnl) {
+    private Holding holdingWith(double position, double averageCost, double unrealizedPnl) {
         return new Holding("AAPL", 265598, "STK", "USD", position, averageCost, 0.0, 0.0, unrealizedPnl, 0.0, "U1234567");
     }
 }

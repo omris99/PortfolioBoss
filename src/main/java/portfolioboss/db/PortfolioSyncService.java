@@ -20,12 +20,12 @@ import java.util.Set;
 @Service
 public class PortfolioSyncService {
 
-    private final HoldingRepository holdings;
-    private final AccountStateRepository accountStates;
+    private final HoldingRepository holdingRepository;
+    private final AccountStateRepository accountStateRepository;
 
-    public PortfolioSyncService(HoldingRepository holdings, AccountStateRepository accountStates) {
-        this.holdings = holdings;
-        this.accountStates = accountStates;
+    public PortfolioSyncService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository) {
+        this.holdingRepository = holdingRepository;
+        this.accountStateRepository = accountStateRepository;
     }
 
     @Transactional
@@ -33,26 +33,27 @@ public class PortfolioSyncService {
         String account = snapshot.account();
         Instant syncedAt = snapshot.asOf();
         Set<Integer> reportedConIds = new HashSet<>();
-        int added = 0;
-        int updated = 0;
+        int addedCount = 0;
+        int updatedCount = 0;
 
-        for (Holding reading : snapshot.holdings()) {
-            reportedConIds.add(reading.conId());
-            Optional<HoldingEntity> stored = holdings.findByAccountAndConId(account, reading.conId());
-            if (stored.isPresent()) {
-                stored.get().refreshFromIb(reading, syncedAt);   // Hibernate writes the change at commit
-                updated++;
+        for (Holding holdingFromIb : snapshot.holdings()) {
+            reportedConIds.add(holdingFromIb.conId());
+            Optional<HoldingEntity> storedHolding =
+                    holdingRepository.findByAccountAndConId(account, holdingFromIb.conId());
+            if (storedHolding.isPresent()) {
+                storedHolding.get().refreshFromIb(holdingFromIb, syncedAt);   // Hibernate writes the change at commit
+                updatedCount++;
             } else {
-                holdings.save(HoldingEntity.firstSeen(account, reading, syncedAt));
-                added++;
+                holdingRepository.save(new HoldingEntity(account, holdingFromIb, syncedAt));
+                addedCount++;
             }
         }
 
-        int closed = markMissingAsClosed(account, reportedConIds, syncedAt);
-        accountStates.save(AccountStateEntity.of(snapshot));
+        int closedCount = markMissingAsClosed(account, reportedConIds, syncedAt);
+        accountStateRepository.save(new AccountStateEntity(snapshot));
         System.out.printf("[db] synced %d holdings (%d new, %d updated, %d closed)%n",
-                reportedConIds.size(), added, updated, closed);
-        return new SyncResult(added, updated, closed);
+                reportedConIds.size(), addedCount, updatedCount, closedCount);
+        return new SyncResult(addedCount, updatedCount, closedCount);
     }
 
     /**
@@ -60,13 +61,13 @@ public class PortfolioSyncService {
      * read from IB costs nothing permanent.
      */
     private int markMissingAsClosed(String account, Set<Integer> reportedConIds, Instant syncedAt) {
-        int closed = 0;
-        for (HoldingEntity stored : holdings.findByAccountAndStatus(account, HoldingStatus.OPEN)) {
-            if (!reportedConIds.contains(stored.conId())) {
-                stored.markClosed(syncedAt);
-                closed++;
+        int closedCount = 0;
+        for (HoldingEntity openHolding : holdingRepository.findByAccountAndStatus(account, HoldingStatus.OPEN)) {
+            if (!reportedConIds.contains(openHolding.conId())) {
+                openHolding.markClosed(syncedAt);
+                closedCount++;
             }
         }
-        return closed;
+        return closedCount;
     }
 }
