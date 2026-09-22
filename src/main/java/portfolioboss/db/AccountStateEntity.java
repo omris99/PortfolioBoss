@@ -3,6 +3,8 @@ package portfolioboss.db;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import portfolioboss.model.PortfolioSnapshot;
+import portfolioboss.utils.Utils;
 
 import java.time.Instant;
 
@@ -24,5 +26,30 @@ public class AccountStateEntity {
 
     /** Required by JPA, which creates entities by reflection. */
     protected AccountStateEntity() {
+    }
+
+    static AccountStateEntity of(PortfolioSnapshot snapshot) {
+        AccountStateEntity state = new AccountStateEntity();
+        state.account = snapshot.account();
+        state.asOf = snapshot.asOf();
+        state.netLiquidation = Utils.finiteOrNull(snapshot.netLiquidation());
+        state.totalCashValue = Utils.finiteOrNull(snapshot.totalCashValue());
+        return state;
+    }
+
+    public String account() {
+        return account;
+    }
+
+    public Instant asOf() {
+        return asOf;
+    }
+
+    public Double netLiquidation() {
+        return netLiquidation;
+    }
+
+    public Double totalCashValue() {
+        return totalCashValue;
     }
 }

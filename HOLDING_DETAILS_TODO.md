@@ -482,8 +482,20 @@ pg_dump portfolioboss | gzip > "${HOME}/PortfolioBossBackups/portfolioboss-$(dat
 ## סשן 2 — סנכרון בחיבור + ה-API קורא מה-DB
 
 > **תנאי מוקדם:** סשן 1. **המטרה:** בכל חיבור ל-TWS ה-DB מתעדכן, וה-API מגיש **רק מה-DB**.
+>
+> **סטטוס (22.09.2026):** 2.1–2.5 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית:
+> - השירות הקורא נקרא **`PortfolioReadService`**, לא `PortfolioQueryService` (המלצה שאושרה).
+> - סדר המימוש: 2.1, ואז 2.2+2.5 (הסנכרון ובדיקותיו) יחד, ואז 2.4+2.3 יחד — אי אפשר היה למחוק את `SnapshotStore`
+>   לפני ששני הצדדים (הקורא והכותב) עברו לדבר עם ה-DB.
+> - `HoldingEntity` / `AccountStateEntity` קיבלו accessors ציבוריים בסגנון record ו-`HoldingEntity.toIbHolding()`,
+>   כך ש-`costBasis` / `unrealizedPnlPercent` נשארים מחושבים פעם אחת, ב-`Holding`.
+> - העוזר המשותף ל-JSON ול-DB (`finiteOrNull`, ובכיוון ההפוך `nanIfNull`) יושב ב-**`portfolioboss.utils.Utils`**
+>   (השם `Figures` נדחה — "שם גרוע מאוד"; `Utils` הוא הדפוס הקיים ב-IBBot). `JsonNumbers` נמחק.
+> - נוספו `PortfolioWrapperTest` ו-`PortfolioReadServiceTest`, לא בתוכנית המקורית.
+> - **חריגה מכוונת מהתוכנית, ביוזמת עומרי (22.09.2026):** יישמנו כבר עכשיו את הליבה של **סשן 9** למטה —
+>   TWS לא זמין כבר לא מפיל את האפליקציה. 9.2/9.3 (דגל stale + באנר ב-UI) נשארו בכוונה לסשן 9 עצמו.
 
-### 2.1 🟢 `Holding` מקבל `conId`; `PortfolioWrapper` ממפה לפיו
+### ✅ 2.1 🟢 `Holding` מקבל `conId`; `PortfolioWrapper` ממפה לפיו
 
 **קוד קיים רלוונטי:**
 ```java
@@ -504,7 +516,7 @@ holdings.put(contract.symbol(), new Holding(contract.symbol(), ...));
 
 ---
 
-### 2.2 🔴 `PortfolioSyncService` — הליבה של הסנכרון
+### ✅ 2.2 🔴 `PortfolioSyncService` — הליבה של הסנכרון
 
 **קובץ חדש:** `src/main/java/portfolioboss/db/PortfolioSyncService.java`
 
@@ -551,14 +563,16 @@ public class PortfolioSyncService {
 
 ---
 
-### 2.3 🟡 `Main`: סנכרון במקום `SnapshotStore`
+### ✅ 2.3 🟡 `Main`: סנכרון במקום `SnapshotStore`
 
 **המימוש:** ב-`ApplicationRunner` (0.3): `snapshotStore.set(snapshot)` ← `syncService.sync(snapshot)`. **למחוק את `SnapshotStore`.**
-אם הסנכרון זורק (שגיאת DB) — `[db error] ...` ויציאה עם קוד 1: בלי DB האפליקציה לא יכולה לעבוד. (יציאה על TWS לא זמין — נשארת עד סשן 9.)
+אם הסנכרון זורק (שגיאת DB) — `[db error] ...` ויציאה עם קוד 1: בלי DB האפליקציה לא יכולה לעבוד.
+**עודכן בפועל (22.09.2026):** המשפט "יציאה על TWS לא זמין — נשארת עד סשן 9" **כבר לא נכון** — ראו הליבה
+של סשן 9 למטה, שבוצעה מוקדם באותו יום ביוזמת עומרי.
 
 ---
 
-### 2.4 🟡 `PortfolioQueryService` + ה-DTOs — ה-API קורא מה-DB
+### ✅ 2.4 🟡 `PortfolioReadService` (בתוכנית: `PortfolioQueryService`) + ה-DTOs — ה-API קורא מה-DB
 
 **המימוש:**
 - `PortfolioResponse(account, asOf, netLiquidation, totalCashValue, holdings)` — `asOf` מ-`account_state.as_of`.
@@ -573,7 +587,7 @@ public class PortfolioSyncService {
 
 ---
 
-### 2.5 🟡 בדיקות סנכרון (JUnit מול DB אמיתי)
+### ✅ 2.5 🟡 בדיקות סנכרון (JUnit מול DB אמיתי)
 
 **הגדרה:** `src/test/resources/application-test.properties` → `jdbc:postgresql://localhost:5432/portfolioboss_test`, `@ActiveProfiles("test")`.
 **⚠️ בדיקות לעולם לא רצות מול `portfolioboss`.** שימוש ב-`@DataJpaTest` עם `@AutoConfigureTestDatabase(replace = NONE)` (כדי לא לעבור ל-DB מוטמע) + `@Import(PortfolioSyncService.class)`;
@@ -594,7 +608,20 @@ public class PortfolioSyncService {
 2. `psql portfolioboss -c "select symbol, position, status from holding"` תואם ל-TWS.
 3. `update holding set sector='Test' where symbol='...'` → ריצה נוספת → הסקטור נשאר.
 4. ה-UI מציג אותה טבלה כמו קודם (השדות החדשים עדיין לא מוצגים). `diff` מול `before.json` מסשן 0 — נוספו רק `id`, `conId`, `sector`, `status`.
-5. בלי TWS: יציאה עם ההודעה הישנה.
+5. ~~בלי TWS: יציאה עם ההודעה הישנה.~~ **שונה ב-22.09.2026** — ראו הסטטוס למעלה: בלי TWS האפליקציה עולה
+   כרגיל ומגישה את הסנכרון האחרון, במקום לצאת.
+
+**סטטוס הבדיקה (22.09.2026, חלקי):**
+1. ✅ ריצה ראשונה מול TWS חי: `holding` ב-`portfolioboss` (האמיתי) מכיל 7 שורות `OPEN`, שורת `account_state` אחת.
+   ⬜ ריצה שנייה מול TWS חי (כדי לראות `updated` ולא `new`) — עוד לא בוצעה.
+2. ⬜ פתוח — עומרי דחה לסשן 4.
+3. ⬜ פתוח — עומרי דחה לסשן 4 (אין עדיין דרך להזין סקטור מלבד `psql` ישירות; ה-endpoint הכותב מגיע רק שם).
+4. ⬜ פתוח חלקית: אומת ש-`GET /api/portfolio` מחזיר 200 עם `id`/`conId`/`sector`/`status` על גבי הנתונים האמיתיים;
+   לא בוצעה השוואה חזותית מול ה-UI הפתוח בדפדפן ולא `diff` מול `before.json`.
+5. ✅ אומת פעמיים: (א) TWS כבוי **לפני** השינוי — יציאה עם ההודעה הישנה, ה-DB לא נגע. (ב) TWS כבוי **אחרי**
+   השינוי, מול אותו DB עם 7 השורות מ-(1) — האפליקציה עלתה, הדפיסה
+   `[db] TWS unreachable; serving the portfolio from the last sync, if any`, ו-`/api/portfolio` החזיר את
+   אותם 7 holdings ואת אותו `asOf` כמו הסנכרון האחרון.
 
 ---
 
@@ -1032,13 +1059,21 @@ CREATE TABLE trade_draft (
 ## סשן 9 — [רעיון עתידי] עבודה ללא TWS (Offline fallback)
 
 > **תנאי מוקדם:** סשן 2 (בלתי-תלוי בסשנים 3–8). **הרעיון:** אם TWS סגור או לא מחובר — להציג את הנתונים השמורים האחרונים ולאפשר להמשיך להזין סקטור ועסקאות.
+>
+> **סטטוס (22.09.2026):** 9.1 בוצע מוקדם, בתוך סשן 2, ביוזמת עומרי — ראו שם. 9.2 ו-9.3 (דגל stale + באנר
+> ב-UI) עדיין לא בוצעו ונשארים לסשן הזה, בכוונה (עומרי בחר להשאיר, 22.09.2026).
 
-### 9.1 🟢 `Main` — במקום יציאה
+### ✅ 9.1 🟢 `Main` — במקום יציאה
 
 **קוד קיים רלוונטי:** ה-runner (0.3): `if (snapshot == null) { System.exit(SpringApplication.exit(context)); }`.
 
 **התיקון:** אם `snapshot == null` **וקיימת** שורה ב-`account_state` → `[db] TWS unavailable — serving the last saved portfolio (synced <asOf>)`, ממשיכים ל-`UiLauncher`.
 אם אין נתונים שמורים בכלל — יוצאים כמו היום (אין מה להציג).
+
+**בפועל (`TwsPortfolioRunner`, סשן 2):** ההודעה היא `[db] TWS unreachable; serving the portfolio from the
+last sync, if any`, וה-runner **תמיד** ממשיך ל-`UiLauncher` — גם אם `account_state` ריק לגמרי — ונשען על
+ה-503 הקיים ב-`PortfolioController` כדי לטפל במקרה הזה, במקום ענף נפרד שבודק אם יש נתונים ויוצא אם אין.
+פשוט יותר מהתכנון המקורי, ואומת חי ב-22.09.2026.
 
 ### 9.2 🟢 מצב סנכרון ב-API
 

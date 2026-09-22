@@ -52,6 +52,18 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- @DataJpaTest: starts only the database layer (entities and repositories) for a test. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Lets those database tests run the Flyway migrations, so the test database gets the real schema. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway-test</artifactId>
+            <scope>test</scope>
+        </dependency>
 
         <!-- IB's TWS API is not on Maven Central: run.sh installs ~/DevTools/twsapi/TwsApi.jar into the
              local Maven repository. "local" is only a label, not a real version. -->

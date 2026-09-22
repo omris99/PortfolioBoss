@@ -46,6 +46,6 @@ class HoldingTest {
     }
 
     private static Holding holdingWith(double position, double averageCost, double unrealizedPnl) {
-        return new Holding("AAPL", "STK", "USD", position, averageCost, 0.0, 0.0, unrealizedPnl, 0.0, "U1234567");
+        return new Holding("AAPL", 265598, "STK", "USD", position, averageCost, 0.0, 0.0, unrealizedPnl, 0.0, "U1234567");
     }
 }

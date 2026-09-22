@@ -30,15 +30,15 @@ Stage and commit the current changes.
 (`docs: ...`, `chore: ...`). Never invent a scope that isn't on this list; if nothing
 fits, leave it out.
 
-*In the code today (Milestone 0 + the first UI slice + the database schema, built with Maven and Spring Boot):*
+*In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection, the first UI slice):*
 
 | Scope | Covers |
 |---|---|
 | `ib` | `IbGateway`, `PortfolioWrapper`, `TwsPortfolioRunner` — socket, reader loop, EWrapper callbacks, and the startup read from TWS |
 | `model` | `Holding`, `PortfolioSnapshot` and the derived portfolio math |
 | `report` | the console snapshot report and its formatting |
-| `api` | `PortfolioController`, `SnapshotStore` and the `api/response/` records — the local Spring MVC API (`GET /api/portfolio`) |
-| `db` | `portfolioboss.db` (entities, repositories, and later the sync and the daily NAV snapshot), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
+| `api` | `PortfolioController`, `PortfolioReadService` and the `api/response/` records — the local Spring MVC API (`GET /api/portfolio`), which always reads from the database |
+| `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 

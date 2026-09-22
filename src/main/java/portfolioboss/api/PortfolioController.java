@@ -6,12 +6,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import portfolioboss.api.response.PortfolioResponse;
-import portfolioboss.model.PortfolioSnapshot;
 
 import java.util.Optional;
 
 /**
- * The local HTTP API the UI reads from: serves the portfolio snapshot as JSON.
+ * The local HTTP API the UI reads from: serves the portfolio the last sync stored in the database, as JSON.
  *
  * <p>Read-only by construction — a single GET endpoint; Spring answers 405 to every other method.
  * The server is bound to the loopback interface (see {@code application.properties}).
@@ -19,21 +18,22 @@ import java.util.Optional;
 @RestController
 class PortfolioController {
 
-    private final SnapshotStore snapshotStore;
+    private final PortfolioReadService portfolioReadService;
 
-    PortfolioController(SnapshotStore snapshotStore) {
-        this.snapshotStore = snapshotStore;
+    PortfolioController(PortfolioReadService portfolioReadService) {
+        this.portfolioReadService = portfolioReadService;
     }
 
     @GetMapping("/api/portfolio")
     ResponseEntity<PortfolioResponse> portfolio() {
-        Optional<PortfolioSnapshot> snapshot = snapshotStore.current();
-        if (snapshot.isEmpty()) {
-            // The web server is already up while Main is still reading TWS (up to ~15s).
+        Optional<PortfolioResponse> portfolio = portfolioReadService.currentPortfolio();
+        if (portfolio.isEmpty()) {
+            // Only on the very first run: the web server is already up while TwsPortfolioRunner is still
+            // reading TWS (up to ~15s), and nothing has been synced yet.
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(PortfolioResponse.from(snapshot.get()));
+                .body(portfolio.get());
     }
 }

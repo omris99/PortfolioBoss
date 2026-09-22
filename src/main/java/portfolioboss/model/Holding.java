@@ -6,6 +6,7 @@ package portfolioboss.model;
  * <p>All figures come straight from IB's {@code updatePortfolio} callback — the broker is the
  * source of truth for quantity and average cost, so nothing here is entered by hand.
  *
+ * @param conId        IB's stable id for the instrument ({@code symbol} can change; this does not)
  * @param position     number of shares held (can be fractional)
  * @param averageCost  average cost per share, including commissions (IB already folds these in)
  * @param marketPrice  last price IB has for the instrument
@@ -14,6 +15,7 @@ package portfolioboss.model;
  */
 public record Holding(
         String symbol,
+        int conId,
         String secType,
         String currency,
         double position,

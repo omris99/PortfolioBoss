@@ -16,4 +16,7 @@ public interface HoldingRepository extends JpaRepository<HoldingEntity, Long> {
     Optional<HoldingEntity> findByAccountAndConId(String account, int conId);
 
     List<HoldingEntity> findByAccountAndStatus(String account, HoldingStatus status);
+
+    /** Open and closed holdings alike, in the order they were first seen. */
+    List<HoldingEntity> findByAccountOrderById(String account);
 }

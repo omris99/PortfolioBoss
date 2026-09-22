@@ -1,13 +1,15 @@
 package portfolioboss.api.response;
 
-import portfolioboss.model.PortfolioSnapshot;
+import portfolioboss.db.AccountStateEntity;
+import portfolioboss.db.HoldingEntity;
 
 import java.time.Instant;
 import java.util.List;
 
 /**
- * The body of {@code GET /api/portfolio}. {@code asOf} is written as an ISO-8601 string
- * ({@code "2026-09-19T08:05:00Z"}); a figure IB did not report is {@code null}.
+ * The body of {@code GET /api/portfolio}: the account figures and the holdings of the last sync, as stored in
+ * the database. {@code asOf} is written as an ISO-8601 string ({@code "2026-09-19T08:05:00Z"}); a figure IB did
+ * not report is {@code null} (the database already holds it as {@code NULL}).
  */
 public record PortfolioResponse(
         String account,
@@ -16,15 +18,12 @@ public record PortfolioResponse(
         Double totalCashValue,
         List<HoldingResponse> holdings) {
 
-    public static PortfolioResponse from(PortfolioSnapshot snapshot) {
-        List<HoldingResponse> holdings = snapshot.holdings().stream()
-                .map(HoldingResponse::from)
-                .toList();
+    public static PortfolioResponse from(AccountStateEntity accountState, List<HoldingEntity> holdings) {
         return new PortfolioResponse(
-                snapshot.account(),
-                snapshot.asOf(),
-                JsonNumbers.finiteOrNull(snapshot.netLiquidation()),
-                JsonNumbers.finiteOrNull(snapshot.totalCashValue()),
-                holdings);
+                accountState.account(),
+                accountState.asOf(),
+                accountState.netLiquidation(),
+                accountState.totalCashValue(),
+                holdings.stream().map(HoldingResponse::from).toList());
     }
 }

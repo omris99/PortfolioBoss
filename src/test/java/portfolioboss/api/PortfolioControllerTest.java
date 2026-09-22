@@ -1,19 +1,21 @@
 package portfolioboss.api;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import portfolioboss.model.Holding;
-import portfolioboss.model.PortfolioSnapshot;
+import portfolioboss.api.response.HoldingResponse;
+import portfolioboss.api.response.PortfolioResponse;
+import portfolioboss.db.HoldingStatus;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -23,12 +25,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Pins the JSON contract the UI depends on ({@code ui/src/types/portfolio.ts}) using made-up
- * holdings, so it needs no TWS. {@code @WebMvcTest} starts only Spring's web layer;
- * {@code MockMvc} sends it fake HTTP requests without a real server.
+ * Pins the JSON contract the UI depends on ({@code ui/src/types/portfolio.ts}) using made-up responses, so it
+ * needs neither TWS nor a database. {@code @WebMvcTest} starts only Spring's web layer; {@code MockMvc} sends
+ * it fake HTTP requests without a real server; {@code @MockitoBean} replaces {@link PortfolioReadService} with
+ * a stand-in whose answers each test chooses. The path from the database to the response is tested in
+ * {@code PortfolioReadServiceTest}.
  */
 @WebMvcTest(PortfolioController.class)
-@Import(SnapshotStore.class)
 class PortfolioControllerTest {
 
     private static final String ACCOUNT = "U1234567";
@@ -37,23 +40,20 @@ class PortfolioControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    private SnapshotStore snapshotStore;
-
-    @BeforeEach
-    void startWithoutASnapshot() {
-        snapshotStore.set(null);
-    }
+    @MockitoBean
+    private PortfolioReadService portfolioReadService;
 
     @Test
-    void answers503UntilTheSnapshotHasBeenRead() throws Exception {
+    void answers503WhenNothingHasBeenSyncedYet() throws Exception {
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.empty());
+
         mockMvc.perform(get("/api/portfolio"))
                 .andExpect(status().isServiceUnavailable());
     }
 
     @Test
-    void servesTheSnapshotWithTheFieldNamesTheUiExpects() throws Exception {
-        snapshotStore.set(new PortfolioSnapshot(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(apple())));
+    void servesThePortfolioWithTheFieldNamesTheUiExpects() throws Exception {
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(portfolioWith(apple())));
 
         mockMvc.perform(get("/api/portfolio"))
                 .andExpect(status().isOk())
@@ -72,20 +72,25 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].realizedPnl").value(25.0))
                 .andExpect(jsonPath("$.holdings[0].account").value(ACCOUNT))
                 .andExpect(jsonPath("$.holdings[0].costBasis").value(1500.0))
-                .andExpect(jsonPath("$.holdings[0].unrealizedPnlPercent").value(closeTo(33.333, 0.001)));
+                .andExpect(jsonPath("$.holdings[0].unrealizedPnlPercent").value(closeTo(33.333, 0.001)))
+                .andExpect(jsonPath("$.holdings[0].id").value(7))
+                .andExpect(jsonPath("$.holdings[0].conId").value(265598))
+                .andExpect(jsonPath("$.holdings[0].sector").value("Technology"))
+                .andExpect(jsonPath("$.holdings[0].status").value("OPEN"));
     }
 
     @Test
     void writesAsOfAsAnIsoString() throws Exception {
-        snapshotStore.set(new PortfolioSnapshot(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of()));
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(portfolioWith()));
 
         mockMvc.perform(get("/api/portfolio"))
                 .andExpect(jsonPath("$.asOf").value("2026-09-19T08:05:00Z"));
     }
 
     @Test
-    void writesFiguresIbDidNotReportAsNullNotAsTheStringNaN() throws Exception {
-        snapshotStore.set(new PortfolioSnapshot(ACCOUNT, AS_OF, Double.NaN, Double.NaN, List.of(withoutCostData())));
+    void keepsFiguresIbDidNotReportInTheJsonAsNull() throws Exception {
+        PortfolioResponse withoutFigures = new PortfolioResponse(ACCOUNT, AS_OF, null, null, List.of(withoutCostData()));
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withoutFigures));
 
         mockMvc.perform(get("/api/portfolio"))
                 .andExpect(jsonPath("$.netLiquidation").value(nullValue()))
@@ -93,7 +98,8 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].position").value(5.0))
                 .andExpect(jsonPath("$.holdings[0].averageCost").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].costBasis").value(nullValue()))
-                .andExpect(jsonPath("$.holdings[0].unrealizedPnlPercent").value(nullValue()));
+                .andExpect(jsonPath("$.holdings[0].unrealizedPnlPercent").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].sector").value(nullValue()));
     }
 
     @Test
@@ -103,12 +109,18 @@ class PortfolioControllerTest {
         mockMvc.perform(delete("/api/portfolio")).andExpect(status().isMethodNotAllowed());
     }
 
-    private static Holding apple() {
-        return new Holding("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT);
+    private static PortfolioResponse portfolioWith(HoldingResponse... holdings) {
+        return new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(holdings));
     }
 
-    /** IB sent a position but no cost or price figures for it. */
-    private static Holding withoutCostData() {
-        return new Holding("MSFT", "STK", "USD", 5.0, Double.NaN, Double.NaN, Double.NaN, Double.NaN, 0.0, ACCOUNT);
+    private static HoldingResponse apple() {
+        return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
+                1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN);
+    }
+
+    /** IB sent a position but no cost or price figures for it, and no sector has been entered. */
+    private static HoldingResponse withoutCostData() {
+        return new HoldingResponse("MSFT", "STK", "USD", 5.0, null, null, null, null, 0.0, ACCOUNT,
+                null, null, 8, 272093, null, HoldingStatus.OPEN);
     }
 }

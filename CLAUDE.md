@@ -5,18 +5,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A read-only decision-support tool for a **long-term** Interactive Brokers portfolio — the calm
-counterpart to the sibling IBBot intraday trading project (`~/DevProjects/IBBot`). Currently at
-**Milestone 0** plus the first UI slice: it connects to TWS, prints holdings, then serves that
-snapshot to a React UI (`ui/`) that shows the positions table. The PostgreSQL schema and JPA
-entities are in place (`db/`), but nothing reads or writes them yet. It is a Maven / Spring Boot
-application (Java 21, Spring Boot 4.1.1).
+counterpart to the sibling IBBot intraday trading project (`~/DevProjects/IBBot`). It connects to
+TWS, syncs the holdings into a local PostgreSQL database on every connection, and serves that
+database to a React UI (`ui/`) that shows the positions table — the API always reads from the
+database, never straight from TWS. It is a Maven / Spring Boot application (Java 21, Spring Boot
+4.1.1).
 
 [TODO.md](TODO.md) is the plan of record — the six product principles, the settled architecture
 decisions, and the milestone breakdown. Read it before proposing features or structural changes;
 a feature that doesn't trace back to one of the six principles probably belongs in IBBot, not here.
 [HOLDING_DETAILS_TODO.md](HOLDING_DETAILS_TODO.md) is the session-by-session plan for the next stretch
-of Milestone 1 (Postgres, trades, holding details); its sessions 0 (Maven + Spring Boot) and 1
-(PostgreSQL, Flyway, schema, entities) are done.
+of Milestone 1 (Postgres, trades, holding details); its sessions 0 (Maven + Spring Boot), 1
+(PostgreSQL, Flyway, schema, entities) and 2 (sync at connection, API reads from the database) are done.
 
 ## Hard invariant: read-only
 
@@ -43,10 +43,11 @@ Boot 4's name, not `-web`), JUnit 5. [run.sh](run.sh) is a thin wrapper around `
 ./run.sh 7496 102     # custom clientId
 ```
 
-`./run.sh` reads the portfolio from TWS once, prints it, and then keeps running: it serves that
-snapshot at `http://localhost:8080/api/portfolio`, starts the UI's dev server, and opens
-`http://localhost:5174` in the browser (stop everything with Ctrl+C). The UI is a separate Vite app
-(Node 20.19+) whose dependencies must be installed once:
+`./run.sh` reads the portfolio from TWS once, prints it, syncs it into PostgreSQL, and then keeps
+running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
+and opens `http://localhost:5174` in the browser (stop everything with Ctrl+C). If TWS could not be
+read this run, it serves whatever the previous sync stored instead (see "Running requires TWS" below).
+The UI is a separate Vite app (Node 20.19+) whose dependencies must be installed once:
 
 ```bash
 cd ui && npm install     # first time only
@@ -57,11 +58,14 @@ npm run build            # tsc -b && vite build; the type check is the only UI c
 The UI shows the snapshot taken when `run.sh` started; refreshing means re-running `run.sh` (a
 refresh button is a later step).
 
-Tests: `mvn -q test` (JUnit 5; no TWS and, so far, no PostgreSQL — the `@WebMvcTest` slice does not
-load the database). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc`)
-pins the JSON contract the UI depends on with made-up holdings; `HoldingTest` covers the derived math.
-Trust `mvn`'s exit code, not the log: `-q` is silent on success, and `target/surefire-reports/` keeps
-the reports of tests that have since been deleted.
+Tests: `mvn -q test` (JUnit 5; no TWS, but the database tests need `portfolioboss_test` running — see
+above). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc` + `@MockitoBean` on `PortfolioReadService`)
+pins the JSON contract the UI depends on with made-up responses, no database needed; `HoldingTest` covers
+the derived math; `PortfolioWrapperTest` feeds `PortfolioWrapper` IB callbacks directly, no socket.
+`PortfolioSyncServiceTest` and `PortfolioReadServiceTest` are `@DataJpaTest`s against the real
+`portfolioboss_test` database (`src/test/resources/application-test.properties`, `@ActiveProfiles("test")`),
+each test rolled back automatically. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
+`target/surefire-reports/` keeps the reports of tests that have since been deleted.
 
 Spring's own settings are in `src/main/resources/application.properties` (loopback address, port 8080,
 startup banner off so it doesn't mix with the `[ib]` lines, the database connection, `ddl-auto=validate`,
@@ -78,7 +82,10 @@ with a newer TWS API, delete that `local` directory so the next `run.sh` registe
 dependency now, so `~/DevTools/google-proto-buf/` is no longer used.
 
 **Running requires TWS/Gateway to be logged in** with *Configure → API → Enable ActiveX and Socket
-Clients* on. Without it the program prints a connection error and exits — expect that when running
+Clients* on for a fresh sync. Without it (or if TWS is silent), `TwsPortfolioRunner` prints the
+connection error, skips the sync, and comes up anyway serving whatever the last successful sync
+stored — an empty database (nothing has ever synced) still answers 503, same as before any sync.
+The app itself never exits over TWS being unreachable; expect the stale-data case when running
 outside the user's trading hours rather than treating it as a code bug.
 
 **Running also requires PostgreSQL 17** (`brew install postgresql@17`, kept running with `brew services
@@ -87,9 +94,12 @@ point tests at the real one). The formula is keg-only, so `psql`, `createdb` and
 `/opt/homebrew/opt/postgresql@17/bin`, not on the PATH. Spring connects and runs the Flyway migrations
 *before* `TwsPortfolioRunner` starts, so with PostgreSQL down the app exits with code 1 within seconds
 (`Connection to localhost:5432 refused`, inside a long Spring stack trace) without touching TWS. Unlike a
-TWS that is simply off, a stopped PostgreSQL is something to fix. To check the database side without a live
-TWS — and without real holdings in the output — run `./run.sh 7599`: nothing listens there, so it gets
-through Flyway and schema validation and then exits 0 with the usual TWS error.
+TWS that is simply off, a stopped PostgreSQL is something to fix — a sync failure (a `DataAccessException`
+or `TransactionException` from `PortfolioSyncService.sync`) is the only thing that still exits the app
+(code 1, `[db error] ...`), because the database is required and TWS is not. To check the database side
+without a live TWS run `./run.sh 7599`: nothing listens there, so it gets through Flyway and schema
+validation and then serves whatever is already in the database (or 503 on a database that has never
+synced) instead of exiting — stop it with Ctrl+C.
 
 **Client id 101 is deliberate.** IBBot connects as client id `0`; TWS rejects duplicate ids, so
 PortfolioBoss must keep a distinct one for both to be connected at once.
@@ -101,29 +111,34 @@ what delivers real quantity and **average cost** from the broker.
 
 ```
 Main (Spring Boot: brings the web server up, then Spring runs the runner)
-  └──> TwsPortfolioRunner ──> IbGateway ──owns──> PortfolioWrapper ──> Holding, PortfolioSnapshot
+  └──> TwsPortfolioRunner ──> IbGateway ──owns──> PortfolioWrapper ──> Holding (+conId), PortfolioSnapshot
         │                     (socket + reader loop)  (EWrapper callbacks)
-        ├──stores──> SnapshotStore <──reads── PortfolioController ──JSON──> ui/
-        │                                     (api/response/*Response)     (React; the dev server proxies /api to :8080)
+        ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state)
         └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser
+
+PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
+        │                     (api/response/*Response)                     driven by HTTP requests, not by TWS)
+        └──JSON──> ui/ (React; the dev server proxies /api to :8080)
 ```
 
-The snapshot lifecycle, which is the part worth knowing:
+The sync-at-connection lifecycle, which is the part worth knowing:
 
 1. `IbGateway.connect()` opens the socket and starts a **daemon** `ib-reader` thread pumping
    `EReader.processMsgs()` on each signal.
 2. IB calls back `managedAccounts` → `PortfolioWrapper` takes the first account and issues
    `reqAccountUpdates(true, account)`.
-3. `updatePortfolio` fires once per position (zero-quantity ones are removed as closed-out);
+3. `updatePortfolio` fires once per position, keyed by **`conId`** (IB's stable contract id, not
+   `symbol` — two positions can share a symbol); zero-quantity ones are removed as closed-out.
    `updateAccountValue` picks out only `NetLiquidation` and `TotalCashValue`.
 4. `accountDownloadEnd` stores a `PortfolioSnapshot` (exposed by `IbGateway.snapshot()`), prints the
    report, **unsubscribes** (`reqAccountUpdates(false, …)` — we want a snapshot, not the ~3-minute
    live updates), and counts down a `CountDownLatch`.
 5. `TwsPortfolioRunner` is blocked on that latch with a 15s timeout, then disconnects. With a snapshot
-   it puts it in `SnapshotStore`, launches the UI and returns — Tomcat's non-daemon threads keep the
-   JVM alive until Ctrl+C. Without one (TWS unreachable or silent) it calls
-   `System.exit(SpringApplication.exit(context))`: closing the context stops the web server, and since
-   the reader loop is a daemon thread the JVM exits right after.
+   it hands it to `PortfolioSyncService.sync`, which upserts it into the database (see below). Either
+   way — synced or not — it then launches the UI and returns; Tomcat's non-daemon threads keep the
+   JVM alive until Ctrl+C. If the sync itself throws (a database problem, not a TWS problem) it prints
+   `[db error]` and calls `System.exit(SpringApplication.exit(context, () -> 1))`: the database is
+   required, TWS is not.
 
 `TwsPortfolioRunner` is an `ApplicationRunner`, so Spring runs it once, **after the web server is
 already listening** — a request that arrives while TWS is still being read (up to 15s) gets a 503 from
@@ -141,13 +156,20 @@ Error handling note: `INFO_CODES` in `PortfolioWrapper` filters IB's information
 program reports a clear message instead of waiting out the timeout.
 
 `Holding` is a record mirroring `updatePortfolio` exactly — the broker is the source of truth, so no
-field is hand-entered. Derived math (`costBasis`, `unrealizedPnlPercent`) lives on the record.
+field is hand-entered — plus `conId`, IB's stable contract id, its second component. Derived math
+(`costBasis`, `unrealizedPnlPercent`) lives on the record.
 
-The database layer, `portfolioboss.db`, is built but **not connected to the flow yet** (the sync, and an
-API that reads from it, are the next session). `HoldingEntity`, `TradeEntity` and `AccountStateEntity` map
-the tables `holding`, `trade` and `account_state`, created by
-`src/main/resources/db/migration/V1__portfolio_schema.sql`; `HoldingRepository` is the only repository so
-far. Things that are easy to break:
+The database layer, `portfolioboss.db`, is now connected to the flow: `PortfolioSyncService.sync` runs
+once per connection (called from `TwsPortfolioRunner`, step 5 above), and the API reads only from the
+database, never straight from TWS. `HoldingEntity`, `TradeEntity` and `AccountStateEntity` map the tables
+`holding`, `trade` and `account_state`, created by `src/main/resources/db/migration/V1__portfolio_schema.sql`.
+`sync` upserts by `(account, conId)`: a holding reported by IB is created (`HoldingEntity.firstSeen`) or
+refreshed (`refreshFromIb` — IB's figures only, `status = OPEN`; it never touches `sector` or `trades`); an
+open holding IB no longer reports is marked `CLOSED` (`markClosed`), never deleted, so the sector and trades
+typed in by hand survive; a `CLOSED` holding that reappears is reopened automatically. `AccountStateEntity`
+holds one row overwritten on every sync. All of this runs in one `@Transactional` method, so a snapshot is
+stored whole or not at all. `HoldingRepository` and `AccountStateRepository` are the repositories.
+Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
   checksum): a schema change is a new `V2__….sql`.
 - `ddl-auto=validate` makes Hibernate check the entities against the tables at startup and change nothing;
@@ -156,19 +178,24 @@ far. Things that are easy to break:
   (`trade.quantity`, `price`) are `NUMERIC` under `BigDecimal`. A `NUMERIC` column under a `Double` field
   fails validation at startup (tried).
 - `HoldingEntity` (a stored row), `model.Holding` (one IB reading) and `HoldingResponse` (what the UI gets)
-  are three different things on purpose.
-- A holding that leaves TWS is meant to be marked `CLOSED`, never deleted, so the sector and trades typed
-  in by hand survive (the sync will do it). `scripts/backup-db.sh` dumps the database to
-  `~/PortfolioBossBackups`, outside the repo.
+  are three different things on purpose — `HoldingEntity.toIbHolding()` rebuilds a `Holding` from the stored
+  row (`NULL` → `NaN`) so the derived math is never duplicated outside `Holding`.
+- `scripts/backup-db.sh` dumps the database to `~/PortfolioBossBackups`, outside the repo.
+- Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`) are `@DataJpaTest`s against the
+  real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 
-`PortfolioController` (Spring MVC) serves `GET /api/portfolio`: 503 until `SnapshotStore` holds the
-snapshot, then 200 with `Cache-Control: no-store` and a `PortfolioResponse`. The response records
-(`PortfolioResponse`, `HoldingResponse`) live in `api/response/`; Jackson turns them into JSON, so
-their component names **are** the JSON keys and must stay stable (`ui/src/types/portfolio.ts` mirrors
-them) — add fields, don't rename or remove. `asOf` is an ISO-8601 string. `JsonNumbers.finiteOrNull`
-turns IB's `NaN` / infinity into `null`: without it Jackson writes the *string* `"NaN"`, which breaks
-the UI's `number | null` types. `SnapshotStore` is temporary — the database replaces it. The port is
-`server.port` in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.
+`PortfolioController` (Spring MVC) serves `GET /api/portfolio` through `PortfolioReadService`
+(`@Transactional(readOnly = true)`, since `open-in-view=false` means entities must be read inside the
+transaction): 503 until a sync has ever stored an `account_state` row, then 200 with `Cache-Control:
+no-store` and a `PortfolioResponse` built from the latest sync — including closed holdings, which the UI
+filters. The response records (`PortfolioResponse`, `HoldingResponse`) live in `api/response/`; Jackson
+turns them into JSON, so their component names **are** the JSON keys and must stay stable
+(`ui/src/types/portfolio.ts` mirrors them) — add fields, don't rename or remove. Beyond the original IB
+fields, `HoldingResponse` also carries `id`, `conId`, `sector` and `status` (the UI does not read them yet).
+`asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
+`null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
+Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
+in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.
 
 `UiLauncher` copies IBBot's `launchVisualizer()`: `bash -l -c "npm run dev"` in `ui/` (a login shell,
 so `npm` is on the PATH), output to `ui/dev-server.log`, then macOS `open` once the port answers.
@@ -184,18 +211,23 @@ Things that are easy to break:
 
 ## Conventions
 
-- Console output uses `[ib]` prefixes for connection lifecycle, `[ib error]` for real errors, and
-  `[api]` for the local API, `[ui]` / `[ui error]` for the UI launcher.
+- Console output uses `[ib]` prefixes for connection lifecycle, `[ib error]` for real errors, `[api]`
+  for the local API, `[ui]` / `[ui error]` for the UI launcher, and `[db]` / `[db error]` for the sync
+  (`[db] synced N holdings (N new, M updated, K closed)` on success; `[db] TWS unreachable; serving the
+  portfolio from the last sync, if any` when TWS could not be read; `[db error]` only when the sync
+  itself fails, which is also the only case that still exits the app).
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
-  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]` (the `[db]` lines arrive with the sync).
+  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`.
 - Readability over brevity, in Java and TypeScript alike: descriptive names (`holding`,
   `sortState`, `response`), never one-letter variables (the conventional `e` in a `catch` is fine),
   and small functions/components with a single job instead of long inline expressions.
 - One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` owns the TWS
   host/port/client id and the single `IbGateway`. Don't add a second entry point or a second place
   that connects to TWS.
-- API response types go in `portfolioboss.api.response`; visibility stays as narrow as it can (a
-  helper like `JsonNumbers` is package-private, and only the factory the controller calls is `public`).
+- API response types go in `portfolioboss.api.response`; visibility stays as narrow as it can (the
+  `from(...)` factories are the only `public` surface most of these records need). A helper used by more
+  than one layer — `portfolioboss.utils.Utils`, shared by `api.response` and `db` — is the one exception,
+  and lives in its own package rather than being duplicated per layer.
 - Changelog: a notable change bumps `AppMetadata.VERSION` and adds an entry at the top of the
   changelog comment below the class in `AppMetadata.java` (copied from IBBot). Format:
   `VERSION x.y.z: [short title]`, then one ` * ` line per cohesive change — lead with the
@@ -206,7 +238,7 @@ Things that are easy to break:
 - Reuse from IBBot happens by **copying self-contained pieces** (the Finnhub `NewsProvider`
   abstraction, its `ui/` React stack), not by shared modules — see the architecture decisions in
   TODO.md.
-- Milestone 1 direction: Maven, Spring Boot REST and the PostgreSQL schema and entities (`holding`,
-  `trade`, `account_state`) are in; next is the sync at connection and an API that reads from the
-  database, then trades and holding details — see HOLDING_DETAILS_TODO.md. The `thesis` table comes
-  later. The **written thesis per holding** is the actual product, not the IB reader.
+- Milestone 1 direction: Maven, Spring Boot REST, the PostgreSQL schema and entities, and the sync at
+  connection are in; the API reads only from the database. Next is deriving buy/sell dates and holding
+  period from `trade` rows, then the write endpoints and the UI forms — see HOLDING_DETAILS_TODO.md. The
+  `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

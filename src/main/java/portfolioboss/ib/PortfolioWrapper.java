@@ -33,7 +33,8 @@ public class PortfolioWrapper extends DefaultEWrapper {
     private double netLiquidation = Double.NaN;
     private double totalCashValue = Double.NaN;
 
-    private final Map<String, Holding> holdings = new LinkedHashMap<>();
+    /** Keyed by IB's contract id: two positions can share a symbol, but never a conId. */
+    private final Map<Integer, Holding> holdings = new LinkedHashMap<>();
     private final CountDownLatch portfolioDownloaded = new CountDownLatch(1);
     private volatile boolean connectionFailed = false;
     private volatile PortfolioSnapshot snapshot;
@@ -82,11 +83,12 @@ public class PortfolioWrapper extends DefaultEWrapper {
                                 double realizedPNL, String accountName) {
         double quantity = position.value().doubleValue();
         if (quantity == 0.0) {
-            holdings.remove(contract.symbol());   // a closed-out position
+            holdings.remove(contract.conid());   // a closed-out position
             return;
         }
-        holdings.put(contract.symbol(), new Holding(
+        holdings.put(contract.conid(), new Holding(
                 contract.symbol(),
+                contract.conid(),
                 String.valueOf(contract.secType()),
                 contract.currency(),
                 quantity, averageCost, marketPrice, marketValue, unrealizedPNL, realizedPNL, accountName));
