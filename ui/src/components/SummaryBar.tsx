@@ -18,18 +18,15 @@ function SummaryStat({
   );
 }
 
-/** IB does not always report account-level figures; the API sends those as null. */
-function formatOptionalMoney(amount: number | null): string {
-  return amount === null ? '—' : formatMoney(amount);
-}
-
+/** A figure IB did not report for a holding counts as nothing in the total. */
 function sumOfField(holdings: Holding[], field: 'marketValue' | 'unrealizedPnl'): number {
-  return holdings.reduce((runningTotal, holding) => runningTotal + holding[field], 0);
+  return holdings.reduce((runningTotal, holding) => runningTotal + (holding[field] ?? 0), 0);
 }
 
-export function SummaryBar({ snapshot }: { snapshot: PortfolioSnapshot }) {
-  const totalPositionsValue = sumOfField(snapshot.holdings, 'marketValue');
-  const totalUnrealizedPnl = sumOfField(snapshot.holdings, 'unrealizedPnl');
+/** The totals are over `openHoldings` only; the account-level figures come from the snapshot as IB reported them. */
+export function SummaryBar({ snapshot, openHoldings }: { snapshot: PortfolioSnapshot; openHoldings: Holding[] }) {
+  const totalPositionsValue = sumOfField(openHoldings, 'marketValue');
+  const totalUnrealizedPnl = sumOfField(openHoldings, 'unrealizedPnl');
 
   return (
     <div
@@ -37,8 +34,8 @@ export function SummaryBar({ snapshot }: { snapshot: PortfolioSnapshot }) {
       role="region"
       aria-label="Account summary"
     >
-      <SummaryStat label="Net liquidation" value={formatOptionalMoney(snapshot.netLiquidation)} />
-      <SummaryStat label="Cash" value={formatOptionalMoney(snapshot.totalCashValue)} />
+      <SummaryStat label="Net liquidation" value={formatMoney(snapshot.netLiquidation)} />
+      <SummaryStat label="Cash" value={formatMoney(snapshot.totalCashValue)} />
       <SummaryStat label="Positions value" value={formatMoney(totalPositionsValue)} />
       <SummaryStat
         label="Unrealized P&L"

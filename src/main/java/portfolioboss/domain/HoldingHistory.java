@@ -67,12 +67,18 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
      * {@code OPEN} counts to {@code snapshotDate} (the last sync, not the system clock, so the number
      * stays the same between syncs); {@code CLOSED} counts to {@code lastSellDate} — {@code null} if no
      * sell was ever entered for it. {@code null} throughout if there is no buy to start counting from.
+     *
+     * <p>Never negative: a buy dated after the last sync (entered today while the portfolio is served from an
+     * older sync, e.g. with TWS off) counts as 0 days held, not as minus the days since that sync.
      */
     public Long holdingDays(HoldingStatus status, LocalDate snapshotDate) {
         if (firstBuyDate == null) {
             return null;
         }
         LocalDate endDate = status == HoldingStatus.CLOSED ? lastSellDate : snapshotDate;
-        return endDate == null ? null : ChronoUnit.DAYS.between(firstBuyDate, endDate);
+        if (endDate == null) {
+            return null;
+        }
+        return Math.max(0, ChronoUnit.DAYS.between(firstBuyDate, endDate));
     }
 }

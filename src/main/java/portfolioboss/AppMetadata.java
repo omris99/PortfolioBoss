@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.7.0";
+    public static final String VERSION = "0.8.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,19 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.8.0: [Sector and trades in the UI]
+ * PositionsTable gains Sector, Bought, Last sold and Held columns; sorting keeps empty values ("—") last in both directions, and rows are keyed by holding id, so two holdings sharing a symbol no longer collide.
+ * The UI types IB figures as number | null and shows a missing one as "—"; before, a price IB did not report rendered as 0.00, which looked like a real zero.
+ * Held shows the holding period in its two largest units ("1y 1m", a month counted as 30 days), with the exact number of days on hover.
+ * SectorCell added: the sector is edited in the table — Enter or leaving the field saves, Esc cancels, an empty field clears it — and the sectors already entered are offered as you type.
+ * TradesPanel / TradeForm added: a chevron opens a holding's trades to add, correct or delete them; a holding with no trades starts as a BUY of the whole position at IB's average cost.
+ * TradeForm rounds that prefilled average cost to 4 decimal places: IB's figure (188.2990476) has more than the 6 the API accepts, so the first prefilled trade was rejected.
+ * apiClient added: the four write calls, named like the backend; a failed write shows the API's own reason, and every write reloads the portfolio (usePortfolio's retry is now reload).
+ * App shows only open holdings, with a "Show closed (n)" toggle that adds the closed ones dimmed and tagged; the summary always totals open holdings; the API-unreachable message no longer mentions TWS.
+ * HoldingHistory.holdingDays is never negative: a buy dated after the last sync (entered today while an older sync is served) counts as 0 days instead of -3.
+ * TradeRequest: too many digits now reads "must have at most 6 decimal places (and 14 digits before the point)" instead of Hibernate Validator's "numeric value out of bounds".
+ * New tests: HoldingHistoryTest for a buy dated after the last sync, and HoldingWriteControllerTest for a price with too many decimal places — the case the prefill hit.
+ *
  * VERSION 0.7.0: [Write endpoints for the sector and trades]
  * HoldingWriteController added: PUT /api/holdings/{id}/sector, POST /api/holdings/{id}/trades, PUT and DELETE /api/trades/{id}; the API was GET-only, now it also writes hand-entered data, never anything at IB.
  * HoldingWriteService added: one transaction per write; the sector and note are trimmed and blank becomes null; holdings are never created or deleted here, only by the sync.

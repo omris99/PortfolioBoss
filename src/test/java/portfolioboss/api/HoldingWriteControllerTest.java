@@ -17,7 +17,6 @@ import portfolioboss.db.TradeSide;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
@@ -102,7 +101,19 @@ class HoldingWriteControllerTest {
         postTrade("""
                 {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 0.0000001}""")
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value(startsWith("quantity: numeric value out of bounds")));
+                .andExpect(jsonPath("$.detail")
+                        .value("quantity: must have at most 6 decimal places (and 14 digits before the point)"));
+    }
+
+    /** IB's average cost, as the UI once prefilled it unrounded (the UI now rounds it to 4 places). */
+    @Test
+    void rejectsAPriceWithMoreDecimalPlacesThanTheDatabaseKeeps() throws Exception {
+        postTrade("""
+                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10, "price": 188.2990476}""")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail")
+                        .value("price: must have at most 6 decimal places (and 14 digits before the point)"));
+        verifyNoInteractions(holdingWriteService);
     }
 
     @Test

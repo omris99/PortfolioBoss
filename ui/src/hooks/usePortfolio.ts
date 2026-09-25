@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { PortfolioSnapshot } from '../types/portfolio';
 
-const API_UNREACHABLE_MESSAGE =
-  'Could not read the portfolio from the PortfolioBoss API. Is ./run.sh running, with TWS logged in?';
+// The API serves the last sync even with TWS off, so TWS is not the thing to check here.
+const API_UNREACHABLE_MESSAGE = 'Could not read the portfolio from the PortfolioBoss API. Is ./run.sh running?';
 
-/** Loads the portfolio snapshot once on mount; `retry` loads it again (e.g. after starting the API). */
+/**
+ * Loads the portfolio snapshot once on mount. `reload` loads it again: after a failed load, and after every write
+ * (sector, trades), since the API derives the dates and holding period on the server. The previous snapshot stays
+ * in place while reloading, so the table does not disappear.
+ */
 export function usePortfolio() {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -30,5 +34,5 @@ export function usePortfolio() {
     void loadSnapshot();
   }, [loadSnapshot]);
 
-  return { snapshot, errorMessage, isLoading, retry: loadSnapshot };
+  return { snapshot, errorMessage, isLoading, reload: loadSnapshot };
 }

@@ -20,7 +20,10 @@ import java.time.LocalDate;
 public record TradeRequest(
         @NotNull @PastOrPresent LocalDate tradeDate,
         @NotNull TradeSide side,
-        @NotNull @Positive @Digits(integer = 14, fraction = 6) BigDecimal quantity,
-        @PositiveOrZero @Digits(integer = 14, fraction = 6) BigDecimal price,
+        @NotNull @Positive @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal quantity,
+        @PositiveOrZero @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal price,
         @Size(max = 500) String note) {
+
+    /** Replaces Hibernate Validator's "numeric value out of bounds (<14 digits>.<6 digits> expected)", which the UI shows. */
+    private static final String TOO_MANY_DIGITS = "must have at most 6 decimal places (and 14 digits before the point)";
 }

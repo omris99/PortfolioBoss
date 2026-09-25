@@ -21,12 +21,12 @@ average cost from the broker via `reqAccountUpdates`. On top of it, PortfolioBos
   disappears from TWS is marked closed, never deleted;
 - serves that database to a small React UI that shows the positions table (the API never reads TWS
   directly, so the last sync is still there when TWS is off);
-- stores the sector and the buy/sell trades you enter, through a local JSON API (the UI forms for
-  them come next);
+- lets you enter each holding's sector and buy/sell trades right in the table, stored through a
+  local JSON API;
 - derives each holding's buy date, last sell date and holding period from those trades.
 
 ```
-PortfolioBoss v0.7.0 (RunID: 250920260933) · read-only portfolio reader
+PortfolioBoss v0.8.0 (RunID: 250920260933) · read-only portfolio reader
 [ib] connecting to 127.0.0.1:7496 (clientId=101, read-only)
 [ib] connection ready
 [ib] account: U1234567
@@ -94,15 +94,26 @@ If TWS can't be reached, `run.sh` prints the connection error, skips the sync an
 sync stored (a database that has never synced answers 503). If PostgreSQL isn't running it exits within
 seconds, without trying TWS.
 
-The page shows the portfolio as of the last sync — to refresh it, stop `run.sh` (Ctrl+C) and run it
-again. The UI is styled after IBBot's (React, Vite, Tailwind, dark slate theme).
+The page shows the portfolio as of the last sync and reloads it after every change you make; new
+figures from IB need `run.sh` stopped (Ctrl+C) and run again. The UI is styled after IBBot's (React,
+Vite, Tailwind, dark slate theme).
 
 ## Sector and trades
 
 A holding's sector and its buy/sell trades are entered by hand and stored in PortfolioBoss's own
-database — never sent to IB, and never overwritten by the sync. Until the UI has forms for them, the
-API takes them directly. Bodies are JSON only; `{holdingId}` and `{tradeId}` are the `id`s in
-`GET /api/portfolio`.
+database — never sent to IB, and never overwritten by the sync. Bought, Last sold and Held are derived
+from those trades.
+
+- **Sector:** click the cell ("+ add" when empty), type, and press Enter. Esc cancels; an empty field
+  clears it. The sectors you already entered are offered as you type.
+- **Trades:** the ▸ at the start of a row opens the holding's trades, with a form to add one; the pencil
+  corrects a trade, the bin deletes it. For a holding with no trades yet, the form starts as a buy of
+  the whole position at IB's average cost (which includes commissions), so only the date is left.
+- **Closed holdings** (sold in full at IB) are hidden; "Show closed" brings them back, dimmed, so their
+  history can still be completed.
+
+The UI uses a small local API, which can also be called directly. Bodies are JSON only; `{holdingId}`
+and `{tradeId}` are the `id`s in `GET /api/portfolio`.
 
 | Request | Body | Answer |
 |---|---|---|
@@ -127,8 +138,8 @@ An invalid request answers 400 with the reason (`"quantity: must be greater than
 | Milestone | Goal |
 |---|---|
 | **0** ✅ | Read-only connect to IB, print real holdings + average cost. |
-| 1 | Persist holdings + a **written thesis and status** per holding (Postgres/JPA); expose over REST. *In progress: Maven + Spring Boot, the sync into PostgreSQL, derived buy/sell dates and holding period, and the write endpoints for the sector and trades are done; the thesis comes after the UI forms.* |
-| 2 | React/TypeScript UI on real data (the "Horizon" demo is the visual target). *Started: the positions table.* |
+| 1 | Persist holdings + a **written thesis and status** per holding (Postgres/JPA); expose over REST. *In progress: Maven + Spring Boot, the sync into PostgreSQL, derived buy/sell dates and holding period, and entering the sector and trades are done; the thesis is next.* |
+| 2 | React/TypeScript UI on real data (the "Horizon" demo is the visual target). *Started: the positions table, with the sector and trades editable in it.* |
 | 3 | Analytics — concentration, sector exposure, benchmark vs. SPY, averaging-down calculator on real cost basis. |
 | 4 | Fundamentals / earnings / dividends (Finnhub), rule-based alerts, decision journal. |
 
@@ -170,7 +181,7 @@ src/main/resources/db/migration/           # Flyway migrations (V1__portfolio_sc
 src/test/java/portfolioboss/               # JUnit 5; the database tests use portfolioboss_test
 scripts/backup-db.sh                       # dumps the database to ~/PortfolioBossBackups
 
-ui/                        # React 19 + Vite + Tailwind; the positions table and account summary
+ui/                        # React 19 + Vite + Tailwind; the positions table (sector and trades editable) and account summary
 ```
 
 Built with Maven (`pom.xml`); `./run.sh` wraps `mvn spring-boot:run`.

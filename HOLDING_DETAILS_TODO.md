@@ -819,8 +819,16 @@ JSON פגום (`HttpMessageNotReadableException`) — נכלל בבסיס (400).
 ## סשן 5 — UI: צד הקריאה (types, פורמט, עמודות, מיון)
 
 > **תנאי מוקדם:** סשן 3 (סשן 4 לא הכרחי לזה, אבל יאפשר לבדוק בקלות).
+>
+> **סטטוס (25.09.2026):** 5.1–5.4 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית:
+> - **תיקון שלא היה בתוכנית (אושר):** נתוני IB ב-`Holding` הם עכשיו `number | null` (כמו שה-API שולח), וכל פונקציות `format.ts` מקבלות `null` ← "—".
+>   קודם `null` הוצג כ-`0.00` — נראה כמו מחיר אמיתי של אפס. `formatOptionalMoney` של `SummaryBar` נמחק (`formatMoney` עושה אותו דבר).
+> - `compareNullableLast` נקרא **`compareWithEmptyLast`**; העמודות מחולקות ל-`TextField` / `NumberField` (`isTextField`) — תאריכי ISO ממוינים כטקסט.
+>   עמודה שנבחרת לראשונה: טקסט ותאריכים עולה (הישן קודם), מספרים יורד.
+> - תוספות קטנות: tooltip עם מספר הימים המדויק על "Held" (`formatDayCount`), כי החודשים מקורבים; `whitespace-nowrap` בתאים.
+> - `SummaryBar` מקבל `{ snapshot, openHoldings }` (הסכומים מהפתוחות, נתוני החשבון מה-snapshot); `openHoldingsOf` ב-`App`.
 
-### 5.1 🟢 `ui/src/types/portfolio.ts`
+### ✅ 5.1 🟢 `ui/src/types/portfolio.ts`
 
 **קוד קיים רלוונטי:** `Holding` שורות 3-16; ההערה בשורה 1 מפנה ל-`PortfolioJson.java` (שנמחק בסשן 0).
 
@@ -854,7 +862,7 @@ export interface Holding {
 
 ---
 
-### 5.2 🟢 `ui/src/lib/format.ts`
+### ✅ 5.2 🟢 `ui/src/lib/format.ts`
 
 **המימוש:**
 ```ts
@@ -872,7 +880,7 @@ export function formatHoldingPeriod(days: number | null): string { ... }
 
 ---
 
-### 5.3 🟡 `PositionsTable.tsx` — עמודות חדשות ומיון
+### ✅ 5.3 🟡 `PositionsTable.tsx` — עמודות חדשות ומיון
 
 **קוד קיים רלוונטי:**
 ```ts
@@ -921,7 +929,7 @@ function compareNullableLast<T>(
 
 ---
 
-### 5.4 🟢 `App.tsx` — סינון פתוחות + טקסטים
+### ✅ 5.4 🟢 `App.tsx` — סינון פתוחות + טקסטים
 
 **קוד קיים רלוונטי:** שורות 65-67 (`sectionSubtitle`: "snapshot taken …"), שורה 74 ("Read-only view of your Interactive Brokers holdings."), שורה 79 (`SummaryBar`), שורה 58 (`PositionsTable`).
 
@@ -937,13 +945,30 @@ const openHoldings = snapshot.holdings.filter((holding) => holding.status === 'O
 **בדיקת אימות סשן 5:** `cd ui && npm run build` ירוק. בדפדפן: העמודות החדשות מופיעות; מיון בכל אחת בשני הכיוונים — **ריקים תמיד בתחתית**;
 החזקה בלי עסקאות מציגה "—"; החזקה שהוספתי לה `BUY` דרך `curl`/`psql` מציגה תאריך וזמן החזקה.
 
+**סטטוס הבדיקה (25.09.2026):** ✅ `npm run build` ירוק. ✅ `format.ts` הורץ על מקרי קצה (esbuild + node): 45 ← `1m 15d`, 412 ← `1y 1m`,
+364 ← `12m 4d`, `null` ← "—". ✅ רינדור בצד השרת (`react-dom/server`) של הטבלה עם נתונים חסרים והחזקה סגורה — הסדר ברירת המחדל שם ריקים בסוף.
+הבדיקה בדפדפן נדחתה ביוזמת עומרי לאחר סשן 6 ונעשית יחד איתה — ראו שם.
+
 ---
 
 ## סשן 6 — UI: טפסי הזנה (סקטור, עסקאות, החזקות סגורות)
 
 > **תנאי מוקדם:** סשנים 4 + 5.
+>
+> **סטטוס (25.09.2026):** 6.1–6.5 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית (אושרו מראש, חוץ מהבאג בסוף):
+> - `apiClient.ts` חושף **ארבע פונקציות בשמות של השרת** (`changeSector`, `addTrade`, `changeTrade`, `deleteTrade`) — `sendJson` פרטי, וכל הכתובות במקום אחד.
+>   `errorMessageOf(error)` נותן את הטקסט להצגה. `TradeRequest` נוסף ל-`types/portfolio.ts` (מקביל ל-record ב-Java).
+> - `usePortfolio`: **`retry` ← `reload`** (משמש גם אחרי כל כתיבה), והודעת השגיאה כבר לא מזכירה את TWS.
+> - **תיקון ב-backend:** `HoldingHistory.holdingDays` לא שלילי לעולם (`Math.max(0, …)`) — קנייה בתאריך שאחרי הסנכרון האחרון הציגה `-3d`. בדיקה חדשה ב-`HoldingHistoryTest`.
+> - `SectorCell`: `readOnly` בזמן שמירה (לא `disabled`, כדי לא לגרום ל-blur כפול); Enter מוריד פוקוס, כך שה-blur הוא נקודת השמירה היחידה.
+> - `TradeForm`: "היום" מקומי (`localTodayIsoDate`, לא `toISOString()` שהוא UTC); במקום placeholder "IB avg cost" — שורת הסבר מתחת לטופס
+>   כשהוא ממולא מ-IB. `TradesPanel`: `formGeneration` ב-`key` של הטופס מאפס אותו אחרי כל שמירה.
+> - "Show closed" מציג גם את מספר הסגורות (`Show closed (n)`); ה-`datalist` נבנה מההחזקות המוצגות בלבד.
+> - **באג שעומרי מצא בבדיקה בדפדפן (תוקן):** המילוי מראש שם את העלות הממוצעת הגולמית של IB (`188.2990476`, 7 ספרות) — השרת דחה עם הודעה סתומה.
+>   `prefilledPriceText` מעגל ל-4 ספרות (הכמות לא מעוגלת — חייבת להתאים ל-IB), ול-`@Digits` ב-`TradeRequest` נוספה הודעה קריאה
+>   (`TOO_MANY_DIGITS`: "must have at most 6 decimal places (and 14 digits before the point)") + בדיקה `rejectsAPriceWithMoreDecimalPlacesThanTheDatabaseKeeps`.
 
-### 6.1 🟢 `ui/src/lib/apiClient.ts`
+### ✅ 6.1 🟢 `ui/src/lib/apiClient.ts`
 
 **הבעיה:** `usePortfolio` מציג הודעה אחת לכל כשל (`API_UNREACHABLE_MESSAGE`). לכתיבה צריך את הודעת השרת ("quantity: must be greater than 0").
 
@@ -966,7 +991,7 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 
 ---
 
-### 6.2 🟡 `SectorCell` — עריכה בתוך הטבלה
+### ✅ 6.2 🟡 `SectorCell` — עריכה בתוך הטבלה
 
 **המימוש:** `components/SectorCell.tsx`. מצב צפייה: כפתור עם הסקטור או "+ add". מצב עריכה: `<input list="sector-options">`, `Enter`/`blur` שומר (`PUT /api/holdings/{id}/sector`)
 אם השתנה, `Esc` מבטל, ריק מנקה; שגיאה מוצגת מתחת בוורוד; בזמן שמירה — disabled.
@@ -977,7 +1002,7 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 
 ---
 
-### 6.3 🟡 שורה נפתחת + `TradesPanel`
+### ✅ 6.3 🟡 שורה נפתחת + `TradesPanel`
 
 **המימוש:** עמודה צרה בהתחלה עם כפתור chevron (`aria-expanded`); ב-`PositionsTable` state `expandedHoldingId: number | null` (אחת פתוחה בכל פעם);
 כשפתוחה — `<tr><td colSpan={COLUMNS.length + 1}>` עם `TradesPanel`: רשימת העסקאות (תאריך, תג BUY ירוק / SELL אדום, כמות, מחיר, הערה) עם אייקוני עריכה (`Pencil`)
@@ -985,7 +1010,7 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 
 ---
 
-### 6.4 🟡 `TradeForm`
+### ✅ 6.4 🟡 `TradeForm`
 
 **המימוש:** שדות: תאריך (`<input type="date" max={היום}>`, ברירת מחדל היום), צד (שני כפתורים BUY / SELL), כמות (`type="number" step="any"`), מחיר (אופציונלי), הערה (אופציונלית, `maxLength=500`, placeholder "Why? (optional)").
 יצירה → `POST /api/holdings/{id}/trades`; עריכה → `PUT /api/trades/{id}` עם שדות ממולאים. ולידציה בצד הלקוח משקפת את השרת (כמות > 0, תאריך קיים), **והשרת הוא הסמכות** — מציגים את `ApiError.message`.
@@ -996,7 +1021,7 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 
 ---
 
-### 6.5 🟢 מתג "Show closed"
+### ✅ 6.5 🟢 מתג "Show closed"
 
 **המימוש:** checkbox בכותרת אזור ה-Positions; state ב-`App` (`showClosed`); הטבלה מקבלת `showClosed ? snapshot.holdings : openHoldings`.
 שורות `CLOSED`: `opacity-60` ותג "closed" ליד הסימבול. עריכת עסקאות של החזקה סגורה מותרת (זה בדיוק המקום להשלים היסטוריה). `SummaryBar` תמיד על הפתוחות.
@@ -1006,6 +1031,10 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 **בדיקת אימות סשן 6 (ידני בדפדפן):** להזין סקטור (`Enter` / blur / `Esc`; ריק מנקה) → נשמר אחרי רענון ואחרי הפעלה מחדש של `run.sh`;
 להוסיף `BUY` → מתעדכנים "Bought" ו-"Held"; להוסיף `SELL` חלקי → "Last sold"; למחוק עסקה → חוזר; שגיאת ולידציה (כמות 0) מציגה את הודעת השרת;
 מתג "Show closed"; החזקה ללא עסקאות מציעה BUY מוכן; `npm run build`.
+
+**סטטוס הבדיקה (25.09.2026):** ✅ `npm run build` ירוק; ✅ `mvn -q test` ירוק — 64 בדיקות. ✅ רינדור בצד השרת של פאנל העסקאות והטופס
+(כולל מילוי backfill: `188.2990476` ← `188.299`, `0.0523456` ← `0.0523`). 🟡 **הבדיקה בדפדפן (של סשנים 5 ו-6 יחד) — בידי עומרי:** הוא התחיל
+אותה ומצא את באג המחיר הממולא (ראו הסטטוס למעלה, תוקן); לא דווח על שאר הרשימה.
 
 ---
 

@@ -89,6 +89,14 @@ class HoldingHistoryTest {
     }
 
     @Test
+    void aBuyDatedAfterTheLastSyncCountsAsZeroDaysNotNegative() {
+        HoldingHistory history = HoldingHistory.of(List.of(buy("2026-09-25", 10)));
+
+        assertThat(history.firstBuyDate()).isEqualTo(LocalDate.of(2026, 9, 25));
+        assertThat(history.holdingDays(HoldingStatus.OPEN, SNAPSHOT_DATE)).isZero();
+    }
+
+    @Test
     void aClosedHoldingWithNoSellEnteredHasNoHoldingDays() {
         HoldingHistory history = HoldingHistory.of(List.of(buy("2026-01-01", 10)));
 

@@ -31,7 +31,7 @@ Stage and commit the current changes.
 fits, leave it out.
 
 *In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection, derived buy/sell dates,
-write endpoints for the sector and trades, the first UI slice):*
+write endpoints for the sector and trades, and the UI that shows the positions and enters the sector and trades):*
 
 | Scope | Covers |
 |---|---|

@@ -8,9 +8,9 @@ A read-only decision-support tool for a **long-term** Interactive Brokers portfo
 counterpart to the sibling IBBot intraday trading project (`~/DevProjects/IBBot`). It connects to
 TWS, syncs the holdings into a local PostgreSQL database on every connection, and serves that
 database to a React UI (`ui/`) that shows the positions table — the API always reads from the
-database, never straight from TWS. What the user enters by hand (a holding's sector and its trades) is
-written to the same database through a few JSON endpoints; the UI forms for them are still to come. It is
-a Maven / Spring Boot application (Java 21, Spring Boot 4.1.1).
+database, never straight from TWS. In the same table the user enters what IB doesn't know (a holding's
+sector and its buy/sell trades), which the UI writes to the same database through a few JSON endpoints. It
+is a Maven / Spring Boot application (Java 21, Spring Boot 4.1.1).
 
 [TODO.md](TODO.md) is the plan of record — the six product principles, the settled architecture
 decisions, and the milestone breakdown. Read it before proposing features or structural changes;
@@ -18,7 +18,8 @@ a feature that doesn't trace back to one of the six principles probably belongs 
 [HOLDING_DETAILS_TODO.md](HOLDING_DETAILS_TODO.md) is the session-by-session plan for the next stretch
 of Milestone 1 (Postgres, trades, holding details); its sessions 0 (Maven + Spring Boot), 1
 (PostgreSQL, Flyway, schema, entities), 2 (sync at connection, API reads from the database), 3
-(derived buy/sell dates and holding period) and 4 (write endpoints for the sector and trades) are done.
+(derived buy/sell dates and holding period), 4 (write endpoints for the sector and trades), 5 (UI: the new
+columns and sorting) and 6 (UI: entering the sector and trades) are done; 7–9 are ideas for later.
 
 ## Hard invariant: read-only
 
@@ -62,8 +63,8 @@ npm run dev              # manual alternative to the auto-start; proxies /api to
 npm run build            # tsc -b && vite build; the type check is the only UI check for now
 ```
 
-The UI shows the snapshot taken when `run.sh` started; refreshing means re-running `run.sh` (a
-refresh button is a later step).
+The UI shows the portfolio as of the last sync. It reloads `/api/portfolio` after every write (sector,
+trades), but new figures from IB need a new `run.sh` (a refresh button is a later step).
 
 Tests: `mvn -q test` (JUnit 5; no TWS, but the database tests need `portfolioboss_test` running — see
 above). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc` + `@MockitoBean` on `PortfolioReadService`)
@@ -132,8 +133,9 @@ PortfolioController ──reads── PortfolioReadService ──reads── Pos
         └──JSON──> ui/ (React; the dev server proxies /api to :8080)
 
 HoldingWriteController ──writes── HoldingWriteService ──writes── Postgres  (sector and trade rows only;
-        (api/request/*Request, @Valid;                                    never IB, never a holding row
-         ApiErrorHandler → ProblemDetail JSON)                            created or deleted)
+        ▲  (api/request/*Request, @Valid;                                 never IB, never a holding row
+        │   ApiErrorHandler → ProblemDetail JSON)                         created or deleted)
+        └──JSON── ui/'s sector cell and trade form (ui/src/lib/apiClient.ts), then a reload of /api/portfolio
 ```
 
 The sync-at-connection lifecycle, which is the part worth knowing:
@@ -210,7 +212,8 @@ chronological order (a buy before a sell on the same date) tracking a running qu
 full and bought again later, and without this the first-ever buy date would belong to an unrelated stretch of
 ownership. A sell entered while already flat is treated as a data-entry mistake and silently ignored, never
 rejected. `holdingDays` counts to `lastSellDate` when `CLOSED`, or to the last sync's date (`account_state.as_of`,
-not the system clock, so the number doesn't drift between page loads) when `OPEN`. `HoldingRepository
+not the system clock, so the number doesn't drift between page loads) when `OPEN` — and is never negative: a
+buy dated after that sync (entered today while serving an older sync, e.g. with TWS off) counts as 0 days. `HoldingRepository
 .findByAccountOrderById`'s `@EntityGraph(attributePaths = "trades")` loads a holding's trades in the same
 query instead of one extra query per holding; `TradeEntity.toTradeFact()` reduces a row to what the
 computation needs.
@@ -224,7 +227,7 @@ turns them into JSON, so their component names **are** the JSON keys and must st
 (`ui/src/types/portfolio.ts` mirrors them) — add fields, don't rename or remove. Beyond the original IB
 fields, `HoldingResponse` also carries `id`, `conId`, `sector`, `status`, and — derived via
 `domain.HoldingHistory`, see above — `firstBuyDate`, `lastSellDate`, `holdingDays` and `trades`
-(a `List<TradeResponse>`, one entry per `trade` row); none of these are read by the UI yet.
+(a `List<TradeResponse>`, one entry per `trade` row); the UI reads all of them.
 `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
@@ -236,15 +239,19 @@ twin of `PortfolioReadService`): `PUT /api/holdings/{holdingId}/sector` (204), `
 (200 + the trade) and `DELETE /api/trades/{tradeId}` (204). After a write the UI reloads all of
 `/api/portfolio`, so the endpoints stay small. The bodies are the `api/request/` records (`SectorRequest`,
 `TradeRequest`), checked by `@Valid` before the method runs, with limits that mirror the columns
-(`@Digits(integer = 14, fraction = 6)` for `NUMERIC(20,6)`, `@Size` for the `VARCHAR`s, `@PastOrPresent` trade
-date). The sector and the note are trimmed, and blank becomes `null`. An unknown id is a
+(`@Digits(integer = 14, fraction = 6)` for `NUMERIC(20,6)`, with its own readable message, `@Size` for the
+`VARCHAR`s, `@PastOrPresent` trade date). The sector and the note are trimmed, and blank becomes `null`. An unknown id is a
 `ResponseStatusException` with 404. `ApiErrorHandler` (`@RestControllerAdvice extends
 ResponseEntityExceptionHandler`) makes every error a `ProblemDetail` JSON body (`status`, `title`, `detail`)
 and overrides only the validation case, so that `detail` names the fields — `"quantity: must be greater than
-0"`, sorted, in English (Hibernate Validator ships no Hebrew messages). The UI is meant to show `detail`.
+0"`, sorted, in English (Hibernate Validator ships no Hebrew messages). The UI shows that `detail` as it is;
+its write calls are all in `ui/src/lib/apiClient.ts`, named after the service's methods.
 Things that are easy to break:
 - `spring-boot-starter-validation` must stay in `pom.xml`: without it `@Valid` is silently ignored — no
   startup error, invalid input just reaches the database.
+- IB's average cost spreads the commissions over every share, so it has more decimal places than the 6
+  `@Digits` allows (`188.2990476`, found in the live check): the UI's `TradeForm` rounds it to 4 places when it
+  prefills a price. Anything else that sends an IB figure as a trade amount has to round it too.
 - `consumes = APPLICATION_JSON_VALUE` states the JSON-only rule, but it is not the only guard: a
   `@RequestBody` record can only be read from JSON, so another `Content-Type` gets 415 even without it (tried).
 
@@ -299,7 +306,8 @@ Things that are easy to break:
   abstraction, its `ui/` React stack), not by shared modules — see the architecture decisions in
   TODO.md.
 - Milestone 1 direction: Maven, Spring Boot REST, the PostgreSQL schema and entities, the sync at connection,
-  deriving buy/sell dates and holding period from `trade` rows, and the write endpoints for the sector and
-  trades are in; the API reads only from the database. Next is the UI — the new columns (session 5), then the
-  entry forms (session 6); see HOLDING_DETAILS_TODO.md. The
+  deriving buy/sell dates and holding period from `trade` rows, the write endpoints for the sector and trades,
+  and the UI to show and enter them are in; the API reads only from the database. HOLDING_DETAILS_TODO.md's
+  sessions 7–9 (reconciliation warnings, detected-change trade drafts, a stale-data banner) are optional
+  ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.
