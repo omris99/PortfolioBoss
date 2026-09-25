@@ -15,7 +15,7 @@ public record TradeResponse(
         BigDecimal price,
         String note) {
 
-    protected TradeResponse(TradeEntity trade) {
+    public TradeResponse(TradeEntity trade) {
         this(trade.id(), trade.tradeDate(), trade.side(), trade.quantity(), trade.price(), trade.note());
     }
 }

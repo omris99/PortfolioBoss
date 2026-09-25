@@ -25,6 +25,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
+        <!-- Hibernate Validator: checks @NotNull / @Positive / @Size ... on a @Valid request body before the controller
+             method runs. Without it @Valid is silently ignored and invalid input reaches the database. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
         <!-- Hibernate (maps classes to tables), Spring Data repositories, and HikariCP (the connection pool). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

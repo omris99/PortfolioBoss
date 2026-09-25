@@ -8,16 +8,17 @@ A read-only decision-support tool for a **long-term** Interactive Brokers portfo
 counterpart to the sibling IBBot intraday trading project (`~/DevProjects/IBBot`). It connects to
 TWS, syncs the holdings into a local PostgreSQL database on every connection, and serves that
 database to a React UI (`ui/`) that shows the positions table — the API always reads from the
-database, never straight from TWS. It is a Maven / Spring Boot application (Java 21, Spring Boot
-4.1.1).
+database, never straight from TWS. What the user enters by hand (a holding's sector and its trades) is
+written to the same database through a few JSON endpoints; the UI forms for them are still to come. It is
+a Maven / Spring Boot application (Java 21, Spring Boot 4.1.1).
 
 [TODO.md](TODO.md) is the plan of record — the six product principles, the settled architecture
 decisions, and the milestone breakdown. Read it before proposing features or structural changes;
 a feature that doesn't trace back to one of the six principles probably belongs in IBBot, not here.
 [HOLDING_DETAILS_TODO.md](HOLDING_DETAILS_TODO.md) is the session-by-session plan for the next stretch
 of Milestone 1 (Postgres, trades, holding details); its sessions 0 (Maven + Spring Boot), 1
-(PostgreSQL, Flyway, schema, entities), 2 (sync at connection, API reads from the database) and 3
-(derived buy/sell dates and holding period) are done.
+(PostgreSQL, Flyway, schema, entities), 2 (sync at connection, API reads from the database), 3
+(derived buy/sell dates and holding period) and 4 (write endpoints for the sector and trades) are done.
 
 ## Hard invariant: read-only
 
@@ -26,10 +27,15 @@ deliberately exposes no order-placement method, and `PortfolioWrapper` overrides
 account-reading callbacks. Do not add `placeOrder`, `cancelOrder`, or order-related `EWrapper`
 callbacks — if a task seems to need them, it is the wrong project.
 
-The local API is covered by the same rule: `PortfolioController` has one GET endpoint (Spring answers
-405 to every other method) and the server binds to the loopback interface only
-(`server.address=127.0.0.1` in `application.properties`). Don't add an endpoint that changes
-anything, and don't expose it beyond localhost (the connection to TWS and the API are both
+The local API never touches the IB account either. It writes only to PortfolioBoss's own database — the
+sector and trades the user enters, through `HoldingWriteController` — and never creates or deletes a
+holding (only the sync does). `PortfolioController` stays GET-only (Spring answers 405 to every other
+method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
+`application.properties`), there is **no CORS configuration**, and every write endpoint with a body accepts
+JSON only: a page on another site can make the browser send a request to localhost without asking first
+only as text or a form (415 here), while JSON, PUT and DELETE need a CORS preflight that nothing grants.
+Don't add CORS configuration, don't add an endpoint that writes anything other than PortfolioBoss's own
+hand-entered data, and don't expose the API beyond localhost (the connection to TWS and the API are both
 unencrypted, which is fine only while local).
 
 ## Build & run
@@ -63,9 +69,12 @@ Tests: `mvn -q test` (JUnit 5; no TWS, but the database tests need `portfoliobos
 above). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc` + `@MockitoBean` on `PortfolioReadService`)
 pins the JSON contract the UI depends on with made-up responses, no database needed; `HoldingTest` covers
 the derived math; `PortfolioWrapperTest` feeds `PortfolioWrapper` IB callbacks directly, no socket.
-`PortfolioSyncServiceTest` and `PortfolioReadServiceTest` are `@DataJpaTest`s against the real
-`portfolioboss_test` database (`src/test/resources/application-test.properties`, `@ActiveProfiles("test")`),
-each test rolled back automatically. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
+`PortfolioSyncServiceTest`, `PortfolioReadServiceTest` and `HoldingWriteServiceTest` are `@DataJpaTest`s
+against the real `portfolioboss_test` database (`src/test/resources/application-test.properties`,
+`@ActiveProfiles("test")`), each test rolled back automatically. The write endpoints are tested in the same two
+halves: `HoldingWriteControllerTest` (`@WebMvcTest`, service mocked) for status codes, validation messages and
+the JSON-only rule, `HoldingWriteServiceTest` for what is stored. There is no whole-app `@SpringBootTest`: it
+would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
 `target/surefire-reports/` keeps the reports of tests that have since been deleted.
 
 Spring's own settings are in `src/main/resources/application.properties` (loopback address, port 8080,
@@ -121,6 +130,10 @@ PortfolioController ──reads── PortfolioReadService ──reads── Pos
         │                     (api/response/*Response,                    driven by HTTP requests, not by TWS)
         │                      +domain/HoldingHistory)
         └──JSON──> ui/ (React; the dev server proxies /api to :8080)
+
+HoldingWriteController ──writes── HoldingWriteService ──writes── Postgres  (sector and trade rows only;
+        (api/request/*Request, @Valid;                                    never IB, never a holding row
+         ApiErrorHandler → ProblemDetail JSON)                            created or deleted)
 ```
 
 The sync-at-connection lifecycle, which is the part worth knowing:
@@ -171,7 +184,9 @@ holding, syncedAt)`) or refreshed (`refreshFromIb` — IB's figures only, `statu
 so the sector and trades typed in by hand survive; a `CLOSED` holding that reappears is reopened
 automatically. `AccountStateEntity` holds one row, replaced by a new instance (`new AccountStateEntity(snapshot)`)
 on every sync. All of this runs in one `@Transactional` method, so a snapshot is stored whole or not at all.
-`HoldingRepository` and `AccountStateRepository` are the repositories.
+The hand-entered side is written only by `api.HoldingWriteService` (below), through `HoldingEntity.changeSector`,
+the `TradeEntity` constructor and `TradeEntity.changeDetails`. `HoldingRepository`, `TradeRepository` and
+`AccountStateRepository` are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
   checksum): a schema change is a new `V2__….sql`.
@@ -184,8 +199,8 @@ Things that are easy to break:
   are three different things on purpose — `HoldingEntity.toIbHolding()` rebuilds a `Holding` from the stored
   row (`NULL` → `NaN`) so the derived math is never duplicated outside `Holding`.
 - `scripts/backup-db.sh` dumps the database to `~/PortfolioBossBackups`, outside the repo.
-- Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`) are `@DataJpaTest`s against the
-  real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
+- Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`) are
+  `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 
 `portfolioboss.domain` holds `HoldingHistory` and `TradeFact` — pure computation, no Spring and no
 database, so it is unit tested directly. A holding's `firstBuyDate`, `lastSellDate` and `holdingDays` are
@@ -215,6 +230,24 @@ fields, `HoldingResponse` also carries `id`, `conId`, `sector`, `status`, and �
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
 in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.
 
+`HoldingWriteController` serves the writes through `HoldingWriteService` (`@Transactional`, the write-side
+twin of `PortfolioReadService`): `PUT /api/holdings/{holdingId}/sector` (204), `POST
+/api/holdings/{holdingId}/trades` (201 + the new trade as a `TradeResponse`), `PUT /api/trades/{tradeId}`
+(200 + the trade) and `DELETE /api/trades/{tradeId}` (204). After a write the UI reloads all of
+`/api/portfolio`, so the endpoints stay small. The bodies are the `api/request/` records (`SectorRequest`,
+`TradeRequest`), checked by `@Valid` before the method runs, with limits that mirror the columns
+(`@Digits(integer = 14, fraction = 6)` for `NUMERIC(20,6)`, `@Size` for the `VARCHAR`s, `@PastOrPresent` trade
+date). The sector and the note are trimmed, and blank becomes `null`. An unknown id is a
+`ResponseStatusException` with 404. `ApiErrorHandler` (`@RestControllerAdvice extends
+ResponseEntityExceptionHandler`) makes every error a `ProblemDetail` JSON body (`status`, `title`, `detail`)
+and overrides only the validation case, so that `detail` names the fields — `"quantity: must be greater than
+0"`, sorted, in English (Hibernate Validator ships no Hebrew messages). The UI is meant to show `detail`.
+Things that are easy to break:
+- `spring-boot-starter-validation` must stay in `pom.xml`: without it `@Valid` is silently ignored — no
+  startup error, invalid input just reaches the database.
+- `consumes = APPLICATION_JSON_VALUE` states the JSON-only rule, but it is not the only guard: a
+  `@RequestBody` record can only be read from JSON, so another `Content-Type` gets 415 even without it (tried).
+
 `UiLauncher` copies IBBot's `launchVisualizer()`: `bash -l -c "npm run dev"` in `ui/` (a login shell,
 so `npm` is on the PATH), output to `ui/dev-server.log`, then macOS `open` once the port answers.
 Things that are easy to break:
@@ -242,11 +275,13 @@ Things that are easy to break:
 - One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` owns the TWS
   host/port/client id and the single `IbGateway`. Don't add a second entry point or a second place
   that connects to TWS.
-- API response types go in `portfolioboss.api.response`; the accessors and derived-math methods every other
-  layer needs (`Holding.costBasis()`, `HoldingEntity.id()`/`sector()`/`trades()`/`toIbHolding()`, …) are
+- API response types go in `portfolioboss.api.response`, request bodies in `portfolioboss.api.request`; the
+  accessors, derived-math and write methods another package needs (`Holding.costBasis()`,
+  `HoldingEntity.id()`/`sector()`/`trades()`/`toIbHolding()`/`changeSector()`, `TradeEntity`'s constructor and
+  `changeDetails()`, `TradeResponse(TradeEntity)` — built by `HoldingWriteService` in `api`, …) are
   `public`. Everything internal to a class's own package — `HoldingEntity`'s and `AccountStateEntity`'s
-  from-a-snapshot constructors, `refreshFromIb`, `markClosed`, `TradeResponse`'s and `HoldingResponse.from`'s
-  entity-to-response conversions, `TwsPortfolioRunner`'s own constructor — is marked `protected` rather than
+  from-a-snapshot constructors, `refreshFromIb`, `markClosed`, `HoldingResponse.from`'s entity-to-response
+  conversion, `TwsPortfolioRunner`'s own constructor — is marked `protected` rather than
   left as the unmarked package-private default: an explicit keyword is easier to spot while reading than the
   *absence* of one. (On a `record`, always `final`, or on a package-private top-level class, `protected` is
   exactly as reachable as package-private in practice — nothing outside the package can subclass either — so
@@ -264,6 +299,7 @@ Things that are easy to break:
   abstraction, its `ui/` React stack), not by shared modules — see the architecture decisions in
   TODO.md.
 - Milestone 1 direction: Maven, Spring Boot REST, the PostgreSQL schema and entities, the sync at connection,
-  and deriving buy/sell dates and holding period from `trade` rows are in; the API reads only from the
-  database. Next is the write endpoints (sector, trades) and the UI forms — see HOLDING_DETAILS_TODO.md. The
+  deriving buy/sell dates and holding period from `trade` rows, and the write endpoints for the sector and
+  trades are in; the API reads only from the database. Next is the UI — the new columns (session 5), then the
+  entry forms (session 6); see HOLDING_DETAILS_TODO.md. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

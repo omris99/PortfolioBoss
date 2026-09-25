@@ -48,6 +48,22 @@ public class TradeEntity {
     protected TradeEntity() {
     }
 
+    /** A trade the user entered for {@code holding}. {@code price} and {@code note} may be {@code null}. */
+    public TradeEntity(HoldingEntity holding, LocalDate tradeDate, TradeSide side, BigDecimal quantity,
+                       BigDecimal price, String note) {
+        this.holding = holding;
+        changeDetails(tradeDate, side, quantity, price, note);
+    }
+
+    /** A correction by the user: every field is replaced, and the trade stays on the same holding. */
+    public void changeDetails(LocalDate tradeDate, TradeSide side, BigDecimal quantity, BigDecimal price, String note) {
+        this.tradeDate = tradeDate;
+        this.side = side;
+        this.quantity = quantity;
+        this.price = price;
+        this.note = note;
+    }
+
     public Long id() {
         return id;
     }

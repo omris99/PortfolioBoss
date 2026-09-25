@@ -31,14 +31,14 @@ Stage and commit the current changes.
 fits, leave it out.
 
 *In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection, derived buy/sell dates,
-the first UI slice):*
+write endpoints for the sector and trades, the first UI slice):*
 
 | Scope | Covers |
 |---|---|
 | `ib` | `IbGateway`, `PortfolioWrapper`, `TwsPortfolioRunner` — socket, reader loop, EWrapper callbacks, and the startup read from TWS |
 | `model` | `Holding`, `PortfolioSnapshot` and the derived portfolio math |
 | `report` | the console snapshot report and its formatting |
-| `api` | `PortfolioController`, `PortfolioReadService` and the `api/response/` records — the local Spring MVC API (`GET /api/portfolio`), which always reads from the database |
+| `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
 | `domain` | `portfolioboss.domain` (`HoldingHistory`, `TradeFact`) — pure computation over trades, no Spring |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
@@ -70,9 +70,10 @@ Tests (`src/test/`) take the scope of the code they cover.
   `config/local.env`, or `.claude/settings.local.json` unless the user explicitly asks
 - Keep the subject line under 72 characters
 - The body should explain *what* and *why*, not restate the diff line by line
-- This project is **read-only by design** — a commit that adds `placeOrder`, `cancelOrder`, any
-  order-related callback, or an API endpoint that changes something (or binds beyond localhost) is a
-  signal something is wrong; flag it instead of committing
+- This project is **read-only toward IB by design** — a commit that adds `placeOrder`, `cancelOrder`, any
+  order-related callback, an API endpoint that writes anything other than PortfolioBoss's own hand-entered
+  data (sector, trades), CORS configuration, a write endpoint that accepts something other than JSON, or
+  binding beyond localhost is a signal something is wrong; flag it instead of committing
 - If `$ARGUMENTS` is provided, use it as the commit message (skip analysis)
 
 ## Arguments

@@ -103,6 +103,11 @@ public class HoldingEntity {
         closedDetectedAt = syncedAt;
     }
 
+    /** Entered by the user through the API; the sync never calls this. {@code null} clears it. */
+    public void changeSector(String sector) {
+        this.sector = sector;
+    }
+
     public Long id() {
         return id;
     }

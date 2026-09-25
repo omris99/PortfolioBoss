@@ -615,7 +615,8 @@ public class PortfolioSyncService {
 1. ✅ ריצה ראשונה מול TWS חי: `holding` ב-`portfolioboss` (האמיתי) מכיל 7 שורות `OPEN`, שורת `account_state` אחת.
    ⬜ ריצה שנייה מול TWS חי (כדי לראות `updated` ולא `new`) — עוד לא בוצעה.
 2. ⬜ פתוח — עומרי דחה לסשן 4.
-3. ⬜ פתוח — עומרי דחה לסשן 4 (אין עדיין דרך להזין סקטור מלבד `psql` ישירות; ה-endpoint הכותב מגיע רק שם).
+3. ✅ (25.09.2026, סשן 4) מכוסה אוטומטית: `HoldingWriteServiceTest.theSectorAndTradesEnteredByHandSurviveTheNextSync` מזין
+   סקטור ועסקה דרך השירות הכותב, מריץ סנכרון אמיתי נוסף (מול `portfolioboss_test`), ובודק ששניהם נשארו. לא הורץ חי מול TWS.
 4. ⬜ פתוח חלקית: אומת ש-`GET /api/portfolio` מחזיר 200 עם `id`/`conId`/`sector`/`status` על גבי הנתונים האמיתיים;
    לא בוצעה השוואה חזותית מול ה-UI הפתוח בדפדפן ולא `diff` מול `before.json`.
 5. ✅ אומת פעמיים: (א) TWS כבוי **לפני** השינוי — יציאה עם ההודעה הישנה, ה-DB לא נגע. (ב) TWS כבוי **אחרי**
@@ -702,8 +703,25 @@ List<TradeResponse> trades     // מסודר לפי תאריך ואז id
 ## סשן 4 — endpoints כותבים (סקטור ועסקאות)
 
 > **תנאי מוקדם:** סשן 3. **⚠️ זה הסשן ששובר במכוון את הכלל ב-CLAUDE.md** "`ApiServer` has one GET endpoint … Don't add an endpoint that changes anything".
+>
+> **סטטוס (25.09.2026):** 4.1–4.5 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית (אושרו מראש):
+> - השירות נקרא **`HoldingWriteService`**, לא `TradeService` — הוא כותב גם את הסקטור; התאום של `PortfolioReadService`, ויושב לידו ב-`api`.
+> - **`ApiErrorHandler`**, לא `ApiErrors` — השם אומר מה המחלקה עושה.
+> - **אין `NotFoundException`:** 404 נזרק כ-`ResponseStatusException(NOT_FOUND, "No holding with id …")`, ומחלקת הבסיס
+>   `ResponseEntityExceptionHandler` כבר הופכת אותו ל-`ProblemDetail` עם ההודעה — מחלקה אחת ו-handler אחד פחות.
+> - ה-records של הבקשות יושבים ב-**`api/request/`** (מקביל ל-`api/response/`). ה-controller עם נתיבים מלאים, בלי `@RequestMapping("/api")` —
+>   כמו `PortfolioController`. שמות המתודות: `changeSector`, `addTrade`, `changeTrade`, `deleteTrade`.
+> - **הבדיקות מפוצלות לשתיים** (ולא בדיקת MockMvc אחת מול ה-DB): `HoldingWriteControllerTest` (`@WebMvcTest`, שירות מדומה — 14 בדיקות)
+>   ו-`HoldingWriteServiceTest` (`@DataJpaTest` מול `portfolioboss_test` — 10). `@SpringBootTest` היה מריץ את `TwsPortfolioRunner` ומתחבר ל-TWS.
+> - **תוספות:** `@Digits(integer = 14, fraction = 6)` על כמות ומחיר (תואם `NUMERIC(20,6)`; בלעדיו מספר ענק מגיע ל-Postgres ומחזיר 500),
+>   ו-`note` ריקה נשמרת כ-`null` כמו הסקטור.
+> - **נמצא בבדיקת חבלה:** `consumes` אינו ההגנה היחידה — `@RequestBody` של record נקרא רק מ-JSON, ולכן גם בלעדיו מתקבל 415. נשאר כהצהרה מפורשת.
+> - הודעות הולידציה באנגלית: ל-Hibernate Validator אין קובץ הודעות בעברית.
 
-### 4.1 🟡 החלטה מתועדת: ניסוח מחדש של ה-invariant
+### ✅ 4.1 🟡 החלטה מתועדת: ניסוח מחדש של ה-invariant
+
+> **בפועל (25.09.2026, ב"עדכונים של סוף סשן"):** עודכנו CLAUDE.md ("Hard invariant: read-only" — כולל "אין הגדרת CORS"),
+> ה-Rules של ה-commit skill, reference_ui.md, והשורה "GET only" ב-README.
 
 **קוד קיים רלוונטי (CLAUDE.md):** "The local API is covered by the same rule: `ApiServer` has one GET endpoint and binds to the loopback interface only. Don't add an endpoint that changes anything…"
 
@@ -715,7 +733,7 @@ database (sector, trades). It binds to loopback only, has no CORS configuration,
 
 ---
 
-### 4.2 🟡 `HoldingWriteController` + `TradeService`
+### ✅ 4.2 🟡 `HoldingWriteController` + `TradeService` (בפועל: `HoldingWriteService`)
 
 **המימוש:**
 ```java
@@ -751,7 +769,7 @@ record TradeRequest(
 
 ---
 
-### 4.3 🟡 טיפול בשגיאות — `ApiErrors`
+### ✅ 4.3 🟡 טיפול בשגיאות — `ApiErrors` (בפועל: `ApiErrorHandler`)
 
 **הבעיה:** ה-UI צריך להציג הודעה שימושית, אבל `ProblemDetail` ברירת המחדל של שגיאות ולידציה הוא רק `"Invalid request content."`.
 
@@ -767,7 +785,7 @@ JSON פגום (`HttpMessageNotReadableException`) — נכלל בבסיס (400).
 
 ---
 
-### 4.4 🔴 עמדת אבטחה — בדיקות
+### ✅ 4.4 🔴 עמדת אבטחה — בדיקות
 
 **הבעיה:** ברגע שה-API כותב, דף אינטרנט זדוני יכול לנסות לשלוח בקשות ל-`localhost:8080` מהדפדפן.
 
@@ -779,7 +797,7 @@ JSON פגום (`HttpMessageNotReadableException`) — נכלל בבסיס (400).
 
 ---
 
-### 4.5 🟡 בדיקות `HoldingWriteControllerTest` (MockMvc, מול ה-DB של הבדיקות)
+### ✅ 4.5 🟡 בדיקות `HoldingWriteControllerTest` (MockMvc, מול ה-DB של הבדיקות — בפועל מפוצל, ראו הסטטוס למעלה)
 
 עסקה תקינה → 201 ונשמרת; תאריך עתידי → 400; כמות `0` → 400; `side` לא מוכר → 400; החזקה לא קיימת → 404;
 סקטור ריק → `null`; `text/plain` → 415; מחיקה כפולה → 404 בפעם השנייה; הודעת השגיאה מכילה את שם השדה.
@@ -788,6 +806,13 @@ JSON פגום (`HttpMessageNotReadableException`) — נכלל בבסיס (400).
 
 **בדיקת אימות סשן 4:** `curl -X POST -H 'Content-Type: application/json' -d '{"tradeDate":"2025-01-15","side":"BUY","quantity":10}' localhost:8080/api/holdings/1/trades`
 → 201; שורה ב-`psql`; `GET /api/portfolio` מחזיר אותה. אותה בקשה עם `-H 'Content-Type: text/plain'` → 415.
+
+**סטטוס הבדיקה (25.09.2026):** ✅ `mvn -q test` ירוק — 62 בדיקות (24 חדשות). ✅ בדיקה חיה מול ה-`portfolioboss` האמיתי, בבחירת עומרי
+(`./run.sh 7599`, בלי TWS): `POST` של BUY להחזקה 1 → 201; `GET` הציג את העסקה עם `firstBuyDate` ו-`holdingDays` (615);
+`text/plain` → 415; כמות 0 → 400 עם `"quantity: must be greater than 0"`; preflight מאתר אחר — בלי כותרות CORS;
+`DELETE` דרך ה-proxy של Vite (5174, עם `Origin` של הדפדפן) → 204; מחיקה חוזרת → 404 `"No trade with id 1"`.
+ה-DB חזר למצבו (רק מונה ה-id של `trade` התקדם). בדיקת חבלה: הסרת `@Valid` או של ה-override ב-`ApiErrorHandler` מפילה בדיקות;
+הסרת `consumes` לא (ראו הסטטוס למעלה).
 
 ---
 

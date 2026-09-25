@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.6.0";
+    public static final String VERSION = "0.7.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,16 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.7.0: [Write endpoints for the sector and trades]
+ * HoldingWriteController added: PUT /api/holdings/{id}/sector, POST /api/holdings/{id}/trades, PUT and DELETE /api/trades/{id}; the API was GET-only, now it also writes hand-entered data, never anything at IB.
+ * HoldingWriteService added: one transaction per write; the sector and note are trimmed and blank becomes null; holdings are never created or deleted here, only by the sync.
+ * SectorRequest / TradeRequest added (api/request): checked by @Valid before the endpoint runs — date not in the future, positive quantity, limits matching the NUMERIC(20,6) and VARCHAR columns.
+ * pom.xml: spring-boot-starter-validation added; without Hibernate Validator @Valid is silently ignored and invalid trades would reach the database.
+ * ApiErrorHandler added: API errors are ProblemDetail JSON; a failed validation names the fields ("quantity: must be greater than 0") instead of Spring's generic text; an unknown id is 404.
+ * Write endpoints accept JSON only and there is no CORS configuration, so another website can't make the browser write to the local API: text or form posts get 415, JSON needs a preflight nothing grants.
+ * TradeRepository added; HoldingEntity.changeSector, the new TradeEntity constructor and TradeEntity.changeDetails are the only code that writes the hand-entered columns.
+ * New tests: HoldingWriteControllerTest (status codes, messages, 415, no CORS) and HoldingWriteServiceTest (what is stored, against portfolioboss_test, incl. sector and trades surviving a re-sync).
+ *
  * VERSION 0.6.0: [Derived buy/sell dates and holding period]
  * HoldingHistory and TradeFact added (portfolioboss.domain, pure computation, no Spring): derive a holding's buy/sell dates and holding period from its trade rows instead of storing them.
  * The derivation resets on every full sell followed by a rebuy of the same holding (a new "episode"), so a stock sold and bought again later doesn't inherit an unrelated first-buy date.
