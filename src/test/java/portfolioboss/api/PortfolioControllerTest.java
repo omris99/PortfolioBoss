@@ -10,6 +10,8 @@ import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.TradeResponse;
 import portfolioboss.db.HoldingStatus;
 import portfolioboss.db.TradeSide;
+import portfolioboss.domain.HoldingWarning;
+import portfolioboss.domain.HoldingWarningType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -42,6 +44,7 @@ class PortfolioControllerTest {
 
     private static final String ACCOUNT = "U1234567";
     private static final Instant AS_OF = Instant.parse("2026-09-19T08:05:00Z");
+    private static final String NO_TRADES_MESSAGE = "No buy entered yet, so the buy date and holding period are unknown.";
 
     @Autowired
     private MockMvc mockMvc;
@@ -91,7 +94,17 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].trades[0].side").value("BUY"))
                 .andExpect(jsonPath("$.holdings[0].trades[0].quantity").value(10))
                 .andExpect(jsonPath("$.holdings[0].trades[0].price").value(150.0))
-                .andExpect(jsonPath("$.holdings[0].trades[0].note").value("Initial position"));
+                .andExpect(jsonPath("$.holdings[0].trades[0].note").value("Initial position"))
+                .andExpect(jsonPath("$.holdings[0].warnings").value(empty()));
+    }
+
+    @Test
+    void servesEachWarningWithItsTypeAndMessage() throws Exception {
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(portfolioWith(withoutCostData())));
+
+        mockMvc.perform(get("/api/portfolio"))
+                .andExpect(jsonPath("$.holdings[0].warnings[0].type").value("NO_TRADES_LOGGED"))
+                .andExpect(jsonPath("$.holdings[0].warnings[0].message").value(NO_TRADES_MESSAGE));
     }
 
     @Test
@@ -137,12 +150,13 @@ class PortfolioControllerTest {
                 new BigDecimal("10"), new BigDecimal("150.00"), "Initial position");
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
-                LocalDate.of(2024, 3, 14), null, 920L, List.of(buy));
+                LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of());
     }
 
     /** IB sent a position but no cost or price figures for it, no sector and no trades entered. */
     private HoldingResponse withoutCostData() {
+        HoldingWarning noTrades = new HoldingWarning(HoldingWarningType.NO_TRADES_LOGGED, NO_TRADES_MESSAGE);
         return new HoldingResponse("MSFT", "STK", "USD", 5.0, null, null, null, null, 0.0, ACCOUNT,
-                null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of());
+                null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of(), List.of(noTrades));
     }
 }

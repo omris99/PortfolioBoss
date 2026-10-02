@@ -6,6 +6,14 @@
 
 export type HoldingStatus = 'OPEN' | 'CLOSED';
 export type TradeSide = 'BUY' | 'SELL';
+export type HoldingWarningType = 'NO_TRADES_LOGGED' | 'CLOSED_WITHOUT_SELL' | 'QUANTITY_MISMATCH';
+
+/** A gap between the trades entered and what IB reports. It never blocks anything. */
+export interface HoldingWarning {
+  type: HoldingWarningType;
+  /** In English, shown as it is. */
+  message: string;
+}
 
 /** One buy or sell entered by hand. */
 export interface Trade {
@@ -58,6 +66,8 @@ export interface Holding {
   holdingDays: number | null;
   /** Ordered by trade date, then id. */
   trades: Trade[];
+  /** Empty when the trades entered match IB; otherwise the one gap to fix first. */
+  warnings: HoldingWarning[];
 }
 
 export interface PortfolioSnapshot {

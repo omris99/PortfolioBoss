@@ -31,7 +31,8 @@ Stage and commit the current changes.
 fits, leave it out.
 
 *In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection, derived buy/sell dates,
-write endpoints for the sector and trades, and the UI that shows the positions and enters the sector and trades):*
+write endpoints for the sector and trades, the UI that shows the positions and enters the sector and trades, and the
+reconciliation warnings):*
 
 | Scope | Covers |
 |---|---|
@@ -40,7 +41,7 @@ write endpoints for the sector and trades, and the UI that shows the positions a
 | `report` | the console snapshot report and its formatting |
 | `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
-| `domain` | `portfolioboss.domain` (`HoldingHistory`, `TradeFact`) — pure computation over trades, no Spring |
+| `domain` | `portfolioboss.domain` (`HoldingHistory`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`) — pure computation over trades (derived dates, reconciliation warnings), no Spring |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 

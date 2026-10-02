@@ -3,6 +3,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { deleteTrade, errorMessageOf } from '../lib/apiClient';
 import { EMPTY_VALUE, formatMoney, formatQuantity } from '../lib/format';
 import type { Holding, Trade, TradeSide } from '../types/portfolio';
+import { HoldingWarningList } from './HoldingWarnings';
 import { TradeForm } from './TradeForm';
 
 function TradeSideBadge({ side }: { side: TradeSide }) {
@@ -103,6 +104,7 @@ export function TradesPanel({ holding, onDataChanged }: { holding: Holding; onDa
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
+      <HoldingWarningList warnings={holding.warnings} />
       {holding.trades.length === 0 ? (
         <p className="text-slate-500">No trades entered yet for {holding.symbol}.</p>
       ) : (

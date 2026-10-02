@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
+import { needsAttention } from './components/HoldingWarnings';
 import { PositionsTable } from './components/PositionsTable';
 import { SummaryBar } from './components/SummaryBar';
 import { usePortfolio } from './hooks/usePortfolio';
@@ -26,6 +27,31 @@ function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStat
 function openHoldingsOf(snapshot: PortfolioSnapshot | null): Holding[] {
   if (snapshot === null) return [];
   return snapshot.holdings.filter((holding) => holding.status === 'OPEN');
+}
+
+/**
+ * "2 holdings need attention (1 closed, hidden)", or `null` when none does. It counts every holding, not only the
+ * shown ones: "closed without a sell" is only ever on a closed holding, which is hidden by default.
+ */
+function attentionSummaryOf(allHoldings: Holding[], showClosed: boolean): string | null {
+  const holdingsNeedingAttention = allHoldings.filter(needsAttention);
+  if (holdingsNeedingAttention.length === 0) return null;
+
+  const hiddenCount = showClosed
+    ? 0
+    : holdingsNeedingAttention.filter((holding) => holding.status === 'CLOSED').length;
+  const subjectAndVerb = holdingsNeedingAttention.length === 1 ? 'holding needs' : 'holdings need';
+  const hiddenNote = hiddenCount > 0 ? ` (${hiddenCount} closed, hidden)` : '';
+  return `${holdingsNeedingAttention.length} ${subjectAndVerb} attention${hiddenNote}`;
+}
+
+function AttentionSummary({ summary }: { summary: string }) {
+  return (
+    <div className="mt-1 flex items-center gap-1 text-xs text-orange-500">
+      <TriangleAlert size={12} className="shrink-0" />
+      {summary}
+    </div>
+  );
 }
 
 function ShowClosedToggle({
@@ -108,6 +134,7 @@ function App() {
   const allHoldings = snapshot?.holdings ?? [];
   const closedCount = allHoldings.length - openHoldings.length;
   const visibleHoldings = showClosed ? allHoldings : openHoldings;
+  const attentionSummary = attentionSummaryOf(allHoldings, showClosed);
   const loadStatus = loadStatusOf(errorMessage, isLoading);
   const sectionSubtitle = snapshot
     ? `Account ${snapshot.account} · last synced from TWS ${new Date(snapshot.asOf).toLocaleString()}`
@@ -132,6 +159,7 @@ function App() {
             <div>
               <div className="text-sm font-semibold text-slate-100">Positions</div>
               <div className="mt-1 text-xs text-slate-400">{sectionSubtitle}</div>
+              {attentionSummary && <AttentionSummary summary={attentionSummary} />}
             </div>
             <div className="flex items-center gap-4">
               <ShowClosedToggle closedCount={closedCount} showClosed={showClosed} onChange={setShowClosed} />

@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.8.0";
+    public static final String VERSION = "0.9.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,14 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.9.0: [Reconciliation warnings]
+ * HoldingHistory.warnings added: checks the trades entered against IB and returns the one gap to fix first — no buy entered, a closed holding with no sell, or a quantity other than IB's (0.0001 tolerance).
+ * HoldingWarning / HoldingWarningType added (domain): sent as they are in a new warnings list on each holding in GET /api/portfolio; a warning never blocks a write, IB stays the source of truth.
+ * HoldingHistory.netQuantity now sums every trade entered, including a sell while flat that the dates ignore; before, it was the episode's running quantity, so such a sell never showed up as a gap.
+ * HoldingWarnings added (UI): a triangle next to the symbol with the message on hover, and the same message at the top of the trades panel; "no buy entered yet" in yellow, the other two in orange.
+ * App shows "n holdings need attention" under the Positions title, counting closed holdings too and noting "(n closed, hidden)", since a closed holding with no sell is hidden by default.
+ * New tests: HoldingHistoryTest for each warning, their order, the decimal tolerance and a sell the dates ignore; PortfolioControllerTest and PortfolioReadServiceTest for warnings in the JSON.
+ *
  * VERSION 0.8.0: [Sector and trades in the UI]
  * PositionsTable gains Sector, Bought, Last sold and Held columns; sorting keeps empty values ("—") last in both directions, and rows are keyed by holding id, so two holdings sharing a symbol no longer collide.
  * The UI types IB figures as number | null and shows a missing one as "—"; before, a price IB did not report rendered as 0.00, which looked like a real zero.

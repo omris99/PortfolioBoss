@@ -114,16 +114,16 @@ class HoldingHistoryTest {
     }
 
     @Test
-    void aSellWithNoPriorBuyIsIgnored() {
+    void aSellWithNoPriorBuyIsIgnoredByTheDates() {
         HoldingHistory history = HoldingHistory.of(List.of(sell("2026-01-01", 10)));
 
         assertThat(history.firstBuyDate()).isNull();
         assertThat(history.lastSellDate()).isNull();
-        assertThat(history.netQuantity()).isEqualByComparingTo("0");
+        assertThat(history.netQuantity()).isEqualByComparingTo("-10");   // still counted, for the check against IB
     }
 
     @Test
-    void aSecondSellAfterTheEpisodeIsAlreadyFlatIsIgnored() {
+    void aSecondSellAfterTheEpisodeIsAlreadyFlatIsIgnoredByTheDates() {
         // a duplicate/mistaken sell entry after the position was already fully sold
         HoldingHistory history = HoldingHistory.of(List.of(
                 buy("2026-01-01", 10),
@@ -131,7 +131,91 @@ class HoldingHistoryTest {
                 sell("2026-02-15", 3)));
 
         assertThat(history.lastSellDate()).isEqualTo(LocalDate.of(2026, 2, 1));
-        assertThat(history.netQuantity()).isEqualByComparingTo("0");
+        assertThat(history.netQuantity()).isEqualByComparingTo("-3");   // still counted, for the check against IB
+    }
+
+    // ── warnings ────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void noBuyEnteredWarnsNoTradesLoggedAndNothingElse() {
+        // IB reports 100 and the log adds up to 0, but the missing buys are one gap, reported once
+        HoldingHistory history = HoldingHistory.of(List.of());
+
+        assertThat(history.warnings(HoldingStatus.OPEN, 100))
+                .extracting(HoldingWarning::type)
+                .containsExactly(HoldingWarningType.NO_TRADES_LOGGED);
+    }
+
+    @Test
+    void tradesAddingUpToIbsQuantityGiveNoWarning() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2025-01-01", 60),
+                buy("2025-06-01", 50),
+                sell("2026-01-01", 10)));
+
+        assertThat(history.warnings(HoldingStatus.OPEN, 100)).isEmpty();
+    }
+
+    @Test
+    void tradesAddingUpToLessThanIbReportsWarnQuantityMismatch() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2025-01-01", 60),
+                buy("2025-06-01", 30)));
+
+        assertThat(history.warnings(HoldingStatus.OPEN, 100)).containsExactly(new HoldingWarning(
+                HoldingWarningType.QUANTITY_MISMATCH, "The trades entered add up to 90 shares; IB reports 100."));
+    }
+
+    @Test
+    void aDifferenceWithinTheToleranceIsNotAMismatch() {
+        HoldingHistory history = HoldingHistory.of(List.of(buy("2026-01-01", "0.0523")));
+
+        assertThat(history.warnings(HoldingStatus.OPEN, 0.05234)).isEmpty();
+        assertThat(history.warnings(HoldingStatus.OPEN, 0.0525))
+                .extracting(HoldingWarning::type)
+                .containsExactly(HoldingWarningType.QUANTITY_MISMATCH);
+    }
+
+    @Test
+    void aClosedHoldingWithNoSellEnteredWarnsClosedWithoutSellAndNothingElse() {
+        // the log adds up to 10 against IB's 0 as well, but the missing sell is one gap, reported once
+        HoldingHistory history = HoldingHistory.of(List.of(buy("2026-01-01", 10)));
+
+        assertThat(history.warnings(HoldingStatus.CLOSED, 0))
+                .extracting(HoldingWarning::type)
+                .containsExactly(HoldingWarningType.CLOSED_WITHOUT_SELL);
+    }
+
+    @Test
+    void aClosedHoldingSoldInFullGivesNoWarning() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2026-01-01", 10),
+                sell("2026-03-01", 10)));
+
+        assertThat(history.warnings(HoldingStatus.CLOSED, 0)).isEmpty();
+    }
+
+    @Test
+    void aClosedHoldingSoldOnlyInPartWarnsQuantityMismatch() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2026-01-01", 10),
+                sell("2026-03-01", 4)));
+
+        assertThat(history.warnings(HoldingStatus.CLOSED, 0)).containsExactly(new HoldingWarning(
+                HoldingWarningType.QUANTITY_MISMATCH, "The trades entered add up to 6 shares; IB reports 0."));
+    }
+
+    @Test
+    void aSellTheDatesIgnoreIsStillCaughtByTheQuantityCheck() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2023-03-01", 10),
+                sell("2024-01-01", 10),
+                sell("2024-02-01", 3),    // entered by mistake: the position is already flat
+                buy("2024-05-01", 5)));
+
+        assertThat(history.firstBuyDate()).isEqualTo(LocalDate.of(2024, 5, 1));
+        assertThat(history.warnings(HoldingStatus.OPEN, 5)).containsExactly(new HoldingWarning(
+                HoldingWarningType.QUANTITY_MISMATCH, "The trades entered add up to 2 shares; IB reports 5."));
     }
 
     private TradeFact buy(String date, long quantity) {

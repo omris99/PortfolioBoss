@@ -4,6 +4,7 @@ import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingStatus;
 import portfolioboss.db.TradeEntity;
 import portfolioboss.domain.HoldingHistory;
+import portfolioboss.domain.HoldingWarning;
 import portfolioboss.domain.TradeFact;
 import portfolioboss.model.Holding;
 import portfolioboss.utils.Utils;
@@ -15,9 +16,10 @@ import java.util.List;
  * One holding as the UI receives it. Jackson turns the record into JSON using the component names,
  * so they are the JSON keys and must stay stable ({@code ui/src/types/portfolio.ts} mirrors them).
  * A figure IB did not report is {@code null}. It is built from the stored row; `id`, `conId`, `sector`
- * and `status` were added when the API began reading from the database, and `firstBuyDate`,
- * `lastSellDate`, `holdingDays` and `trades` when those were derived from the `trade` table. Fields are
- * only ever added, never renamed or removed.
+ * and `status` were added when the API began reading from the database, `firstBuyDate`,
+ * `lastSellDate`, `holdingDays` and `trades` when those were derived from the `trade` table, and
+ * `warnings` when the trades entered began to be checked against IB. Fields are only ever added, never
+ * renamed or removed.
  */
 public record HoldingResponse(
         String symbol,
@@ -39,7 +41,8 @@ public record HoldingResponse(
         LocalDate firstBuyDate,
         LocalDate lastSellDate,
         Long holdingDays,
-        List<TradeResponse> trades) {
+        List<TradeResponse> trades,
+        List<HoldingWarning> warnings) {
 
     /** {@code snapshotDate} is how far an still-{@code OPEN} holding's day count runs — see {@link HoldingHistory}. */
     protected static HoldingResponse from(HoldingEntity holdingEntity, LocalDate snapshotDate) {
@@ -68,6 +71,7 @@ public record HoldingResponse(
                 holdingHistory.firstBuyDate(),
                 holdingHistory.lastSellDate(),
                 holdingHistory.holdingDays(holdingEntity.status(), snapshotDate),
-                tradeEntities.stream().map(TradeResponse::new).toList());
+                tradeEntities.stream().map(TradeResponse::new).toList(),
+                holdingHistory.warnings(holdingEntity.status(), holding.position()));
     }
 }

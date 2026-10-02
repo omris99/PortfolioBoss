@@ -19,7 +19,8 @@ a feature that doesn't trace back to one of the six principles probably belongs 
 of Milestone 1 (Postgres, trades, holding details); its sessions 0 (Maven + Spring Boot), 1
 (PostgreSQL, Flyway, schema, entities), 2 (sync at connection, API reads from the database), 3
 (derived buy/sell dates and holding period), 4 (write endpoints for the sector and trades), 5 (UI: the new
-columns and sorting) and 6 (UI: entering the sector and trades) are done; 7–9 are ideas for later.
+columns and sorting), 6 (UI: entering the sector and trades) and 7 (reconciliation warnings) are done; 8–9 are
+ideas for later.
 
 ## Hard invariant: read-only
 
@@ -204,8 +205,8 @@ Things that are easy to break:
 - Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`) are
   `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 
-`portfolioboss.domain` holds `HoldingHistory` and `TradeFact` — pure computation, no Spring and no
-database, so it is unit tested directly. A holding's `firstBuyDate`, `lastSellDate` and `holdingDays` are
+`portfolioboss.domain` holds `HoldingHistory`, `TradeFact`, `HoldingWarning` and `HoldingWarningType` — pure
+computation, no Spring and no database, so it is unit tested directly. A holding's `firstBuyDate`, `lastSellDate` and `holdingDays` are
 derived from its `trade` rows, never stored: `HoldingHistory.of(List<TradeFact>)` walks them in
 chronological order (a buy before a sell on the same date) tracking a running quantity, and starts a fresh
 **episode** every time a sell brings that quantity back to (near) zero — a long-term holding is often sold in
@@ -218,6 +219,17 @@ buy dated after that sync (entered today while serving an older sync, e.g. with 
 query instead of one extra query per holding; `TradeEntity.toTradeFact()` reduces a row to what the
 computation needs.
 
+`HoldingHistory.warnings(status, ibPosition)` checks the trades entered against IB, which stays the source of truth
+for the quantity — a gap is shown next to the holding, never a reason to reject a trade. It returns **at most one**
+`HoldingWarning(type, message)`, the one to fix first: `NO_TRADES_LOGGED` (no buy at all), else `CLOSED_WITHOUT_SELL`
+(a `CLOSED` holding whose current episode no sell ends), else `QUANTITY_MISMATCH` (`netQuantity` more than `0.0001`
+from IB's `position`). Without that order a holding with no trades would also be a mismatch, the same gap twice.
+Things that are easy to break:
+- `netQuantity` is the plain sum of **every** trade (`TradeFact.signedQuantity()`), including a sell entered while
+  flat that the dates ignore — so the quantity check still points at it.
+- A `NaN` IB position skips the quantity check: `BigDecimal.valueOf(NaN)` throws, which would be a 500.
+- Prices and average cost are never compared: IB's average cost includes commissions and would never match.
+
 `PortfolioController` (Spring MVC) serves `GET /api/portfolio` through `PortfolioReadService`
 (`@Transactional(readOnly = true)`, since `open-in-view=false` means entities must be read inside the
 transaction): 503 until a sync has ever stored an `account_state` row, then 200 with `Cache-Control:
@@ -227,7 +239,9 @@ turns them into JSON, so their component names **are** the JSON keys and must st
 (`ui/src/types/portfolio.ts` mirrors them) — add fields, don't rename or remove. Beyond the original IB
 fields, `HoldingResponse` also carries `id`, `conId`, `sector`, `status`, and — derived via
 `domain.HoldingHistory`, see above — `firstBuyDate`, `lastSellDate`, `holdingDays` and `trades`
-(a `List<TradeResponse>`, one entry per `trade` row); the UI reads all of them.
+(a `List<TradeResponse>`, one entry per `trade` row), and `warnings` (a `List<domain.HoldingWarning>`, see above);
+the UI reads all of them. `HoldingWarning` and its enum go into the JSON as they are, with no `*Response` copy — the
+same as `HoldingStatus` and `TradeSide` — so their names are JSON keys and values too.
 `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
@@ -307,7 +321,7 @@ Things that are easy to break:
   TODO.md.
 - Milestone 1 direction: Maven, Spring Boot REST, the PostgreSQL schema and entities, the sync at connection,
   deriving buy/sell dates and holding period from `trade` rows, the write endpoints for the sector and trades,
-  and the UI to show and enter them are in; the API reads only from the database. HOLDING_DETAILS_TODO.md's
-  sessions 7–9 (reconciliation warnings, detected-change trade drafts, a stale-data banner) are optional
+  the UI to show and enter them, and the reconciliation warnings are in; the API reads only from the database.
+  HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

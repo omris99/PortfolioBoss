@@ -11,6 +11,7 @@ import {
   profitLossColorClass,
 } from '../lib/format';
 import type { Holding } from '../types/portfolio';
+import { HoldingWarningIcon } from './HoldingWarnings';
 import { SECTOR_OPTIONS_LIST_ID, SectorCell } from './SectorCell';
 import { TradesPanel } from './TradesPanel';
 
@@ -116,6 +117,7 @@ function SymbolWithStatus({ holding }: { holding: Holding }) {
           closed
         </span>
       )}
+      <HoldingWarningIcon warnings={holding.warnings} />
     </span>
   );
 }

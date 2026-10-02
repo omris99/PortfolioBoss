@@ -14,6 +14,8 @@ import portfolioboss.api.response.TradeResponse;
 import portfolioboss.db.HoldingStatus;
 import portfolioboss.db.PortfolioSyncService;
 import portfolioboss.db.TradeSide;
+import portfolioboss.domain.HoldingWarning;
+import portfolioboss.domain.HoldingWarningType;
 import portfolioboss.model.Holding;
 import portfolioboss.model.PortfolioSnapshot;
 
@@ -95,6 +97,7 @@ class PortfolioReadServiceTest {
         assertThat(holding.lastSellDate()).isNull();
         assertThat(holding.holdingDays()).isNull();
         assertThat(holding.trades()).isEmpty();
+        assertThat(holding.warnings()).extracting(HoldingWarning::type).containsExactly(HoldingWarningType.NO_TRADES_LOGGED);
     }
 
     @Test
@@ -116,6 +119,8 @@ class PortfolioReadServiceTest {
         assertThat(trade.quantity()).isEqualByComparingTo("10");
         assertThat(trade.price()).isEqualByComparingTo("150.00");
         assertThat(trade.note()).isEqualTo("Initial position");
+        // the 10 bought match the 10 IB reports: IB's stored quantity reached the check
+        assertThat(holding.warnings()).isEmpty();
     }
 
     @Test
