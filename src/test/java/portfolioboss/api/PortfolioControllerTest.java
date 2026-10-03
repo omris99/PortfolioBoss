@@ -46,6 +46,7 @@ class PortfolioControllerTest {
     private static final String ACCOUNT = "U1234567";
     private static final Instant AS_OF = Instant.parse("2026-09-19T08:05:00Z");
     private static final String NO_TRADES_MESSAGE = "No buy entered yet, so the buy date and holding period are unknown.";
+    private static final String SOLD_TOO_MANY = "Sold 7 shares but bought 5 in this period: check this holding's trades.";
 
     @Autowired
     private MockMvc mockMvc;
@@ -154,6 +155,8 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.closedPositions[0].averageSellPrice").value(180.0))
                 .andExpect(jsonPath("$.closedPositions[0].realizedPnl").value(300.0))
                 .andExpect(jsonPath("$.closedPositions[0].realizedPnlPercent").value(20.0))
+                .andExpect(jsonPath("$.closedPositions[0].warning").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[1].warning").value(SOLD_TOO_MANY))
                 .andExpect(jsonPath("$.closedPositions[1].sector").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[1].averageBuyPrice").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[1].realizedPnl").value(nullValue()))
@@ -175,13 +178,13 @@ class PortfolioControllerTest {
     private ClosedPositionResponse appleBoughtAndSold() {
         return new ClosedPositionResponse(7, "AAPL", "USD", "Technology", LocalDate.of(2024, 3, 1),
                 LocalDate.of(2025, 6, 1), 457, new BigDecimal("10"), new BigDecimal("150.00"), new BigDecimal("180.00"),
-                new BigDecimal("300.00"), new BigDecimal("20"));
+                new BigDecimal("300.00"), new BigDecimal("20"), null);
     }
 
-    /** Bought and sold with no price entered for either, and no sector. */
+    /** Bought and sold with no price entered for either, no sector, and more sold than bought. */
     private ClosedPositionResponse microsoftSoldWithNoPricesEntered() {
         return new ClosedPositionResponse(8, "MSFT", "USD", null, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 2, 1),
-                31, new BigDecimal("5"), null, null, null, null);
+                31, new BigDecimal("5"), null, null, null, null, SOLD_TOO_MANY);
     }
 
     /** Bought once, never sold — still OPEN, so holdingDays counts to a made-up snapshot date. */

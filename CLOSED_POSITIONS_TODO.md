@@ -37,6 +37,11 @@
 > **סטטוס (02.10.2026):** 1.1–1.5 נבנו על branch `maven-spring-boot`, עדיין לא committed. `mvn -q test` ירוק — 88 בדיקות (15 חדשות);
 > `npm run build` ירוק; רינדור בצד השרת של הטבלה והסכומים עם נתונים לדוגמה. ⬜ בדיקה בדפדפן — בידי עומרי. תוספות קטנות שלא היו בתוכנית:
 > `HoldingEntity.symbol()` / `currency()` (accessors), `TradeFact.amount()`, ו-`HoldingPeriod` עבר מ-`PositionsTable` לקובץ משלו כי שתי הטבלאות משתמשות בו.
+>
+> **תיקון אחרי בדיקת הדפדפן (03.10.2026):** סבב שנמכר בו יותר ממה שנקנה (15 נקנו, 25 נמכרו) הראה רווח מנופח (+1,400 במקום +200) ומחיר
+> מכירה ממוצע שלא היה באף מכירה. עכשיו `ClosedPosition` שומר גם `soldQuantity`: Avg sell מחושב לפי הכמות שנמכרה, הרווח והאחוז `null`,
+> ו-`ClosedPositionResponse.warning` (בסוף) מחזיר הודעה שמוצגת בשורה כתומה גלויה מתחת לשורה ("Sold 25 shares but bought 15…"). בכותרת:
+> "(n without prices)" ו-"(n to check)" בנפרד.
 
 ### 1.1 🟡 `domain`: `ClosedPosition` וחלוקה ל-position periods ב-`HoldingHistory`
 

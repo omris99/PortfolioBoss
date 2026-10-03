@@ -92,6 +92,8 @@ export interface ClosedPosition {
   realizedPnl: number | null;
   /** Of the buy cost. */
   realizedPnlPercent: number | null;
+  /** What to fix in its trades (more sold than bought, so no realized P&L), in English; shown as it is. */
+  warning: string | null;
 }
 
 export interface PortfolioSnapshot {

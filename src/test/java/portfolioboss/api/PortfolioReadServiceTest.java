@@ -173,6 +173,7 @@ class PortfolioReadServiceTest {
             assertThat(closedPosition.averageSellPrice()).isEqualByComparingTo("180");
             assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("300");
             assertThat(closedPosition.realizedPnlPercent()).isEqualByComparingTo("20");
+            assertThat(closedPosition.warning()).isNull();
         });
     }
 

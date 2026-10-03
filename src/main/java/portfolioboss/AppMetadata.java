@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.10.0";
+    public static final String VERSION = "0.10.1";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,12 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.10.1: [Over-sold closed positions]
+ * ClosedPosition: a period that sold more shares than it bought no longer shows a realized P&L; the extra shares' proceeds counted as pure profit (+1,400 instead of +200). It is "—" now.
+ * ClosedPosition: the average sell price is taken over the shares sold instead of the shares bought, so it is always a price the sells could have had (118, not 196.67).
+ * ClosedPositionResponse gains warning: "Sold 25 shares but bought 15…", shown in an orange row under the position, always visible; the header counts "(n to check)" apart from "(n without prices)".
+ * New test: ClosedPositionTest for a period sold beyond what it bought; HoldingHistoryTest, PortfolioControllerTest and PortfolioReadServiceTest cover the quantity sold and the warning.
+ *
  * VERSION 0.10.0: [Closed positions]
  * ClosedPosition added (domain): a position bought and sold back to zero; it keeps the raw totals and derives the average prices, realized P&L and its %, null when a trade has no price.
  * HoldingHistory now splits the trades into position periods (formerly "episodes") and lists every closed one in closedPositions, including one that ended inside a holding still open today.

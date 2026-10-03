@@ -153,8 +153,11 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
         return List.of(new HoldingWarning(HoldingWarningType.QUANTITY_MISMATCH, message));
     }
 
-    /** "90", "10.5", "-3": without the trailing zeros a {@code NUMERIC(20,6)} column adds ("90.000000"). */
-    private String plainNumber(BigDecimal quantity) {
+    /**
+     * "90", "10.5", "-3": without the trailing zeros a {@code NUMERIC(20,6)} column adds ("90.000000"). Also used by
+     * {@link ClosedPosition}'s warning.
+     */
+    protected static String plainNumber(BigDecimal quantity) {
         return quantity.stripTrailingZeros().toPlainString();
     }
 
@@ -174,8 +177,8 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
         private ClosedPosition toClosedPosition() {
             List<TradeFact> buys = tradesOnSide(TradeSide.BUY);
             List<TradeFact> sells = tradesOnSide(TradeSide.SELL);
-            return new ClosedPosition(firstBuyDate(), lastSellDate(), totalQuantity(buys), totalAmount(buys),
-                    totalAmount(sells));
+            return new ClosedPosition(firstBuyDate(), lastSellDate(), totalQuantity(buys), totalQuantity(sells),
+                    totalAmount(buys), totalAmount(sells));
         }
 
         private List<TradeFact> tradesOnSide(TradeSide side) {

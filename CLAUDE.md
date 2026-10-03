@@ -216,10 +216,12 @@ a running quantity, and splits them into **position periods** (the private recor
 opens one, and the sell that brings the quantity back to (near) zero — or below it, an over-sell the quantity check
 then points at — closes it. A long-term holding is often sold in full and bought again later, and without this the
 first-ever buy date would belong to an unrelated stretch of ownership. The dates come from the last period; every
-closed period becomes a `ClosedPosition` in `HoldingHistory.closedPositions` (raw totals — dates, `quantity`,
-`buyCost`, `sellProceeds` — from which it derives the average prices, `realizedPnl` and its percent; `null` as soon as
-one trade of that side has no price, never a guess). A partial sell inside a period that is still open is not a
-closed position. A sell entered while already flat is treated as a data-entry mistake and silently ignored, never
+closed period becomes a `ClosedPosition` in `HoldingHistory.closedPositions` (raw totals — dates, `quantity` bought,
+`soldQuantity`, `buyCost`, `sellProceeds` — from which it derives the average prices, each over its own side's shares,
+and `realizedPnl` with its percent; `null` as soon as one trade of that side has no price, never a guess). A period
+that sold more than it bought (an over-sell) has no realized P&L either — the extra shares' proceeds would count as
+pure profit — and `ClosedPosition.warning()` says so in English. A partial sell inside a period that is still open is
+not a closed position. A sell entered while already flat is treated as a data-entry mistake and silently ignored, never
 rejected. `holdingDays` counts to `lastSellDate` when `CLOSED`, or to the last sync's date (`account_state.as_of`,
 not the system clock, so the number doesn't drift between page loads) when `OPEN` — and is never negative: a
 buy dated after that sync (entered today while serving an older sync, e.g. with TWS off) counts as 0 days. `HoldingRepository
@@ -253,7 +255,8 @@ the UI reads all of them. `HoldingWarning` and its enum go into the JSON as they
 same as `HoldingStatus` and `TradeSide` — so their names are JSON keys and values too.
 `PortfolioResponse.closedPositions` (added last, at the top level) is every holding's
 `HoldingHistory.closedPositions` as `ClosedPositionResponse`s (`holdingId`, `symbol`, `currency`, `sector`, the
-dates, `holdingDays`, `quantity`, the average prices, `realizedPnl`, `realizedPnlPercent`) — from open holdings as well
+dates, `holdingDays`, `quantity`, the average prices, `realizedPnl`, `realizedPnlPercent`, and `warning` — `null`, or
+the over-sell message, which the UI shows as it is in an orange row under the position) — from open holdings as well
 as closed ones, since a holding still open today may have been sold in full before. The UI sums the realized P&L per
 currency. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it

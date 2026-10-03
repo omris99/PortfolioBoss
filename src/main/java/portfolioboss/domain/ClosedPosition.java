@@ -9,17 +9,19 @@ import java.time.temporal.ChronoUnit;
  * A position bought and then sold back to zero: a finished position period of {@link HoldingHistory}. It keeps only the raw
  * totals; the averages, the realized P&amp;L and its percentage are derived here, so they are written once.
  *
- * <p>Example: 10 shares bought at 150 and later sold at 180 are {@code quantity} 10, {@code buyCost} 1,500 and
- * {@code sellProceeds} 1,800 — a realized P&amp;L of +300, or +20%.
+ * <p>Example: 10 shares bought at 150 and later sold at 180 are {@code quantity} 10, {@code soldQuantity} 10,
+ * {@code buyCost} 1,500 and {@code sellProceeds} 1,800 — a realized P&amp;L of +300, or +20%.
  *
  * @param openDate     the buy that opened the position
  * @param closeDate    the sell that brought it back to zero
  * @param quantity     every share bought in between
+ * @param soldQuantity every share sold in between: as many as were bought, unless more were sold — a data-entry
+ *                     mistake that leaves the realized P&amp;L unknown ({@link #soldMoreThanBought})
  * @param buyCost      quantity × price over every buy, or {@code null} if any buy has no price entered
  * @param sellProceeds quantity × price over every sell, or {@code null} if any sell has no price entered
  */
-public record ClosedPosition(LocalDate openDate, LocalDate closeDate, BigDecimal quantity, BigDecimal buyCost,
-                             BigDecimal sellProceeds) {
+public record ClosedPosition(LocalDate openDate, LocalDate closeDate, BigDecimal quantity, BigDecimal soldQuantity,
+                             BigDecimal buyCost, BigDecimal sellProceeds) {
 
     /** 16 significant digits: plenty for a price or a percentage, and a stop for the endless decimals of 1/3. */
     private static final MathContext DIVISION_PRECISION = MathContext.DECIMAL64;
@@ -31,20 +33,28 @@ public record ClosedPosition(LocalDate openDate, LocalDate closeDate, BigDecimal
     }
 
     public BigDecimal averageBuyPrice() {
-        return perShare(buyCost);
+        return perShare(buyCost, quantity);
+    }
+
+    /** Over the shares sold, so it is always a price one of the sells could have had. */
+    public BigDecimal averageSellPrice() {
+        return perShare(sellProceeds, soldQuantity);
     }
 
     /**
-     * Over the shares bought, which is as many as were sold — unless more were sold than bought, a data-entry mistake
-     * the quantity warning ({@link HoldingHistory#warnings}) already points at.
+     * More sold than bought: a sell entered with too large a quantity, or a buy not entered yet. The proceeds of the
+     * extra shares have no cost to set against them, so they would count as pure profit.
      */
-    public BigDecimal averageSellPrice() {
-        return perShare(sellProceeds);
+    public boolean soldMoreThanBought() {
+        return soldQuantity.compareTo(quantity) > 0;
     }
 
-    /** {@code null} unless every buy and every sell has a price: a missing one is never guessed. */
+    /**
+     * {@code null} unless every buy and every sell has a price and no more was sold than bought: a missing price is
+     * never guessed, and neither is which of the shares sold were really bought.
+     */
     public BigDecimal realizedPnl() {
-        if (buyCost == null || sellProceeds == null) {
+        if (buyCost == null || sellProceeds == null || soldMoreThanBought()) {
             return null;
         }
         return sellProceeds.subtract(buyCost);
@@ -59,7 +69,16 @@ public record ClosedPosition(LocalDate openDate, LocalDate closeDate, BigDecimal
         return realizedPnl.multiply(ONE_HUNDRED).divide(buyCost, DIVISION_PRECISION);
     }
 
-    private BigDecimal perShare(BigDecimal total) {
-        return total == null ? null : total.divide(quantity, DIVISION_PRECISION);
+    /** What to fix, in English and shown as it is; {@code null} when nothing needs checking. */
+    public String warning() {
+        if (!soldMoreThanBought()) {
+            return null;
+        }
+        return "Sold %s shares but bought %s in this period: check this holding's trades."
+                .formatted(HoldingHistory.plainNumber(soldQuantity), HoldingHistory.plainNumber(quantity));
+    }
+
+    private BigDecimal perShare(BigDecimal total, BigDecimal shares) {
+        return total == null ? null : total.divide(shares, DIVISION_PRECISION);
     }
 }

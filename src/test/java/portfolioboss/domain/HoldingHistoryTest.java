@@ -257,6 +257,7 @@ class HoldingHistoryTest {
             assertThat(closedPosition.openDate()).isEqualTo(LocalDate.of(2024, 1, 1));
             assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2024, 4, 1));
             assertThat(closedPosition.quantity()).isEqualByComparingTo("20");
+            assertThat(closedPosition.soldQuantity()).isEqualByComparingTo("20");    // 5 + 15
             assertThat(closedPosition.buyCost()).isEqualByComparingTo("2200");        // 1,000 + 1,200
             assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("2750");   // 650 + 2,100
         });
@@ -311,9 +312,12 @@ class HoldingHistoryTest {
                 sell("2024-06-01", 12, "120"),   // a data-entry mistake: 2 more than were bought
                 buy("2025-01-01", 5, "130")));
 
-        assertThat(history.closedPositions())
-                .extracting(ClosedPosition::closeDate)
-                .containsExactly(LocalDate.of(2024, 6, 1));
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2024, 6, 1));
+            assertThat(closedPosition.quantity()).isEqualByComparingTo("10");
+            assertThat(closedPosition.soldQuantity()).isEqualByComparingTo("12");
+            assertThat(closedPosition.soldMoreThanBought()).isTrue();
+        });
         assertThat(history.firstBuyDate()).isEqualTo(LocalDate.of(2025, 1, 1));
         assertThat(history.netQuantity()).isEqualByComparingTo("3");   // so the check against IB still shows it
     }

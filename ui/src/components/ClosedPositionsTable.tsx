@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import {
   EMPTY_VALUE,
   formatDate,
@@ -109,9 +110,11 @@ function rowKeyOf(closedPosition: ClosedPosition): string {
   return `${closedPosition.holdingId}-${closedPosition.openDate}`;
 }
 
+/** A row with a warning leaves the line under it to the warning, so the two read as one. */
 function ClosedPositionRow({ closedPosition }: { closedPosition: ClosedPosition }) {
+  const borderClass = closedPosition.warning === null ? 'border-b border-slate-800/60 last:border-b-0' : '';
   return (
-    <tr className="border-b border-slate-800/60 transition-colors last:border-b-0 hover:bg-slate-800/30">
+    <tr className={`${borderClass} transition-colors hover:bg-slate-800/30`}>
       {COLUMNS.map((column) => {
         const colorClass = column.valueColorClass?.(closedPosition) ?? 'text-slate-300';
         return (
@@ -123,6 +126,20 @@ function ClosedPositionRow({ closedPosition }: { closedPosition: ClosedPosition 
           </td>
         );
       })}
+    </tr>
+  );
+}
+
+/** Under the row it belongs to, always visible: the same orange as a holding's warnings. */
+function ClosedPositionWarningRow({ message }: { message: string }) {
+  return (
+    <tr className="border-b border-slate-800/60 last:border-b-0">
+      <td colSpan={COLUMNS.length} className="px-3 pb-2 text-xs text-orange-500">
+        <div className="flex items-center gap-1">
+          <TriangleAlert size={12} className="shrink-0" />
+          {message}
+        </div>
+      </td>
     </tr>
   );
 }
@@ -145,7 +162,10 @@ export function ClosedPositionsTable({ closedPositions }: { closedPositions: Clo
         </thead>
         <tbody>
           {newestFirst.map((closedPosition) => (
-            <ClosedPositionRow key={rowKeyOf(closedPosition)} closedPosition={closedPosition} />
+            <Fragment key={rowKeyOf(closedPosition)}>
+              <ClosedPositionRow closedPosition={closedPosition} />
+              {closedPosition.warning !== null && <ClosedPositionWarningRow message={closedPosition.warning} />}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -166,10 +186,16 @@ function realizedPnlByCurrency(closedPositions: ClosedPosition[]): Map<string, n
   return totalsByCurrency;
 }
 
-/** "Realized P&L +1,234.00 USD (1 without prices)": the total of every closed position, per currency. */
+/**
+ * "Realized P&L +1,234.00 USD (1 without prices) (1 to check)": the total of every closed position, per currency, and
+ * how many it leaves out — for a missing price, or for a warning shown under the position's row.
+ */
 export function RealizedPnlTotals({ closedPositions }: { closedPositions: ClosedPosition[] }) {
   const totalsByCurrency = [...realizedPnlByCurrency(closedPositions)];
-  const withoutPnlCount = closedPositions.filter((closedPosition) => closedPosition.realizedPnl === null).length;
+  const withWarningCount = closedPositions.filter((closedPosition) => closedPosition.warning !== null).length;
+  const withoutPricesCount = closedPositions.filter(
+    (closedPosition) => closedPosition.realizedPnl === null && closedPosition.warning === null,
+  ).length;
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
@@ -179,11 +205,12 @@ export function RealizedPnlTotals({ closedPositions }: { closedPositions: Closed
           {formatSignedMoney(total)} {currency}
         </span>
       ))}
-      {withoutPnlCount > 0 && (
+      {withoutPricesCount > 0 && (
         <span className="text-slate-500" title={MISSING_PRICE_HINT}>
-          ({withoutPnlCount} without prices)
+          ({withoutPricesCount} without prices)
         </span>
       )}
+      {withWarningCount > 0 && <span className="text-orange-500">({withWarningCount} to check)</span>}
     </div>
   );
 }
