@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.10.1";
+    public static final String VERSION = "0.11.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,17 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.11.0: [Commissions and manual closed positions]
+ * Trades gain a commission: optional when entered; without one the default for an order is stored, 1 cent a share with a $5 minimum (Utils.calculateOrderCommission, IBBot's rule).
+ * V2 migration adds trade.commission and gives the trades entered before it the same default, so the column is never empty.
+ * ClosedPosition: the realized P&L and its % now subtract the commissions of every buy and sell in the period; before, commissions were ignored. ClosedPositionResponse gains commissions.
+ * Manual closed positions added: table manual_closed_position and POST/PUT/DELETE /api/manual-closed-positions, for a round trip sold before the first sync; JSON only, sell date never before buy date.
+ * GET /api/portfolio serves them in closedPositions with source MANUAL, their id and note (holdingId null); one entered without a commission is charged the default for both orders.
+ * TradeForm gains a Commission field (empty = the default, hint on hover) and TradesPanel a Commission column.
+ * ClosedPositionsSection: an "Add closed position" form, and edit and delete for the rows entered by hand, tagged "manual"; a derived row says it is corrected through its holding's trades.
+ * ClosedPositionsTable gains Commission and Note columns and the currency next to each realized P&L ("+40.00 USD"); percentages now show two decimals instead of one, in Positions too.
+ * New tests: UtilsTest for the default commission, ClosedPositionWriteControllerTest and ClosedPositionWriteServiceTest; commissions in ClosedPositionTest, HoldingHistoryTest and the HoldingWrite tests.
+ *
  * VERSION 0.10.1: [Over-sold closed positions]
  * ClosedPosition: a period that sold more shares than it bought no longer shows a realized P&L; the extra shares' proceeds counted as pure profit (+1,400 instead of +200). It is "—" now.
  * ClosedPosition: the average sell price is taken over the shares sold instead of the shares bought, so it is always a price the sells could have had (118, not 196.67).
