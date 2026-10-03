@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import portfolioboss.api.response.ClosedPositionResponse;
+import portfolioboss.api.response.ClosedPositionSource;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.TradeResponse;
@@ -153,15 +154,19 @@ class PortfolioReadServiceTest {
         syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(5, 200.0)));
         long appleHoldingId = holdingIdOf(APPLE_CON_ID);
         jdbc.update("update holding set sector = ? where id = ?", "Technology", appleHoldingId);
-        insertTrade(appleHoldingId, LocalDate.of(2024, 3, 1), TradeSide.BUY, "10", "150.00", null);
-        insertTrade(appleHoldingId, LocalDate.of(2025, 6, 1), TradeSide.SELL, "10", "180.00", null);
-        insertTrade(appleHoldingId, LocalDate.of(2026, 2, 1), TradeSide.BUY, "5", "200.00", null);
+        insertTrade(appleHoldingId, LocalDate.of(2024, 3, 1), TradeSide.BUY, "10", "150.00", null, "5");
+        insertTrade(appleHoldingId, LocalDate.of(2025, 6, 1), TradeSide.SELL, "10", "180.00", null, "5");
+        insertTrade(appleHoldingId, LocalDate.of(2026, 2, 1), TradeSide.BUY, "5", "200.00", null, "5");
 
         PortfolioResponse portfolio = readPortfolio().orElseThrow();
 
         assertThat(portfolio.holdings().get(0).status()).isEqualTo(HoldingStatus.OPEN);
+        assertThat(portfolio.holdings().get(0).trades()).extracting(TradeResponse::commission)
+                .allSatisfy(commission -> assertThat(commission).isEqualByComparingTo("5"));
         assertThat(portfolio.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.source()).isEqualTo(ClosedPositionSource.TRADES);
             assertThat(closedPosition.holdingId()).isEqualTo(appleHoldingId);
+            assertThat(closedPosition.manualClosedPositionId()).isNull();
             assertThat(closedPosition.symbol()).isEqualTo("AAPL");
             assertThat(closedPosition.currency()).isEqualTo("USD");
             assertThat(closedPosition.sector()).isEqualTo("Technology");
@@ -171,9 +176,12 @@ class PortfolioReadServiceTest {
             assertThat(closedPosition.quantity()).isEqualByComparingTo("10");
             assertThat(closedPosition.averageBuyPrice()).isEqualByComparingTo("150");
             assertThat(closedPosition.averageSellPrice()).isEqualByComparingTo("180");
-            assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("300");
-            assertThat(closedPosition.realizedPnlPercent()).isEqualByComparingTo("20");
+            // the buy and the sell of this period, $5 each — not the buy of the period still open
+            assertThat(closedPosition.commissions()).isEqualByComparingTo("10");
+            assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("290");
+            assertThat(closedPosition.realizedPnlPercent()).isEqualByComparingTo("19.33333333333333");
             assertThat(closedPosition.warning()).isNull();
+            assertThat(closedPosition.note()).isNull();
         });
     }
 
@@ -248,12 +256,20 @@ class PortfolioReadServiceTest {
                 "select id from holding where account = ? and con_id = ?", Long.class, ACCOUNT, conId);
     }
 
+    /** No commission, so the figures the tests check stay round. */
     private void insertTrade(long holdingId, LocalDate tradeDate, TradeSide side, String quantity, String price,
                              String note) {
+        insertTrade(holdingId, tradeDate, side, quantity, price, note, "0");
+    }
+
+    private void insertTrade(long holdingId, LocalDate tradeDate, TradeSide side, String quantity, String price,
+                             String note, String commission) {
         // Bound as BigDecimal, not String: the driver would otherwise send them as varchar, and
         // Postgres refuses to insert a varchar into a numeric column without an explicit cast.
-        jdbc.update("insert into trade (holding_id, trade_date, side, quantity, price, note) values (?, ?, ?, ?, ?, ?)",
-                holdingId, tradeDate, side.name(), new BigDecimal(quantity), price == null ? null : new BigDecimal(price), note);
+        jdbc.update("insert into trade (holding_id, trade_date, side, quantity, price, note, commission) "
+                        + "values (?, ?, ?, ?, ?, ?, ?)",
+                holdingId, tradeDate, side.name(), new BigDecimal(quantity), price == null ? null : new BigDecimal(price),
+                note, new BigDecimal(commission));
         forgetWhatHibernateLoaded();   // the sync's session must not overwrite what was just inserted with SQL
     }
 

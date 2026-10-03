@@ -7,6 +7,8 @@ import portfolioboss.db.AccountStateEntity;
 import portfolioboss.db.AccountStateRepository;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
+import portfolioboss.db.ManualClosedPositionEntity;
+import portfolioboss.db.ManualClosedPositionRepository;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,10 +22,13 @@ public class PortfolioReadService {
 
     private final HoldingRepository holdingRepository;
     private final AccountStateRepository accountStateRepository;
+    private final ManualClosedPositionRepository manualClosedPositionRepository;
 
-    public PortfolioReadService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository) {
+    public PortfolioReadService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository,
+                                ManualClosedPositionRepository manualClosedPositionRepository) {
         this.holdingRepository = holdingRepository;
         this.accountStateRepository = accountStateRepository;
+        this.manualClosedPositionRepository = manualClosedPositionRepository;
     }
 
     /**
@@ -37,6 +42,7 @@ public class PortfolioReadService {
 
     private PortfolioResponse toResponse(AccountStateEntity accountState) {
         List<HoldingEntity> storedHoldings = holdingRepository.findByAccountOrderById(accountState.account());
-        return PortfolioResponse.from(accountState, storedHoldings);
+        List<ManualClosedPositionEntity> manualClosedPositions = manualClosedPositionRepository.findAllByOrderById();
+        return PortfolioResponse.from(accountState, storedHoldings, manualClosedPositions);
     }
 }

@@ -17,11 +17,11 @@ export function formatSignedMoney(amount: number | null): string {
   return `${sign}${twoDecimalFormatter.format(Math.abs(amount))}`;
 }
 
-/** Always shows the sign, with one decimal place, e.g. "+45.9%". */
+/** Always shows the sign, with two decimal places, e.g. "+45.92%". */
 export function formatSignedPercent(percent: number | null): string {
   if (percent === null) return EMPTY_VALUE;
   const sign = percent >= 0 ? '+' : '-';
-  return `${sign}${Math.abs(percent).toFixed(1)}%`;
+  return `${sign}${Math.abs(percent).toFixed(2)}%`;
 }
 
 /** Whole share counts print without decimals; fractional shares keep 4 places. */

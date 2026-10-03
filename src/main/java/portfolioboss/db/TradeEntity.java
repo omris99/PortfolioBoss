@@ -44,24 +44,29 @@ public class TradeEntity {
     private BigDecimal price;
     private String note;
 
+    /** Never {@code null}: the API stores the default when the user entered none. */
+    private BigDecimal commission;
+
     /** Required by JPA, which creates entities by reflection. */
     protected TradeEntity() {
     }
 
     /** A trade the user entered for {@code holding}. {@code price} and {@code note} may be {@code null}. */
     public TradeEntity(HoldingEntity holding, LocalDate tradeDate, TradeSide side, BigDecimal quantity,
-                       BigDecimal price, String note) {
+                       BigDecimal price, String note, BigDecimal commission) {
         this.holding = holding;
-        changeDetails(tradeDate, side, quantity, price, note);
+        changeDetails(tradeDate, side, quantity, price, note, commission);
     }
 
     /** A correction by the user: every field is replaced, and the trade stays on the same holding. */
-    public void changeDetails(LocalDate tradeDate, TradeSide side, BigDecimal quantity, BigDecimal price, String note) {
+    public void changeDetails(LocalDate tradeDate, TradeSide side, BigDecimal quantity, BigDecimal price, String note,
+                              BigDecimal commission) {
         this.tradeDate = tradeDate;
         this.side = side;
         this.quantity = quantity;
         this.price = price;
         this.note = note;
+        this.commission = commission;
     }
 
     public Long id() {
@@ -88,8 +93,12 @@ public class TradeEntity {
         return note;
     }
 
-    /** Reduced to just the date, side, quantity and price that {@link portfolioboss.domain.HoldingHistory} needs. */
+    public BigDecimal commission() {
+        return commission;
+    }
+
+    /** Reduced to just the date, side, quantity, price and commission that {@link portfolioboss.domain.HoldingHistory} needs. */
     public TradeFact toTradeFact() {
-        return new TradeFact(tradeDate, side, quantity, price);
+        return new TradeFact(tradeDate, side, quantity, price, commission);
     }
 }

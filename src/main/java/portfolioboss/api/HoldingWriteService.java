@@ -11,6 +11,9 @@ import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
 import portfolioboss.db.TradeEntity;
 import portfolioboss.db.TradeRepository;
+import portfolioboss.utils.Utils;
+
+import java.math.BigDecimal;
 
 /**
  * Stores what the user enters by hand — a holding's sector and its trades — in PortfolioBoss's own database. The
@@ -34,23 +37,25 @@ public class HoldingWriteService {
     @Transactional
     public void changeSector(long holdingId, SectorRequest sectorRequest) {
         HoldingEntity holding = findHolding(holdingId);
-        holding.changeSector(trimmedOrNull(sectorRequest.sector()));   // Hibernate writes the change at commit
+        holding.changeSector(Utils.trimmedOrNull(sectorRequest.sector()));   // Hibernate writes the change at commit
     }
 
     @Transactional
     public TradeResponse addTrade(long holdingId, TradeRequest tradeRequest) {
         HoldingEntity holding = findHolding(holdingId);
         TradeEntity newTrade = new TradeEntity(holding, tradeRequest.tradeDate(), tradeRequest.side(),
-                tradeRequest.quantity(), tradeRequest.price(), trimmedOrNull(tradeRequest.note()));
+                tradeRequest.quantity(), tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()),
+                commissionOrDefault(tradeRequest));
         TradeEntity savedTrade = tradeRepository.save(newTrade);   // inserted right away, so it already has its id
         return new TradeResponse(savedTrade);
     }
 
+    /** Without a commission, the default is worked out again from the quantity now entered. */
     @Transactional
     public TradeResponse changeTrade(long tradeId, TradeRequest tradeRequest) {
         TradeEntity trade = findTrade(tradeId);
         trade.changeDetails(tradeRequest.tradeDate(), tradeRequest.side(), tradeRequest.quantity(),
-                tradeRequest.price(), trimmedOrNull(tradeRequest.note()));
+                tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()), commissionOrDefault(tradeRequest));
         return new TradeResponse(trade);
     }
 
@@ -73,11 +78,11 @@ public class HoldingWriteService {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
     }
 
-    /** Surrounding spaces are dropped, and text that is then empty is stored as {@code null}: nothing was entered. */
-    private String trimmedOrNull(String typedText) {
-        if (typedText == null || typedText.isBlank()) {
-            return null;
+    /** The commission entered — 0 included — or, when none was, the default for one order of this many shares. */
+    private BigDecimal commissionOrDefault(TradeRequest tradeRequest) {
+        if (tradeRequest.commission() != null) {
+            return tradeRequest.commission();
         }
-        return typedText.strip();
+        return Utils.calculateOrderCommission(tradeRequest.quantity());
     }
 }

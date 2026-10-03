@@ -178,7 +178,12 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
             List<TradeFact> buys = tradesOnSide(TradeSide.BUY);
             List<TradeFact> sells = tradesOnSide(TradeSide.SELL);
             return new ClosedPosition(firstBuyDate(), lastSellDate(), totalQuantity(buys), totalQuantity(sells),
-                    totalAmount(buys), totalAmount(sells));
+                    totalAmount(buys), totalAmount(sells), totalCommissions());
+        }
+
+        /** Of every buy and sell of the period alike. */
+        private BigDecimal totalCommissions() {
+            return trades.stream().map(TradeFact::commission).reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
         private List<TradeFact> tradesOnSide(TradeSide side) {

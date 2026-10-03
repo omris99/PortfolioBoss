@@ -6,6 +6,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import portfolioboss.api.response.ClosedPositionResponse;
+import portfolioboss.api.response.ClosedPositionSource;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.TradeResponse;
@@ -97,6 +98,7 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].trades[0].quantity").value(10))
                 .andExpect(jsonPath("$.holdings[0].trades[0].price").value(150.0))
                 .andExpect(jsonPath("$.holdings[0].trades[0].note").value("Initial position"))
+                .andExpect(jsonPath("$.holdings[0].trades[0].commission").value(5.0))
                 .andExpect(jsonPath("$.holdings[0].warnings").value(empty()));
     }
 
@@ -139,11 +141,13 @@ class PortfolioControllerTest {
     @Test
     void servesClosedPositionsWithTheFieldNamesTheUiExpects() throws Exception {
         PortfolioResponse withClosedPositions = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(),
-                List.of(appleBoughtAndSold(), microsoftSoldWithNoPricesEntered()));
+                List.of(appleBoughtAndSold(), microsoftSoldWithNoPricesEntered(), teslaEnteredByHand()));
         given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withClosedPositions));
 
         mockMvc.perform(get("/api/portfolio"))
+                .andExpect(jsonPath("$.closedPositions[0].source").value("TRADES"))
                 .andExpect(jsonPath("$.closedPositions[0].holdingId").value(7))
+                .andExpect(jsonPath("$.closedPositions[0].manualClosedPositionId").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[0].symbol").value("AAPL"))
                 .andExpect(jsonPath("$.closedPositions[0].currency").value("USD"))
                 .andExpect(jsonPath("$.closedPositions[0].sector").value("Technology"))
@@ -153,14 +157,20 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.closedPositions[0].quantity").value(10))
                 .andExpect(jsonPath("$.closedPositions[0].averageBuyPrice").value(150.0))
                 .andExpect(jsonPath("$.closedPositions[0].averageSellPrice").value(180.0))
-                .andExpect(jsonPath("$.closedPositions[0].realizedPnl").value(300.0))
-                .andExpect(jsonPath("$.closedPositions[0].realizedPnlPercent").value(20.0))
+                .andExpect(jsonPath("$.closedPositions[0].realizedPnl").value(290.0))
+                .andExpect(jsonPath("$.closedPositions[0].realizedPnlPercent").value(closeTo(19.333, 0.001)))
                 .andExpect(jsonPath("$.closedPositions[0].warning").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[0].commissions").value(10.0))
+                .andExpect(jsonPath("$.closedPositions[0].note").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[1].warning").value(SOLD_TOO_MANY))
                 .andExpect(jsonPath("$.closedPositions[1].sector").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[1].averageBuyPrice").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[1].realizedPnl").value(nullValue()))
-                .andExpect(jsonPath("$.closedPositions[1].realizedPnlPercent").value(nullValue()));
+                .andExpect(jsonPath("$.closedPositions[1].realizedPnlPercent").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[2].source").value("MANUAL"))
+                .andExpect(jsonPath("$.closedPositions[2].holdingId").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[2].manualClosedPositionId").value(3))
+                .andExpect(jsonPath("$.closedPositions[2].note").value("Sold before PortfolioBoss"));
     }
 
     @Test
@@ -174,23 +184,33 @@ class PortfolioControllerTest {
         return new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(holdings), List.of());
     }
 
-    /** 10 bought at 150 and sold at 180: +300, or +20%. */
+    /** 10 bought at 150 and sold at 180, $5 commission on each: +290, or +19.33%. */
     private ClosedPositionResponse appleBoughtAndSold() {
-        return new ClosedPositionResponse(7, "AAPL", "USD", "Technology", LocalDate.of(2024, 3, 1),
+        return new ClosedPositionResponse(7L, "AAPL", "USD", "Technology", LocalDate.of(2024, 3, 1),
                 LocalDate.of(2025, 6, 1), 457, new BigDecimal("10"), new BigDecimal("150.00"), new BigDecimal("180.00"),
-                new BigDecimal("300.00"), new BigDecimal("20"), null);
+                new BigDecimal("290.00"), new BigDecimal("19.33333333333333"), null, new BigDecimal("10"),
+                ClosedPositionSource.TRADES, null, null);
     }
 
     /** Bought and sold with no price entered for either, no sector, and more sold than bought. */
     private ClosedPositionResponse microsoftSoldWithNoPricesEntered() {
-        return new ClosedPositionResponse(8, "MSFT", "USD", null, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 2, 1),
-                31, new BigDecimal("5"), null, null, null, null, SOLD_TOO_MANY);
+        return new ClosedPositionResponse(8L, "MSFT", "USD", null, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 2, 1),
+                31, new BigDecimal("5"), null, null, null, null, SOLD_TOO_MANY, new BigDecimal("10"),
+                ClosedPositionSource.TRADES, null, null);
+    }
+
+    /** A round trip entered by hand: no holding, an id of its own and a note. */
+    private ClosedPositionResponse teslaEnteredByHand() {
+        return new ClosedPositionResponse(null, "TSLA", "USD", null, LocalDate.of(2022, 1, 10),
+                LocalDate.of(2023, 5, 1), 476, new BigDecimal("5"), new BigDecimal("300"), new BigDecimal("310"),
+                new BigDecimal("40"), new BigDecimal("2.666666666666667"), null, new BigDecimal("10"),
+                ClosedPositionSource.MANUAL, 3L, "Sold before PortfolioBoss");
     }
 
     /** Bought once, never sold — still OPEN, so holdingDays counts to a made-up snapshot date. */
     private HoldingResponse apple() {
         TradeResponse buy = new TradeResponse(1, LocalDate.of(2024, 3, 14), TradeSide.BUY,
-                new BigDecimal("10"), new BigDecimal("150.00"), "Initial position");
+                new BigDecimal("10"), new BigDecimal("150.00"), "Initial position", new BigDecimal("5"));
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
                 LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of());

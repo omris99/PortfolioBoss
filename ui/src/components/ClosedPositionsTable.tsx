@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
-import { TriangleAlert } from 'lucide-react';
+import { Pencil, PencilOff, Trash2, TriangleAlert } from 'lucide-react';
 import {
   EMPTY_VALUE,
   formatDate,
@@ -29,9 +29,39 @@ function UnknownWithoutPrices() {
   return <span title={MISSING_PRICE_HINT}>{EMPTY_VALUE}</span>;
 }
 
+/** "+40.00 USD", as in the totals above the table: positions in different currencies don't add up. */
 function RealizedPnl({ closedPosition }: { closedPosition: ClosedPosition }) {
   if (closedPosition.realizedPnl === null) return <UnknownWithoutPrices />;
-  return <>{formatSignedMoney(closedPosition.realizedPnl)}</>;
+  return (
+    <>
+      {formatSignedMoney(closedPosition.realizedPnl)}{' '}
+      <span className="text-[10px] text-slate-500">{closedPosition.currency}</span>
+    </>
+  );
+}
+
+/** A long note is cut to the column's width; hovering shows all of it. */
+function NoteCell({ note }: { note: string | null }) {
+  if (note === null) return <>{EMPTY_VALUE}</>;
+  return (
+    <span title={note} className="block max-w-64 truncate font-sans">
+      {note}
+    </span>
+  );
+}
+
+/** A row entered by hand is tagged, like a closed holding in the positions table. */
+function SymbolWithSource({ closedPosition }: { closedPosition: ClosedPosition }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {closedPosition.symbol}
+      {closedPosition.source === 'MANUAL' && (
+        <span className="rounded bg-slate-800 px-1 py-0.5 font-sans text-[9px] font-medium uppercase text-slate-400">
+          manual
+        </span>
+      )}
+    </span>
+  );
 }
 
 // The positions table's order: the figures first, the dates and the holding period at the end.
@@ -39,7 +69,7 @@ const COLUMNS: ColumnDefinition[] = [
   {
     title: 'Symbol',
     alignment: 'left',
-    renderValue: (closedPosition) => closedPosition.symbol,
+    renderValue: (closedPosition) => <SymbolWithSource closedPosition={closedPosition} />,
     valueColorClass: () => 'font-semibold text-slate-100',
   },
   {
@@ -61,6 +91,12 @@ const COLUMNS: ColumnDefinition[] = [
     title: 'Avg sell',
     alignment: 'right',
     renderValue: (closedPosition) => formatMoney(closedPosition.averageSellPrice),
+  },
+  {
+    // Already taken off the realized P&L next to it.
+    title: 'Commission',
+    alignment: 'right',
+    renderValue: (closedPosition) => formatMoney(closedPosition.commissions),
   },
   {
     title: 'Realized P&L',
@@ -89,6 +125,13 @@ const COLUMNS: ColumnDefinition[] = [
     alignment: 'right',
     renderValue: (closedPosition) => <HoldingPeriod days={closedPosition.holdingDays} />,
   },
+  {
+    // Only a row entered by hand has one: a derived row's notes are on its trades.
+    title: 'Note',
+    alignment: 'left',
+    renderValue: (closedPosition) => <NoteCell note={closedPosition.note} />,
+    valueColorClass: () => 'text-slate-400',
+  },
 ];
 
 function alignmentClass(column: ColumnDefinition): string {
@@ -103,18 +146,85 @@ function compareNewestClosedFirst(first: ClosedPosition, second: ClosedPosition)
 }
 
 /**
- * Unique: two position periods of the same holding never open on the same day, because all of a day's buys are
- * counted before its sells.
+ * A row entered by hand by its own id. A derived one by its holding and buy date — unique, since two position periods
+ * of the same holding never open on the same day: all of a day's buys are counted before its sells.
  */
 function rowKeyOf(closedPosition: ClosedPosition): string {
+  if (closedPosition.source === 'MANUAL') return `manual-${closedPosition.manualClosedPositionId}`;
   return `${closedPosition.holdingId}-${closedPosition.openDate}`;
 }
 
-/** A row with a warning leaves the line under it to the warning, so the two read as one. */
-function ClosedPositionRow({ closedPosition }: { closedPosition: ClosedPosition }) {
-  const borderClass = closedPosition.warning === null ? 'border-b border-slate-800/60 last:border-b-0' : '';
+/** What the buttons of the rows entered by hand do; the section around the table owns the form and the deletion. */
+export interface ManualRowActions {
+  manualClosedPositionIdBeingEdited: number | null;
+  manualClosedPositionIdBeingDeleted: number | null;
+  onEdit: (closedPosition: ClosedPosition) => void;
+  onDelete: (closedPosition: ClosedPosition) => void;
+}
+
+function derivedRowHint(closedPosition: ClosedPosition): string {
   return (
-    <tr className={`${borderClass} transition-colors hover:bg-slate-800/30`}>
+    `Derived from the trades of ${closedPosition.symbol}: correct them in its trades panel, in Positions ` +
+    '(with "Show closed" on, if the holding is closed).'
+  );
+}
+
+/** ✏️ and 🗑 on a row entered by hand; on a derived row, a crossed-out pencil that says where it is corrected. */
+function RowActions({
+  closedPosition,
+  manualRowActions,
+}: {
+  closedPosition: ClosedPosition;
+  manualRowActions: ManualRowActions;
+}) {
+  if (closedPosition.source === 'TRADES') {
+    return (
+      <span title={derivedRowHint(closedPosition)} className="inline-flex p-1 text-slate-600">
+        <PencilOff size={12} />
+      </span>
+    );
+  }
+  const isDeleting =
+    manualRowActions.manualClosedPositionIdBeingDeleted === closedPosition.manualClosedPositionId;
+  return (
+    <div className="inline-flex gap-1">
+      <button
+        type="button"
+        title="Edit this closed position"
+        onClick={() => manualRowActions.onEdit(closedPosition)}
+        className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+      >
+        <Pencil size={12} />
+      </button>
+      <button
+        type="button"
+        title="Delete this closed position"
+        onClick={() => manualRowActions.onDelete(closedPosition)}
+        disabled={isDeleting}
+        className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
+      >
+        <Trash2 size={12} />
+      </button>
+    </div>
+  );
+}
+
+/** A row with a warning leaves the line under it to the warning, so the two read as one. */
+function ClosedPositionRow({
+  closedPosition,
+  manualRowActions,
+}: {
+  closedPosition: ClosedPosition;
+  manualRowActions: ManualRowActions;
+}) {
+  const borderClass = closedPosition.warning === null ? 'border-b border-slate-800/60 last:border-b-0' : '';
+  const isBeingEdited =
+    closedPosition.source === 'MANUAL' &&
+    manualRowActions.manualClosedPositionIdBeingEdited === closedPosition.manualClosedPositionId;
+  return (
+    <tr
+      className={`${borderClass} transition-colors hover:bg-slate-800/30 ${isBeingEdited ? 'bg-emerald-500/5' : ''}`}
+    >
       {COLUMNS.map((column) => {
         const colorClass = column.valueColorClass?.(closedPosition) ?? 'text-slate-300';
         return (
@@ -126,15 +236,21 @@ function ClosedPositionRow({ closedPosition }: { closedPosition: ClosedPosition 
           </td>
         );
       })}
+      <td className="w-14 px-2 py-2 text-right">
+        <RowActions closedPosition={closedPosition} manualRowActions={manualRowActions} />
+      </td>
     </tr>
   );
 }
+
+/** Every column, plus the one with the row's buttons. */
+const COLUMN_COUNT_WITH_ACTIONS = COLUMNS.length + 1;
 
 /** Under the row it belongs to, always visible: the same orange as a holding's warnings. */
 function ClosedPositionWarningRow({ message }: { message: string }) {
   return (
     <tr className="border-b border-slate-800/60 last:border-b-0">
-      <td colSpan={COLUMNS.length} className="px-3 pb-2 text-xs text-orange-500">
+      <td colSpan={COLUMN_COUNT_WITH_ACTIONS} className="px-3 pb-2 text-xs text-orange-500">
         <div className="flex items-center gap-1">
           <TriangleAlert size={12} className="shrink-0" />
           {message}
@@ -144,8 +260,17 @@ function ClosedPositionWarningRow({ message }: { message: string }) {
   );
 }
 
-/** Read-only: a closed position is corrected through the trades of its holding, in the positions table. */
-export function ClosedPositionsTable({ closedPositions }: { closedPositions: ClosedPosition[] }) {
+/**
+ * A row entered by hand is edited and deleted here; one derived from trades is corrected through the trades of its
+ * holding, in the positions table.
+ */
+export function ClosedPositionsTable({
+  closedPositions,
+  manualRowActions,
+}: {
+  closedPositions: ClosedPosition[];
+  manualRowActions: ManualRowActions;
+}) {
   const newestFirst = [...closedPositions].sort(compareNewestClosedFirst);
 
   return (
@@ -158,12 +283,15 @@ export function ClosedPositionsTable({ closedPositions }: { closedPositions: Clo
                 {column.title}
               </th>
             ))}
+            <th className="px-2 py-2">
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
           {newestFirst.map((closedPosition) => (
             <Fragment key={rowKeyOf(closedPosition)}>
-              <ClosedPositionRow closedPosition={closedPosition} />
+              <ClosedPositionRow closedPosition={closedPosition} manualRowActions={manualRowActions} />
               {closedPosition.warning !== null && <ClosedPositionWarningRow message={closedPosition.warning} />}
             </Fragment>
           ))}

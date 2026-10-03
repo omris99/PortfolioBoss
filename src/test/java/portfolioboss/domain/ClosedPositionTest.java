@@ -40,6 +40,24 @@ class ClosedPositionTest {
                 .isEqualTo("Sold 25 shares but bought 15 in this period: check this holding's trades.");
     }
 
+    /** $5 to buy and $5 to sell: 1,800 − 1,500 − 10. The average prices stay the prices paid and received. */
+    @Test
+    void theCommissionsComeOffTheRealizedPnlAndItsPercent() {
+        ClosedPosition closedPosition = closedPositionWithCommissions("10", "1500", "1800", "10");
+
+        assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("290");
+        assertThat(closedPosition.realizedPnlPercent()).isEqualByComparingTo("19.33333333333333");
+        assertThat(closedPosition.averageBuyPrice()).isEqualByComparingTo("150");
+        assertThat(closedPosition.averageSellPrice()).isEqualByComparingTo("180");
+    }
+
+    @Test
+    void commissionsCanTurnASmallGainIntoALoss() {
+        ClosedPosition closedPosition = closedPositionWithCommissions("10", "1500", "1505", "10");
+
+        assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("-5");
+    }
+
     @Test
     void aLossIsNegative() {
         ClosedPosition closedPosition = closedPosition("10", "1500", "1200");
@@ -73,15 +91,25 @@ class ClosedPositionTest {
         assertThat(closedPosition.averageBuyPrice()).isEqualByComparingTo("333.3333333333333");
     }
 
-    /** As many shares sold as were bought, the usual case. */
+    /** As many shares sold as were bought, the usual case, and no commission, so the figures stay round. */
     private ClosedPosition closedPosition(String quantity, String buyCost, String sellProceeds) {
-        return closedPositionSoldTo(quantity, quantity, buyCost, sellProceeds);
+        return closedPosition(quantity, quantity, buyCost, sellProceeds, "0");
     }
 
     private ClosedPosition closedPositionSoldTo(String quantity, String soldQuantity, String buyCost,
                                                 String sellProceeds) {
+        return closedPosition(quantity, soldQuantity, buyCost, sellProceeds, "0");
+    }
+
+    private ClosedPosition closedPositionWithCommissions(String quantity, String buyCost, String sellProceeds,
+                                                         String commissions) {
+        return closedPosition(quantity, quantity, buyCost, sellProceeds, commissions);
+    }
+
+    private ClosedPosition closedPosition(String quantity, String soldQuantity, String buyCost, String sellProceeds,
+                                          String commissions) {
         return new ClosedPosition(OPEN_DATE, CLOSE_DATE, new BigDecimal(quantity), new BigDecimal(soldQuantity),
-                decimalOrNull(buyCost), decimalOrNull(sellProceeds));
+                decimalOrNull(buyCost), decimalOrNull(sellProceeds), new BigDecimal(commissions));
     }
 
     private BigDecimal decimalOrNull(String amount) {

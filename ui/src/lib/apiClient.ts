@@ -1,4 +1,4 @@
-import type { TradeRequest } from '../types/portfolio';
+import type { ManualClosedPositionRequest, TradeRequest } from '../types/portfolio';
 
 /** A write the API refused or could not be reached for; `message` is meant to be shown to the user as it is. */
 export class ApiError extends Error {}
@@ -24,6 +24,21 @@ export function changeTrade(tradeId: number, trade: TradeRequest): Promise<void>
 
 export function deleteTrade(tradeId: number): Promise<void> {
   return sendJson('DELETE', `/api/trades/${tradeId}`);
+}
+
+export function addManualClosedPosition(closedPosition: ManualClosedPositionRequest): Promise<void> {
+  return sendJson('POST', '/api/manual-closed-positions', closedPosition);
+}
+
+export function changeManualClosedPosition(
+  manualClosedPositionId: number,
+  closedPosition: ManualClosedPositionRequest,
+): Promise<void> {
+  return sendJson('PUT', `/api/manual-closed-positions/${manualClosedPositionId}`, closedPosition);
+}
+
+export function deleteManualClosedPosition(manualClosedPositionId: number): Promise<void> {
+  return sendJson('DELETE', `/api/manual-closed-positions/${manualClosedPositionId}`);
 }
 
 /**

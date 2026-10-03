@@ -54,19 +54,29 @@ class HoldingWriteControllerTest {
     @Test
     void addsATradeAndAnswers201WithIt() throws Exception {
         TradeRequest expectedRequest = new TradeRequest(LocalDate.of(2025, 1, 15), TradeSide.BUY,
-                new BigDecimal("10.5"), new BigDecimal("150.25"), "Initial position");
+                new BigDecimal("10.5"), new BigDecimal("150.25"), "Initial position", new BigDecimal("1.25"));
         given(holdingWriteService.addTrade(APPLE_HOLDING_ID, expectedRequest)).willReturn(new TradeResponse(TRADE_ID,
                 LocalDate.of(2025, 1, 15), TradeSide.BUY, new BigDecimal("10.5"), new BigDecimal("150.25"),
-                "Initial position"));
+                "Initial position", new BigDecimal("1.25")));
 
         mockMvc.perform(post("/api/holdings/7/trades").contentType(MediaType.APPLICATION_JSON).content("""
                         {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10.5, "price": 150.25,
-                         "note": "Initial position"}"""))
+                         "note": "Initial position", "commission": 1.25}"""))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(TRADE_ID))
                 .andExpect(jsonPath("$.tradeDate").value("2025-01-15"))
                 .andExpect(jsonPath("$.side").value("BUY"))
-                .andExpect(jsonPath("$.quantity").value(10.5));
+                .andExpect(jsonPath("$.quantity").value(10.5))
+                .andExpect(jsonPath("$.commission").value(1.25));
+    }
+
+    @Test
+    void rejectsANegativeCommission() throws Exception {
+        postTrade("""
+                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10, "commission": -1}""")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("commission: must be greater than or equal to 0"));
+        verifyNoInteractions(holdingWriteService);
     }
 
     @Test
@@ -182,9 +192,9 @@ class HoldingWriteControllerTest {
     @Test
     void changesATradeAndAnswers200WithIt() throws Exception {
         TradeRequest expectedRequest = new TradeRequest(LocalDate.of(2025, 2, 1), TradeSide.SELL,
-                new BigDecimal("4"), null, null);
+                new BigDecimal("4"), null, null, null);
         given(holdingWriteService.changeTrade(TRADE_ID, expectedRequest)).willReturn(new TradeResponse(TRADE_ID,
-                LocalDate.of(2025, 2, 1), TradeSide.SELL, new BigDecimal("4"), null, null));
+                LocalDate.of(2025, 2, 1), TradeSide.SELL, new BigDecimal("4"), null, null, new BigDecimal("5")));
 
         mockMvc.perform(put("/api/trades/42").contentType(MediaType.APPLICATION_JSON).content("""
                         {"tradeDate": "2025-02-01", "side": "SELL", "quantity": 4}"""))

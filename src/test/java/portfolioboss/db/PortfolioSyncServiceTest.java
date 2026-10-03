@@ -177,7 +177,8 @@ class PortfolioSyncServiceTest {
     }
 
     private void insertTrade(long holdingId) {
-        jdbc.update("insert into trade (holding_id, trade_date, side, quantity) values (?, DATE '2024-03-14', 'BUY', 10)",
+        jdbc.update("insert into trade (holding_id, trade_date, side, quantity, commission) "
+                        + "values (?, DATE '2024-03-14', 'BUY', 10, 5)",
                 holdingId);
     }
 

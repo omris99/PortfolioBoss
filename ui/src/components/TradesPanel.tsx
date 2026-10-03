@@ -33,6 +33,7 @@ function TradeRow({
       </td>
       <td className="px-2 py-1 text-right font-mono">{formatQuantity(trade.quantity)}</td>
       <td className="px-2 py-1 text-right font-mono">{formatMoney(trade.price)}</td>
+      <td className="px-2 py-1 text-right font-mono">{formatMoney(trade.commission)}</td>
       <td className="px-2 py-1 text-slate-400">{trade.note ?? EMPTY_VALUE}</td>
       <td className="px-2 py-1 text-right">
         <div className="inline-flex gap-1">
@@ -115,6 +116,7 @@ export function TradesPanel({ holding, onDataChanged }: { holding: Holding; onDa
               <th className="px-2 py-1 text-left font-medium">Side</th>
               <th className="px-2 py-1 text-right font-medium">Qty</th>
               <th className="px-2 py-1 text-right font-medium">Price</th>
+              <th className="px-2 py-1 text-right font-medium">Commission</th>
               <th className="px-2 py-1 text-left font-medium">Note</th>
               <th className="px-2 py-1">
                 <span className="sr-only">Actions</span>

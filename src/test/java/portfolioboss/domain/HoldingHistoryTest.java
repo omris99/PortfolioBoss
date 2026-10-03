@@ -323,6 +323,18 @@ class HoldingHistoryTest {
     }
 
     @Test
+    void theCommissionsOfEveryBuyAndSellOfThePeriodAddUp() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                trade("2024-01-01", TradeSide.BUY, "10", "100", "5"),
+                trade("2024-02-01", TradeSide.BUY, "600", "100", "6"),
+                trade("2024-03-01", TradeSide.SELL, "610", "120", "6.10"),
+                trade("2025-01-01", TradeSide.BUY, "5", "130", "5")));   // the next period: not part of it
+
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition ->
+                assertThat(closedPosition.commissions()).isEqualByComparingTo("17.10"));
+    }
+
+    @Test
     void aSellWhileAlreadyFlatBelongsToNoClosedPosition() {
         HoldingHistory history = HoldingHistory.of(List.of(
                 buy("2024-01-01", 10, "100"),
@@ -359,8 +371,14 @@ class HoldingHistoryTest {
         return trade(date, TradeSide.SELL, String.valueOf(quantity), price);
     }
 
+    /** No commission, so the totals in the tests above stay round. */
     private TradeFact trade(String date, TradeSide side, String quantity, String price) {
+        return trade(date, side, quantity, price, "0");
+    }
+
+    private TradeFact trade(String date, TradeSide side, String quantity, String price, String commission) {
         BigDecimal priceOrNull = price == null ? null : new BigDecimal(price);
-        return new TradeFact(LocalDate.parse(date), side, new BigDecimal(quantity), priceOrNull);
+        return new TradeFact(LocalDate.parse(date), side, new BigDecimal(quantity), priceOrNull,
+                new BigDecimal(commission));
     }
 }

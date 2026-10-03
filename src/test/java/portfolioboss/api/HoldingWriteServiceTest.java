@@ -67,7 +67,7 @@ class HoldingWriteServiceTest {
     void anAddedTradeIsServedWithTheHoldingAndSetsItsBuyDate() {
         TradeResponse addedTrade = writeService.addTrade(appleHoldingId,
                 new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal("10.5"),
-                        new BigDecimal("150.25"), "Initial position"));
+                        new BigDecimal("150.25"), "Initial position", new BigDecimal("1.25")));
 
         HoldingResponse apple = readApple();
 
@@ -80,17 +80,44 @@ class HoldingWriteServiceTest {
         assertThat(storedTrade.quantity()).isEqualByComparingTo("10.5");
         assertThat(storedTrade.price()).isEqualByComparingTo("150.25");
         assertThat(storedTrade.note()).isEqualTo("Initial position");
+        assertThat(storedTrade.commission()).isEqualByComparingTo("1.25");
     }
 
     @Test
     void aTradeWithoutPriceOrNoteIsStoredWithBothNull() {
         writeService.addTrade(appleHoldingId,
-                new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal("10"), null, "   "));
+                new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal("10"), null, "   ", null));
 
         TradeResponse storedTrade = readApple().trades().get(0);
 
         assertThat(storedTrade.price()).isNull();
         assertThat(storedTrade.note()).isNull();
+    }
+
+    @Test
+    void aTradeWithoutACommissionIsChargedTheDefaultForItsQuantity() {
+        TradeResponse addedTrade = writeService.addTrade(appleHoldingId, buyWithoutCommission("600"));
+
+        assertThat(addedTrade.commission()).isEqualByComparingTo("6");
+        assertThat(readApple().trades().get(0).commission()).isEqualByComparingTo("6");
+    }
+
+    @Test
+    void aCommissionOfZeroIsKeptNotReplacedByTheDefault() {
+        writeService.addTrade(appleHoldingId, new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY,
+                new BigDecimal("10"), new BigDecimal("150"), null, BigDecimal.ZERO));
+
+        assertThat(readApple().trades().get(0).commission()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void changingATradeWithoutACommissionWorksTheDefaultOutAgainFromTheNewQuantity() {
+        long tradeId = writeService.addTrade(appleHoldingId, buyWithoutCommission("10")).id();   // $5, the minimum
+        forgetWhatHibernateLoaded();
+
+        writeService.changeTrade(tradeId, buyWithoutCommission("1000"));
+
+        assertThat(readApple().trades().get(0).commission()).isEqualByComparingTo("10");
     }
 
     @Test
@@ -108,7 +135,7 @@ class HoldingWriteServiceTest {
         forgetWhatHibernateLoaded();
 
         writeService.changeTrade(tradeId, new TradeRequest(LocalDate.of(2024, 5, 2), TradeSide.SELL,
-                new BigDecimal("4"), new BigDecimal("190"), "Trimmed after earnings"));
+                new BigDecimal("4"), new BigDecimal("190"), "Trimmed after earnings", new BigDecimal("2.5")));
 
         TradeResponse storedTrade = readApple().trades().get(0);
         assertThat(storedTrade.id()).isEqualTo(tradeId);
@@ -117,6 +144,7 @@ class HoldingWriteServiceTest {
         assertThat(storedTrade.quantity()).isEqualByComparingTo("4");
         assertThat(storedTrade.price()).isEqualByComparingTo("190");
         assertThat(storedTrade.note()).isEqualTo("Trimmed after earnings");
+        assertThat(storedTrade.commission()).isEqualByComparingTo("2.5");
     }
 
     @Test
@@ -194,7 +222,12 @@ class HoldingWriteServiceTest {
     }
 
     private TradeRequest buyOfTen(LocalDate tradeDate) {
-        return new TradeRequest(tradeDate, TradeSide.BUY, new BigDecimal("10"), new BigDecimal("150"), null);
+        return new TradeRequest(tradeDate, TradeSide.BUY, new BigDecimal("10"), new BigDecimal("150"), null, null);
+    }
+
+    private TradeRequest buyWithoutCommission(String quantity) {
+        return new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal(quantity),
+                new BigDecimal("150"), null, null);
     }
 
     private PortfolioSnapshot snapshotWithApple(Instant asOf) {

@@ -7,6 +7,8 @@
 export type HoldingStatus = 'OPEN' | 'CLOSED';
 export type TradeSide = 'BUY' | 'SELL';
 export type HoldingWarningType = 'NO_TRADES_LOGGED' | 'CLOSED_WITHOUT_SELL' | 'QUANTITY_MISMATCH';
+/** `TRADES`: derived from a holding's trades, corrected through them. `MANUAL`: one row entered by hand. */
+export type ClosedPositionSource = 'TRADES' | 'MANUAL';
 
 /** A gap between the trades entered and what IB reports. It never blocks anything. */
 export interface HoldingWarning {
@@ -24,6 +26,8 @@ export interface Trade {
   quantity: number;
   price: number | null;
   note: string | null;
+  /** Never `null`: a trade entered without one was stored with the default (1 cent a share, at least $5). */
+  commission: number;
 }
 
 /** The body of `POST /api/holdings/{id}/trades` and `PUT /api/trades/{id}`: a trade as the user typed it. */
@@ -34,6 +38,29 @@ export interface TradeRequest {
   /** Greater than 0. */
   quantity: number;
   price: number | null;
+  note: string | null;
+  /** `null` stores the default for this many shares; 0 is a commission too. */
+  commission: number | null;
+}
+
+/**
+ * The body of `POST /api/manual-closed-positions` and `PUT /api/manual-closed-positions/{id}`: a whole round trip — one
+ * buy and one sell — as the user typed it.
+ */
+export interface ManualClosedPositionRequest {
+  symbol: string;
+  currency: string;
+  sector: string | null;
+  /** Greater than 0. */
+  quantity: number;
+  /** 'yyyy-MM-dd', not in the future. */
+  buyDate: string;
+  buyPrice: number;
+  /** 'yyyy-MM-dd', not in the future and not before `buyDate`. */
+  sellDate: string;
+  sellPrice: number;
+  /** Of the buy and the sell together; `null` stores the default for both orders. */
+  commission: number | null;
   note: string | null;
 }
 
@@ -71,12 +98,12 @@ export interface Holding {
 }
 
 /**
- * A stretch of owning a holding, from a buy to the sell that brought it back to zero, derived by the API from the
- * holding's trades. A figure that needs a price nobody entered is `null`.
+ * A stretch of owning a stock, from a buy to the sell that brought it back to zero: derived by the API from a holding's
+ * trades, or entered by hand as one row (`source`). A figure that needs a price nobody entered is `null`.
  */
 export interface ClosedPosition {
-  /** The holding whose trades it was derived from. */
-  holdingId: number;
+  /** The holding whose trades it was derived from; `null` for a row entered by hand. */
+  holdingId: number | null;
   symbol: string;
   currency: string;
   sector: string | null;
@@ -94,6 +121,13 @@ export interface ClosedPosition {
   realizedPnlPercent: number | null;
   /** What to fix in its trades (more sold than bought, so no realized P&L), in English; shown as it is. */
   warning: string | null;
+  /** Of every buy and sell in it, already taken off `realizedPnl`. */
+  commissions: number;
+  source: ClosedPositionSource;
+  /** The row to edit or delete when `MANUAL`; `null` otherwise. */
+  manualClosedPositionId: number | null;
+  /** The row's note when `MANUAL`; `null` otherwise. */
+  note: string | null;
 }
 
 export interface PortfolioSnapshot {

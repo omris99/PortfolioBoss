@@ -1,8 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { addTrade, changeTrade, errorMessageOf } from '../lib/apiClient';
+import { INPUT_CLASS, isBlank, localTodayIsoDate, numberOrNull, trimmedOrNull } from '../lib/formInput';
 import type { Holding, Trade, TradeRequest, TradeSide } from '../types/portfolio';
 
 const NOTE_MAX_LENGTH = 500;   // the trade.note column
+
+/** The API's rule (`Utils.calculateOrderCommission`), said where the field is. */
+const COMMISSION_HINT =
+  'Leave empty for the default: 1 cent a share, at least $5 — worked out again from the quantity on every save. ' +
+  'Enter 0 for no commission.';
 
 /** What the inputs hold, as typed: number inputs give text, and an empty one means "not entered". */
 interface TradeFormValues {
@@ -10,18 +16,8 @@ interface TradeFormValues {
   side: TradeSide;
   quantityText: string;
   priceText: string;
+  commissionText: string;
   note: string;
-}
-
-/**
- * Today as 'yyyy-MM-dd' in the local time zone — the same "today" the API checks the date against. Not
- * `toISOString()`, which is UTC: just after midnight in Israel it is still yesterday there.
- */
-function localTodayIsoDate(): string {
-  const today = new Date();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${today.getFullYear()}-${month}-${day}`;
 }
 
 /**
@@ -50,6 +46,8 @@ function initialFormValues(holding: Holding, tradeBeingEdited: Trade | null, tod
       side: tradeBeingEdited.side,
       quantityText: String(tradeBeingEdited.quantity),
       priceText: tradeBeingEdited.price === null ? '' : String(tradeBeingEdited.price),
+      // The commission stored — the default, if none was entered. Emptying it works the default out again.
+      commissionText: String(tradeBeingEdited.commission),
       note: tradeBeingEdited.note ?? '',
     };
   }
@@ -59,38 +57,39 @@ function initialFormValues(holding: Holding, tradeBeingEdited: Trade | null, tod
       side: 'BUY',
       quantityText: String(holding.position),
       priceText: holding.averageCost === null ? '' : prefilledPriceText(holding.averageCost),
+      commissionText: '',
       note: '',
     };
   }
-  return { tradeDate: todayIsoDate, side: 'BUY', quantityText: '', priceText: '', note: '' };
+  return { tradeDate: todayIsoDate, side: 'BUY', quantityText: '', priceText: '', commissionText: '', note: '' };
 }
 
 /** The same rules the API enforces, checked first so the common mistakes don't need a round trip. */
 function problemWithForm(formValues: TradeFormValues, todayIsoDate: string): string | null {
   if (formValues.tradeDate === '') return 'Enter the trade date.';
   if (formValues.tradeDate > todayIsoDate) return 'The trade date cannot be in the future.';
-  if (formValues.quantityText.trim() === '' || !(Number(formValues.quantityText) > 0)) {
+  if (isBlank(formValues.quantityText) || !(Number(formValues.quantityText) > 0)) {
     return 'Enter a quantity greater than 0.';
   }
-  if (formValues.priceText.trim() !== '' && !(Number(formValues.priceText) >= 0)) {
+  if (!isBlank(formValues.priceText) && !(Number(formValues.priceText) >= 0)) {
     return 'The price cannot be negative.';
+  }
+  if (!isBlank(formValues.commissionText) && !(Number(formValues.commissionText) >= 0)) {
+    return 'The commission cannot be negative.';
   }
   return null;
 }
 
 function toTradeRequest(formValues: TradeFormValues): TradeRequest {
-  const trimmedNote = formValues.note.trim();
   return {
     tradeDate: formValues.tradeDate,
     side: formValues.side,
     quantity: Number(formValues.quantityText),
-    price: formValues.priceText.trim() === '' ? null : Number(formValues.priceText),
-    note: trimmedNote === '' ? null : trimmedNote,
+    price: numberOrNull(formValues.priceText),
+    note: trimmedOrNull(formValues.note),
+    commission: numberOrNull(formValues.commissionText),
   };
 }
-
-const INPUT_CLASS =
-  'rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none';
 
 function SideButton({
   side,
@@ -217,6 +216,22 @@ export function TradeForm({
             value={formValues.priceText}
             onChange={(event) => updateFormValue('priceText', event.target.value)}
             className={`${INPUT_CLASS} w-28`}
+          />
+        </label>
+
+        <label
+          title={COMMISSION_HINT}
+          className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500"
+        >
+          Commission
+          <input
+            type="number"
+            step="any"
+            min="0"
+            placeholder="default"
+            value={formValues.commissionText}
+            onChange={(event) => updateFormValue('commissionText', event.target.value)}
+            className={`${INPUT_CLASS} w-24`}
           />
         </label>
 
