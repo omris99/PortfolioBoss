@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.TradeResponse;
@@ -117,7 +118,8 @@ class PortfolioControllerTest {
 
     @Test
     void keepsFiguresIbDidNotReportInTheJsonAsNull() throws Exception {
-        PortfolioResponse withoutFigures = new PortfolioResponse(ACCOUNT, AS_OF, null, null, List.of(withoutCostData()));
+        PortfolioResponse withoutFigures =
+                new PortfolioResponse(ACCOUNT, AS_OF, null, null, List.of(withoutCostData()), List.of());
         given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withoutFigures));
 
         mockMvc.perform(get("/api/portfolio"))
@@ -134,6 +136,31 @@ class PortfolioControllerTest {
     }
 
     @Test
+    void servesClosedPositionsWithTheFieldNamesTheUiExpects() throws Exception {
+        PortfolioResponse withClosedPositions = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(),
+                List.of(appleBoughtAndSold(), microsoftSoldWithNoPricesEntered()));
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withClosedPositions));
+
+        mockMvc.perform(get("/api/portfolio"))
+                .andExpect(jsonPath("$.closedPositions[0].holdingId").value(7))
+                .andExpect(jsonPath("$.closedPositions[0].symbol").value("AAPL"))
+                .andExpect(jsonPath("$.closedPositions[0].currency").value("USD"))
+                .andExpect(jsonPath("$.closedPositions[0].sector").value("Technology"))
+                .andExpect(jsonPath("$.closedPositions[0].openDate").value("2024-03-01"))
+                .andExpect(jsonPath("$.closedPositions[0].closeDate").value("2025-06-01"))
+                .andExpect(jsonPath("$.closedPositions[0].holdingDays").value(457))
+                .andExpect(jsonPath("$.closedPositions[0].quantity").value(10))
+                .andExpect(jsonPath("$.closedPositions[0].averageBuyPrice").value(150.0))
+                .andExpect(jsonPath("$.closedPositions[0].averageSellPrice").value(180.0))
+                .andExpect(jsonPath("$.closedPositions[0].realizedPnl").value(300.0))
+                .andExpect(jsonPath("$.closedPositions[0].realizedPnlPercent").value(20.0))
+                .andExpect(jsonPath("$.closedPositions[1].sector").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[1].averageBuyPrice").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[1].realizedPnl").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[1].realizedPnlPercent").value(nullValue()));
+    }
+
+    @Test
     void acceptsOnlyGet() throws Exception {
         mockMvc.perform(post("/api/portfolio")).andExpect(status().isMethodNotAllowed());
         mockMvc.perform(put("/api/portfolio")).andExpect(status().isMethodNotAllowed());
@@ -141,7 +168,20 @@ class PortfolioControllerTest {
     }
 
     private PortfolioResponse portfolioWith(HoldingResponse... holdings) {
-        return new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(holdings));
+        return new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(holdings), List.of());
+    }
+
+    /** 10 bought at 150 and sold at 180: +300, or +20%. */
+    private ClosedPositionResponse appleBoughtAndSold() {
+        return new ClosedPositionResponse(7, "AAPL", "USD", "Technology", LocalDate.of(2024, 3, 1),
+                LocalDate.of(2025, 6, 1), 457, new BigDecimal("10"), new BigDecimal("150.00"), new BigDecimal("180.00"),
+                new BigDecimal("300.00"), new BigDecimal("20"));
+    }
+
+    /** Bought and sold with no price entered for either, and no sector. */
+    private ClosedPositionResponse microsoftSoldWithNoPricesEntered() {
+        return new ClosedPositionResponse(8, "MSFT", "USD", null, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 2, 1),
+                31, new BigDecimal("5"), null, null, null, null);
     }
 
     /** Bought once, never sold — still OPEN, so holdingDays counts to a made-up snapshot date. */

@@ -20,7 +20,10 @@ of Milestone 1 (Postgres, trades, holding details); its sessions 0 (Maven + Spri
 (PostgreSQL, Flyway, schema, entities), 2 (sync at connection, API reads from the database), 3
 (derived buy/sell dates and holding period), 4 (write endpoints for the sector and trades), 5 (UI: the new
 columns and sorting), 6 (UI: entering the sector and trades) and 7 (reconciliation warnings) are done; 8–9 are
-ideas for later.
+ideas for later. [CLOSED_POSITIONS_TODO.md](CLOSED_POSITIONS_TODO.md) comes next: the positions bought and sold back
+to zero, with their realized P&L — session 1 (the list derived from the trades already entered) is done, 2
+(commission, manual closed positions) and 3 (their UI) are not. [INVESTORS_TODO.md](INVESTORS_TODO.md) plans several
+investors sharing one IB account (each one's cash and profit); it is built after the closed positions.
 
 ## Hard invariant: read-only
 
@@ -205,24 +208,30 @@ Things that are easy to break:
 - Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`) are
   `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 
-`portfolioboss.domain` holds `HoldingHistory`, `TradeFact`, `HoldingWarning` and `HoldingWarningType` — pure
-computation, no Spring and no database, so it is unit tested directly. A holding's `firstBuyDate`, `lastSellDate` and `holdingDays` are
-derived from its `trade` rows, never stored: `HoldingHistory.of(List<TradeFact>)` walks them in
-chronological order (a buy before a sell on the same date) tracking a running quantity, and starts a fresh
-**episode** every time a sell brings that quantity back to (near) zero — a long-term holding is often sold in
-full and bought again later, and without this the first-ever buy date would belong to an unrelated stretch of
-ownership. A sell entered while already flat is treated as a data-entry mistake and silently ignored, never
+`portfolioboss.domain` holds `HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning` and
+`HoldingWarningType` — pure computation, no Spring and no database, so it is unit tested directly. A holding's
+`firstBuyDate`, `lastSellDate`, `holdingDays` and closed positions are derived from its `trade` rows, never stored:
+`HoldingHistory.of(List<TradeFact>)` walks them in chronological order (a buy before a sell on the same date) tracking
+a running quantity, and splits them into **position periods** (the private record `PositionPeriod`): a buy while flat
+opens one, and the sell that brings the quantity back to (near) zero — or below it, an over-sell the quantity check
+then points at — closes it. A long-term holding is often sold in full and bought again later, and without this the
+first-ever buy date would belong to an unrelated stretch of ownership. The dates come from the last period; every
+closed period becomes a `ClosedPosition` in `HoldingHistory.closedPositions` (raw totals — dates, `quantity`,
+`buyCost`, `sellProceeds` — from which it derives the average prices, `realizedPnl` and its percent; `null` as soon as
+one trade of that side has no price, never a guess). A partial sell inside a period that is still open is not a
+closed position. A sell entered while already flat is treated as a data-entry mistake and silently ignored, never
 rejected. `holdingDays` counts to `lastSellDate` when `CLOSED`, or to the last sync's date (`account_state.as_of`,
 not the system clock, so the number doesn't drift between page loads) when `OPEN` — and is never negative: a
 buy dated after that sync (entered today while serving an older sync, e.g. with TWS off) counts as 0 days. `HoldingRepository
 .findByAccountOrderById`'s `@EntityGraph(attributePaths = "trades")` loads a holding's trades in the same
 query instead of one extra query per holding; `TradeEntity.toTradeFact()` reduces a row to what the
-computation needs.
+computation needs (date, side, quantity, price), and `HoldingEntity.tradeHistory()` does the whole conversion, so
+`HoldingResponse` and the closed positions derive it the same way.
 
 `HoldingHistory.warnings(status, ibPosition)` checks the trades entered against IB, which stays the source of truth
 for the quantity — a gap is shown next to the holding, never a reason to reject a trade. It returns **at most one**
 `HoldingWarning(type, message)`, the one to fix first: `NO_TRADES_LOGGED` (no buy at all), else `CLOSED_WITHOUT_SELL`
-(a `CLOSED` holding whose current episode no sell ends), else `QUANTITY_MISMATCH` (`netQuantity` more than `0.0001`
+(a `CLOSED` holding whose current position period no sell ends), else `QUANTITY_MISMATCH` (`netQuantity` more than `0.0001`
 from IB's `position`). Without that order a holding with no trades would also be a mismatch, the same gap twice.
 Things that are easy to break:
 - `netQuantity` is the plain sum of **every** trade (`TradeFact.signedQuantity()`), including a sell entered while
@@ -242,7 +251,11 @@ fields, `HoldingResponse` also carries `id`, `conId`, `sector`, `status`, and �
 (a `List<TradeResponse>`, one entry per `trade` row), and `warnings` (a `List<domain.HoldingWarning>`, see above);
 the UI reads all of them. `HoldingWarning` and its enum go into the JSON as they are, with no `*Response` copy — the
 same as `HoldingStatus` and `TradeSide` — so their names are JSON keys and values too.
-`asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
+`PortfolioResponse.closedPositions` (added last, at the top level) is every holding's
+`HoldingHistory.closedPositions` as `ClosedPositionResponse`s (`holdingId`, `symbol`, `currency`, `sector`, the
+dates, `holdingDays`, `quantity`, the average prices, `realizedPnl`, `realizedPnlPercent`) — from open holdings as well
+as closed ones, since a holding still open today may have been sold in full before. The UI sums the realized P&L per
+currency. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
 in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.

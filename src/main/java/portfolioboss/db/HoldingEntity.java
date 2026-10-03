@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import portfolioboss.domain.HoldingHistory;
 import portfolioboss.model.Holding;
 import portfolioboss.utils.Utils;
 
@@ -116,6 +117,14 @@ public class HoldingEntity {
         return conId;
     }
 
+    public String symbol() {
+        return symbol;
+    }
+
+    public String currency() {
+        return currency;
+    }
+
     public String sector() {
         return sector;
     }
@@ -127,6 +136,14 @@ public class HoldingEntity {
     /** Ordered by trade date then id ({@code @OrderBy} on the field below). */
     public List<TradeEntity> trades() {
         return List.copyOf(trades);
+    }
+
+    /**
+     * What this holding's trades add up to — its dates, closed positions and warnings. Derived on every call, never
+     * stored, and here so that everything that reads it derives it the same way.
+     */
+    public HoldingHistory tradeHistory() {
+        return HoldingHistory.of(trades.stream().map(TradeEntity::toTradeFact).toList());
     }
 
     /**

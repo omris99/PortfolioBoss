@@ -88,8 +88,8 @@ public class TradeEntity {
         return note;
     }
 
-    /** Reduced to just the date, side and quantity that {@link portfolioboss.domain.HoldingHistory} needs. */
+    /** Reduced to just the date, side, quantity and price that {@link portfolioboss.domain.HoldingHistory} needs. */
     public TradeFact toTradeFact() {
-        return new TradeFact(tradeDate, side, quantity);
+        return new TradeFact(tradeDate, side, quantity, price);
     }
 }

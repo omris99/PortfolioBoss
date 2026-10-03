@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.9.0";
+    public static final String VERSION = "0.10.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,14 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.10.0: [Closed positions]
+ * ClosedPosition added (domain): a position bought and sold back to zero; it keeps the raw totals and derives the average prices, realized P&L and its %, null when a trade has no price.
+ * HoldingHistory now splits the trades into position periods (formerly "episodes") and lists every closed one in closedPositions, including one that ended inside a holding still open today.
+ * HoldingHistory: a sell that takes the quantity below zero now closes the period; before, the quantity stayed negative and the next buy did not start a new one. The quantity warning still points at it.
+ * GET /api/portfolio gains closedPositions (ClosedPositionResponse): symbol, sector, dates, days held, quantity, average prices and realized P&L of every closed position, open and closed holdings alike.
+ * ClosedPositionsTable added (UI): a "Closed positions" section below Positions, newest sale first, with the realized P&L totaled per currency and "—" plus a hint where prices are missing.
+ * New tests: ClosedPositionTest for the math, HoldingHistoryTest for the split into periods, PortfolioReadServiceTest and PortfolioControllerTest for closedPositions in the JSON.
+ *
  * VERSION 0.9.0: [Reconciliation warnings]
  * HoldingHistory.warnings added: checks the trades entered against IB and returns the one gap to fix first — no buy entered, a closed holding with no sell, or a quantity other than IB's (0.0001 tolerance).
  * HoldingWarning / HoldingWarningType added (domain): sent as they are in a new warnings list on each holding in GET /api/portfolio; a warning never blocks a write, IB stays the source of truth.

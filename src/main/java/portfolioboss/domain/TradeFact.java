@@ -6,13 +6,20 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * One trade, reduced to just what {@link HoldingHistory} needs: no id, price or note. Built from a
+ * One trade, reduced to just what {@link HoldingHistory} needs: no id or note. Built from a
  * {@code TradeEntity} ({@code TradeEntity.toTradeFact()}) so this class stays free of JPA.
+ *
+ * @param price the price per share, or {@code null} if none was entered
  */
-public record TradeFact(LocalDate date, TradeSide side, BigDecimal quantity) {
+public record TradeFact(LocalDate date, TradeSide side, BigDecimal quantity, BigDecimal price) {
 
     /** The quantity as it changes the position: positive for a buy, negative for a sell. */
     public BigDecimal signedQuantity() {
         return side == TradeSide.BUY ? quantity : quantity.negate();
+    }
+
+    /** {@code quantity × price}, or {@code null} if no price was entered. */
+    public BigDecimal amount() {
+        return price == null ? null : quantity.multiply(price);
     }
 }

@@ -2,10 +2,8 @@ package portfolioboss.api.response;
 
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingStatus;
-import portfolioboss.db.TradeEntity;
 import portfolioboss.domain.HoldingHistory;
 import portfolioboss.domain.HoldingWarning;
-import portfolioboss.domain.TradeFact;
 import portfolioboss.model.Holding;
 import portfolioboss.utils.Utils;
 
@@ -47,9 +45,7 @@ public record HoldingResponse(
     /** {@code snapshotDate} is how far an still-{@code OPEN} holding's day count runs — see {@link HoldingHistory}. */
     protected static HoldingResponse from(HoldingEntity holdingEntity, LocalDate snapshotDate) {
         Holding holding = holdingEntity.toIbHolding();
-        List<TradeEntity> tradeEntities = holdingEntity.trades();
-        List<TradeFact> tradeFacts = tradeEntities.stream().map(TradeEntity::toTradeFact).toList();
-        HoldingHistory holdingHistory = HoldingHistory.of(tradeFacts);
+        HoldingHistory holdingHistory = holdingEntity.tradeHistory();
 
         return new HoldingResponse(
                 holding.symbol(),
@@ -71,7 +67,7 @@ public record HoldingResponse(
                 holdingHistory.firstBuyDate(),
                 holdingHistory.lastSellDate(),
                 holdingHistory.holdingDays(holdingEntity.status(), snapshotDate),
-                tradeEntities.stream().map(TradeResponse::new).toList(),
+                holdingEntity.trades().stream().map(TradeResponse::new).toList(),
                 holdingHistory.warnings(holdingEntity.status(), holding.position()));
     }
 }

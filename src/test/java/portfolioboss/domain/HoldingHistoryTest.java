@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /** Pure computation — no Spring, no database. Trades are entered here in whatever order the scenario reads best; {@link HoldingHistory#of} sorts them itself. */
 class HoldingHistoryTest {
@@ -46,7 +47,7 @@ class HoldingHistoryTest {
     }
 
     @Test
-    void aFullSellClosesTheEpisodeAndHoldingDaysRunsToTheSellDate() {
+    void aFullSellClosesThePositionPeriodAndHoldingDaysRunsToTheSellDate() {
         HoldingHistory history = HoldingHistory.of(List.of(
                 buy("2026-01-01", 10),
                 sell("2026-03-01", 10)));
@@ -56,7 +57,7 @@ class HoldingHistoryTest {
     }
 
     @Test
-    void sellingInFullAndBuyingAgainResetsTheEpisode() {
+    void sellingInFullAndBuyingAgainStartsANewPositionPeriod() {
         HoldingHistory history = HoldingHistory.of(List.of(
                 buy("2023-03-01", 10),
                 sell("2024-01-01", 10),
@@ -104,7 +105,7 @@ class HoldingHistoryTest {
     }
 
     @Test
-    void partialQuantitiesThatSumToZeroCloseTheEpisode() {
+    void partialQuantitiesThatSumToZeroCloseThePositionPeriod() {
         HoldingHistory history = HoldingHistory.of(List.of(
                 buy("2026-01-01", "10.5"),
                 sell("2026-02-01", "10.5")));
@@ -123,7 +124,7 @@ class HoldingHistoryTest {
     }
 
     @Test
-    void aSecondSellAfterTheEpisodeIsAlreadyFlatIsIgnoredByTheDates() {
+    void aSecondSellAfterThePositionIsAlreadyFlatIsIgnoredByTheDates() {
         // a duplicate/mistaken sell entry after the position was already fully sold
         HoldingHistory history = HoldingHistory.of(List.of(
                 buy("2026-01-01", 10),
@@ -218,12 +219,128 @@ class HoldingHistoryTest {
                 HoldingWarningType.QUANTITY_MISMATCH, "The trades entered add up to 2 shares; IB reports 5."));
     }
 
+    // ── closed positions ────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void aPositionStillHeldHasNoClosedPosition() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2026-01-01", 10, "150"),
+                sell("2026-02-01", 4, "160")));
+
+        assertThat(history.closedPositions()).isEmpty();
+    }
+
+    @Test
+    void aFullSellBecomesAClosedPositionWithItsTotals() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2024-03-01", 10, "150"),
+                sell("2025-06-01", 10, "180")));
+
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.openDate()).isEqualTo(LocalDate.of(2024, 3, 1));
+            assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2025, 6, 1));
+            assertThat(closedPosition.quantity()).isEqualByComparingTo("10");
+            assertThat(closedPosition.buyCost()).isEqualByComparingTo("1500");
+            assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("1800");
+        });
+    }
+
+    @Test
+    void buysAndPartialSellsUntilTheQuantityIsZeroAreOneClosedPosition() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2024-01-01", 10, "100"),
+                buy("2024-02-01", 10, "120"),
+                sell("2024-03-01", 5, "130"),
+                sell("2024-04-01", 15, "140")));
+
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.openDate()).isEqualTo(LocalDate.of(2024, 1, 1));
+            assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2024, 4, 1));
+            assertThat(closedPosition.quantity()).isEqualByComparingTo("20");
+            assertThat(closedPosition.buyCost()).isEqualByComparingTo("2200");        // 1,000 + 1,200
+            assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("2750");   // 650 + 2,100
+        });
+    }
+
+    @Test
+    void sellingInFullAndBuyingAgainLeavesOneClosedPositionAndTheDatesOfTheNewPeriod() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2024-03-01", 10, "150"),
+                sell("2025-06-01", 10, "180"),
+                buy("2026-02-01", 5, "200")));
+
+        assertThat(history.closedPositions())
+                .extracting(ClosedPosition::openDate, ClosedPosition::closeDate)
+                .containsExactly(tuple(LocalDate.of(2024, 3, 1), LocalDate.of(2025, 6, 1)));
+        assertThat(history.firstBuyDate()).isEqualTo(LocalDate.of(2026, 2, 1));
+        assertThat(history.lastSellDate()).isNull();
+    }
+
+    @Test
+    void eachFullSellClosesItsOwnPositionOldestFirst() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                sell("2025-03-01", 5, "90"),    // entered out of order on purpose
+                buy("2023-01-01", 10, "50"),
+                sell("2023-06-01", 10, "70"),
+                buy("2024-01-01", 5, "80")));
+
+        assertThat(history.closedPositions())
+                .extracting(ClosedPosition::openDate, ClosedPosition::closeDate)
+                .containsExactly(
+                        tuple(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 6, 1)),
+                        tuple(LocalDate.of(2024, 1, 1), LocalDate.of(2025, 3, 1)));
+    }
+
+    @Test
+    void aTradeWithNoPriceLeavesOnlyItsOwnSidesTotalUnknown() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2024-01-01", 10, "100"),
+                buy("2024-02-01", 10),           // no price entered
+                sell("2024-03-01", 20, "120")));
+
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.buyCost()).isNull();
+            assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("2400");
+        });
+    }
+
+    @Test
+    void sellingMoreThanWasBoughtStillClosesThePositionPeriod() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2024-01-01", 10, "100"),
+                sell("2024-06-01", 12, "120"),   // a data-entry mistake: 2 more than were bought
+                buy("2025-01-01", 5, "130")));
+
+        assertThat(history.closedPositions())
+                .extracting(ClosedPosition::closeDate)
+                .containsExactly(LocalDate.of(2024, 6, 1));
+        assertThat(history.firstBuyDate()).isEqualTo(LocalDate.of(2025, 1, 1));
+        assertThat(history.netQuantity()).isEqualByComparingTo("3");   // so the check against IB still shows it
+    }
+
+    @Test
+    void aSellWhileAlreadyFlatBelongsToNoClosedPosition() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2024-01-01", 10, "100"),
+                sell("2024-06-01", 10, "120"),
+                sell("2024-07-01", 3, "125")));   // entered by mistake: the position is already flat
+
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition ->
+                assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("1200"));
+    }
+
+    // ── helpers ─────────────────────────────────────────────────────────────────────────────────
+
     private TradeFact buy(String date, long quantity) {
         return buy(date, String.valueOf(quantity));
     }
 
     private TradeFact buy(String date, String quantity) {
-        return new TradeFact(LocalDate.parse(date), TradeSide.BUY, new BigDecimal(quantity));
+        return trade(date, TradeSide.BUY, quantity, null);
+    }
+
+    private TradeFact buy(String date, long quantity, String price) {
+        return trade(date, TradeSide.BUY, String.valueOf(quantity), price);
     }
 
     private TradeFact sell(String date, long quantity) {
@@ -231,6 +348,15 @@ class HoldingHistoryTest {
     }
 
     private TradeFact sell(String date, String quantity) {
-        return new TradeFact(LocalDate.parse(date), TradeSide.SELL, new BigDecimal(quantity));
+        return trade(date, TradeSide.SELL, quantity, null);
+    }
+
+    private TradeFact sell(String date, long quantity, String price) {
+        return trade(date, TradeSide.SELL, String.valueOf(quantity), price);
+    }
+
+    private TradeFact trade(String date, TradeSide side, String quantity, String price) {
+        BigDecimal priceOrNull = price == null ? null : new BigDecimal(price);
+        return new TradeFact(LocalDate.parse(date), side, new BigDecimal(quantity), priceOrNull);
     }
 }

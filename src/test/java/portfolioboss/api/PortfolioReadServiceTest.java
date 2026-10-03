@@ -8,6 +8,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.TradeResponse;
@@ -98,6 +99,7 @@ class PortfolioReadServiceTest {
         assertThat(holding.holdingDays()).isNull();
         assertThat(holding.trades()).isEmpty();
         assertThat(holding.warnings()).extracting(HoldingWarning::type).containsExactly(HoldingWarningType.NO_TRADES_LOGGED);
+        assertThat(portfolio.closedPositions()).isEmpty();
     }
 
     @Test
@@ -124,7 +126,7 @@ class PortfolioReadServiceTest {
     }
 
     @Test
-    void aFullSellClosesTheEpisodeSoHoldingDaysRunsToTheSellDateNotTheSnapshot() {
+    void aFullSellClosesThePositionPeriodSoHoldingDaysRunsToTheSellDateNotTheSnapshot() {
         syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0)));
         long appleHoldingId = holdingIdOf(APPLE_CON_ID);
         insertTrade(appleHoldingId, LocalDate.of(2024, 1, 1), TradeSide.BUY, "10", "150.00", null);
@@ -132,7 +134,8 @@ class PortfolioReadServiceTest {
         forgetWhatHibernateLoaded();
         syncService.sync(snapshotOf(SECOND_RUN, 100_000.0, 25_000.0));   // Apple is gone: CLOSED
 
-        HoldingResponse holding = readPortfolio().orElseThrow().holdings().get(0);
+        PortfolioResponse portfolio = readPortfolio().orElseThrow();
+        HoldingResponse holding = portfolio.holdings().get(0);
 
         assertThat(holding.status()).isEqualTo(HoldingStatus.CLOSED);
         assertThat(holding.firstBuyDate()).isEqualTo(LocalDate.of(2024, 1, 1));
@@ -140,6 +143,37 @@ class PortfolioReadServiceTest {
         assertThat(holding.holdingDays())
                 .isEqualTo(ChronoUnit.DAYS.between(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 6, 1)));
         assertThat(holding.trades()).hasSize(2);
+        assertThat(portfolio.closedPositions())
+                .extracting(ClosedPositionResponse::closeDate)
+                .containsExactly(LocalDate.of(2024, 6, 1));
+    }
+
+    @Test
+    void servesTheClosedPositionsOfAHoldingThatIsOpenAgain() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(5, 200.0)));
+        long appleHoldingId = holdingIdOf(APPLE_CON_ID);
+        jdbc.update("update holding set sector = ? where id = ?", "Technology", appleHoldingId);
+        insertTrade(appleHoldingId, LocalDate.of(2024, 3, 1), TradeSide.BUY, "10", "150.00", null);
+        insertTrade(appleHoldingId, LocalDate.of(2025, 6, 1), TradeSide.SELL, "10", "180.00", null);
+        insertTrade(appleHoldingId, LocalDate.of(2026, 2, 1), TradeSide.BUY, "5", "200.00", null);
+
+        PortfolioResponse portfolio = readPortfolio().orElseThrow();
+
+        assertThat(portfolio.holdings().get(0).status()).isEqualTo(HoldingStatus.OPEN);
+        assertThat(portfolio.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.holdingId()).isEqualTo(appleHoldingId);
+            assertThat(closedPosition.symbol()).isEqualTo("AAPL");
+            assertThat(closedPosition.currency()).isEqualTo("USD");
+            assertThat(closedPosition.sector()).isEqualTo("Technology");
+            assertThat(closedPosition.openDate()).isEqualTo(LocalDate.of(2024, 3, 1));
+            assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2025, 6, 1));
+            assertThat(closedPosition.holdingDays()).isEqualTo(457);
+            assertThat(closedPosition.quantity()).isEqualByComparingTo("10");
+            assertThat(closedPosition.averageBuyPrice()).isEqualByComparingTo("150");
+            assertThat(closedPosition.averageSellPrice()).isEqualByComparingTo("180");
+            assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("300");
+            assertThat(closedPosition.realizedPnlPercent()).isEqualByComparingTo("20");
+        });
     }
 
     @Test

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
+import { ClosedPositionsTable, RealizedPnlTotals } from './components/ClosedPositionsTable';
 import { needsAttention } from './components/HoldingWarnings';
 import { PositionsTable } from './components/PositionsTable';
 import { SummaryBar } from './components/SummaryBar';
 import { usePortfolio } from './hooks/usePortfolio';
-import type { Holding, PortfolioSnapshot } from './types/portfolio';
+import type { ClosedPosition, Holding, PortfolioSnapshot } from './types/portfolio';
 
 type LoadStatus = 'loading' | 'ready' | 'error';
 
@@ -126,6 +127,30 @@ function PositionsContent({
   return <PositionsTable holdings={visibleHoldings} onDataChanged={onDataChanged} />;
 }
 
+/** Every position bought and sold back to zero, from the trades entered: of closed holdings and open ones alike. */
+function ClosedPositionsSection({ closedPositions }: { closedPositions: ClosedPosition[] }) {
+  const hasClosedPositions = closedPositions.length > 0;
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-100">Closed positions</div>
+          <div className="mt-1 text-xs text-slate-400">Bought and sold back to zero, from the trades entered.</div>
+        </div>
+        {hasClosedPositions && <RealizedPnlTotals closedPositions={closedPositions} />}
+      </div>
+
+      <div className="mt-4">
+        {hasClosedPositions ? (
+          <ClosedPositionsTable closedPositions={closedPositions} />
+        ) : (
+          <EmptyBox message="None yet: a holding shows up here once its trades include a sell back to zero." />
+        )}
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const { snapshot, errorMessage, isLoading, reload } = usePortfolio();
   const [showClosed, setShowClosed] = useState(false);
@@ -179,6 +204,8 @@ function App() {
             />
           </div>
         </section>
+
+        {snapshot && <ClosedPositionsSection closedPositions={snapshot.closedPositions} />}
       </main>
     </div>
   );

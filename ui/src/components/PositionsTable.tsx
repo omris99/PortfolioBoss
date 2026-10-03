@@ -2,8 +2,6 @@ import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   formatDate,
-  formatDayCount,
-  formatHoldingPeriod,
   formatMoney,
   formatQuantity,
   formatSignedMoney,
@@ -11,6 +9,7 @@ import {
   profitLossColorClass,
 } from '../lib/format';
 import type { Holding } from '../types/portfolio';
+import { HoldingPeriod } from './HoldingPeriod';
 import { HoldingWarningIcon } from './HoldingWarnings';
 import { SECTOR_OPTIONS_LIST_ID, SectorCell } from './SectorCell';
 import { TradesPanel } from './TradesPanel';
@@ -120,12 +119,6 @@ function SymbolWithStatus({ holding }: { holding: Holding }) {
       <HoldingWarningIcon warnings={holding.warnings} />
     </span>
   );
-}
-
-/** Months are approximate in the short form, so hovering shows the exact number of days. */
-function HoldingPeriod({ days }: { days: number | null }) {
-  const exactDayCount = days === null ? undefined : formatDayCount(days);
-  return <span title={exactDayCount}>{formatHoldingPeriod(days)}</span>;
 }
 
 // The console report's columns in its order, with the sector after the symbol and the dates and

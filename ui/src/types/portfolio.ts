@@ -70,6 +70,30 @@ export interface Holding {
   warnings: HoldingWarning[];
 }
 
+/**
+ * A stretch of owning a holding, from a buy to the sell that brought it back to zero, derived by the API from the
+ * holding's trades. A figure that needs a price nobody entered is `null`.
+ */
+export interface ClosedPosition {
+  /** The holding whose trades it was derived from. */
+  holdingId: number;
+  symbol: string;
+  currency: string;
+  sector: string | null;
+  /** 'yyyy-MM-dd' */
+  openDate: string;
+  /** 'yyyy-MM-dd' */
+  closeDate: string;
+  holdingDays: number;
+  /** Every share bought between the two dates. */
+  quantity: number;
+  averageBuyPrice: number | null;
+  averageSellPrice: number | null;
+  realizedPnl: number | null;
+  /** Of the buy cost. */
+  realizedPnlPercent: number | null;
+}
+
 export interface PortfolioSnapshot {
   account: string;
   /** ISO-8601 instant of the last sync from TWS. */
@@ -77,4 +101,6 @@ export interface PortfolioSnapshot {
   netLiquidation: number | null;
   totalCashValue: number | null;
   holdings: Holding[];
+  /** From every holding, open or closed: one still open today may have been sold in full before. */
+  closedPositions: ClosedPosition[];
 }
