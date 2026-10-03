@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.11.0";
+    public static final String VERSION = "0.12.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,18 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.12.0: [Average cost, partial sells and manual positions]
+ * HoldingHistory: a period still held after a partial sell is now a closed position of the shares sold; before, only a sell back to zero counted. Tagged "partial · still holding N".
+ * ClosedPosition: the shares sold are measured at average cost (each costs the average of the shares held then, with its part of the buy commissions); a closed period adds up exactly.
+ * ClosedPositionResponse: quantity is now the shares sold, not bought; gains remainingQuantity and trades (the period's own trades); manualClosedPositionId becomes manualPositionId.
+ * V3 migration: manual_position replaces manual_closed_position; its buys and sells are trade rows (of a holding or a manual position, never both); each old row became one buy and one sell.
+ * ManualPositionWriteController replaces ClosedPositionWriteController: POST/PUT/DELETE /api/manual-positions and POST /api/manual-positions/{id}/trades; symbol and currency stored in capitals.
+ * HoldingWriteService: PUT/DELETE /api/trades/{id} also correct a manual position's trades; its last sell can be corrected but not deleted or turned into a buy (409), so the position never vanishes.
+ * Trade quantity must be a whole number: TradeRequest and NewManualPositionRequest reject 2.5 ("must be a whole number"), and the forms take whole numbers only; before, 6 decimal places passed.
+ * ClosedPositionsTable: a chevron opens each row's trades, read-only for a holding and editable for a manual position (details, delete, add/edit/delete trades); the row's own edit/delete are gone.
+ * NewManualPositionForm replaces ManualClosedPositionForm, with a commission for the buy and for the sell; TradeForm and TradesPanel now serve a holding or a manual position alike.
+ * New tests: ManualPositionWriteControllerTest and ManualPositionWriteServiceTest replace the ClosedPositionWrite tests; average cost and partial sells in ClosedPositionTest and HoldingHistoryTest.
+ *
  * VERSION 0.11.0: [Commissions and manual closed positions]
  * Trades gain a commission: optional when entered; without one the default for an order is stored, 1 cent a share with a $5 minimum (Utils.calculateOrderCommission, IBBot's rule).
  * V2 migration adds trade.commission and gives the trades entered before it the same default, so the column is never empty.

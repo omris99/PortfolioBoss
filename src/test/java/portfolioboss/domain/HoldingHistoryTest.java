@@ -222,12 +222,65 @@ class HoldingHistoryTest {
     // ── closed positions ────────────────────────────────────────────────────────────────────────
 
     @Test
-    void aPositionStillHeldHasNoClosedPosition() {
+    void aPositionNeverSoldHasNoClosedPosition() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2026-01-01", 10, "150"),
+                buy("2026-02-01", 5, "160")));
+
+        assertThat(history.closedPositions()).isEmpty();
+    }
+
+    @Test
+    void aPartialSellIsAClosedPositionOfTheSharesSoldWithTheRestStillHeld() {
         HoldingHistory history = HoldingHistory.of(List.of(
                 buy("2026-01-01", 10, "150"),
                 sell("2026-02-01", 4, "160")));
 
-        assertThat(history.closedPositions()).isEmpty();
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.openDate()).isEqualTo(LocalDate.of(2026, 1, 1));
+            assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2026, 2, 1));
+            assertThat(closedPosition.boughtQuantity()).isEqualByComparingTo("10");
+            assertThat(closedPosition.soldQuantity()).isEqualByComparingTo("4");
+            assertThat(closedPosition.soldCost()).isEqualByComparingTo("600");       // 4 × 150
+            assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("640");   // 4 × 160
+            assertThat(closedPosition.remainingQuantity()).isEqualByComparingTo("6");
+        });
+    }
+
+    /** The plan's example (decision 9): the 10 sold cost the average of all 20 held, 150 — not the first 10's 100. */
+    @Test
+    void sharesSoldCostTheAverageOfTheSharesHeldAtTheTime() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2026-01-01", 10, "100"),
+                buy("2026-03-01", 10, "200"),
+                sell("2026-05-01", 10, "180")));
+
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.soldCost()).isEqualByComparingTo("1500");
+            assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("300");
+            assertThat(closedPosition.remainingQuantity()).isEqualByComparingTo("10");
+        });
+    }
+
+    /**
+     * The first sell takes half the cost (500); the 5 left and the 10 bought after it then average 166.67, and the last
+     * sell takes all that is left (2,500) — the same total as all the proceeds less all the cost, with no rounding.
+     */
+    @Test
+    void aBuyBetweenTwoSellsChangesTheAverageOfTheSecond() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2024-01-01", 10, "100"),
+                sell("2024-02-01", 5, "150"),
+                buy("2024-03-01", 10, "200"),
+                sell("2024-04-01", 15, "180")));
+
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.soldQuantity()).isEqualByComparingTo("20");
+            assertThat(closedPosition.soldCost()).isEqualByComparingTo("3000");   // exactly, not 2999.99…
+            assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("3450");
+            assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("450");
+            assertThat(closedPosition.remainingQuantity()).isEqualByComparingTo("0");
+        });
     }
 
     @Test
@@ -239,9 +292,10 @@ class HoldingHistoryTest {
         assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
             assertThat(closedPosition.openDate()).isEqualTo(LocalDate.of(2024, 3, 1));
             assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2025, 6, 1));
-            assertThat(closedPosition.quantity()).isEqualByComparingTo("10");
-            assertThat(closedPosition.buyCost()).isEqualByComparingTo("1500");
+            assertThat(closedPosition.boughtQuantity()).isEqualByComparingTo("10");
+            assertThat(closedPosition.soldCost()).isEqualByComparingTo("1500");
             assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("1800");
+            assertThat(closedPosition.remainingQuantity()).isEqualByComparingTo("0");
         });
     }
 
@@ -256,9 +310,9 @@ class HoldingHistoryTest {
         assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
             assertThat(closedPosition.openDate()).isEqualTo(LocalDate.of(2024, 1, 1));
             assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2024, 4, 1));
-            assertThat(closedPosition.quantity()).isEqualByComparingTo("20");
+            assertThat(closedPosition.boughtQuantity()).isEqualByComparingTo("20");
             assertThat(closedPosition.soldQuantity()).isEqualByComparingTo("20");    // 5 + 15
-            assertThat(closedPosition.buyCost()).isEqualByComparingTo("2200");        // 1,000 + 1,200
+            assertThat(closedPosition.soldCost()).isEqualByComparingTo("2200");       // 1,000 + 1,200
             assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("2750");   // 650 + 2,100
         });
     }
@@ -300,8 +354,22 @@ class HoldingHistoryTest {
                 sell("2024-03-01", 20, "120")));
 
         assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
-            assertThat(closedPosition.buyCost()).isNull();
+            assertThat(closedPosition.soldCost()).isNull();
             assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("2400");
+        });
+    }
+
+    /** The shares sold left before the buy with no price came in, so what they cost is still known. */
+    @Test
+    void aBuyWithNoPriceAfterAPartialSellLeavesWhatWasSoldKnown() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2024-01-01", 10, "100"),
+                sell("2024-02-01", 5, "150"),
+                buy("2024-03-01", 5)));          // no price entered
+
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.soldCost()).isEqualByComparingTo("500");
+            assertThat(closedPosition.remainingQuantity()).isEqualByComparingTo("10");
         });
     }
 
@@ -314,8 +382,9 @@ class HoldingHistoryTest {
 
         assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
             assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2024, 6, 1));
-            assertThat(closedPosition.quantity()).isEqualByComparingTo("10");
+            assertThat(closedPosition.boughtQuantity()).isEqualByComparingTo("10");
             assertThat(closedPosition.soldQuantity()).isEqualByComparingTo("12");
+            assertThat(closedPosition.soldCost()).isEqualByComparingTo("1000");   // all that was bought
             assertThat(closedPosition.soldMoreThanBought()).isTrue();
         });
         assertThat(history.firstBuyDate()).isEqualTo(LocalDate.of(2025, 1, 1));
@@ -334,6 +403,17 @@ class HoldingHistoryTest {
                 assertThat(closedPosition.commissions()).isEqualByComparingTo("17.10"));
     }
 
+    /** Selling 4 of 10 takes 4/10 of the $5 paid to buy them, with all of its own $5. */
+    @Test
+    void aPartialSellTakesItsShareOfTheBuyCommissions() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                trade("2024-01-01", TradeSide.BUY, "10", "100", "5"),
+                trade("2024-02-01", TradeSide.SELL, "4", "150", "5")));
+
+        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition ->
+                assertThat(closedPosition.commissions()).isEqualByComparingTo("7"));
+    }
+
     @Test
     void aSellWhileAlreadyFlatBelongsToNoClosedPosition() {
         HoldingHistory history = HoldingHistory.of(List.of(
@@ -345,7 +425,25 @@ class HoldingHistoryTest {
                 assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("1200"));
     }
 
+    /** Ids in the order the trades are created here: 1, 2, 3 (the sell while flat), 4, 5. */
+    @Test
+    void eachClosedPositionListsTheTradesOfItsPeriod() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2024-01-01", 10, "100"),
+                sell("2024-06-01", 10, "120"),
+                sell("2024-07-01", 3, "125"),     // belongs to no period
+                buy("2025-01-01", 5, "130"),
+                sell("2025-02-01", 3, "140")));   // a partial sell: the period is still open
+
+        assertThat(history.closedPositions())
+                .extracting(ClosedPosition::tradeIds)
+                .containsExactly(List.of(1L, 2L), List.of(4L, 5L));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
+
+    /** Each trade gets the next id, in the order a test creates them; JUnit makes a new instance for every test. */
+    private long nextTradeId = 1;
 
     private TradeFact buy(String date, long quantity) {
         return buy(date, String.valueOf(quantity));
@@ -378,7 +476,7 @@ class HoldingHistoryTest {
 
     private TradeFact trade(String date, TradeSide side, String quantity, String price, String commission) {
         BigDecimal priceOrNull = price == null ? null : new BigDecimal(price);
-        return new TradeFact(LocalDate.parse(date), side, new BigDecimal(quantity), priceOrNull,
+        return new TradeFact(nextTradeId++, LocalDate.parse(date), side, new BigDecimal(quantity), priceOrNull,
                 new BigDecimal(commission));
     }
 }

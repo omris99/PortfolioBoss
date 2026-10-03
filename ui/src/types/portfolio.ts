@@ -7,7 +7,7 @@
 export type HoldingStatus = 'OPEN' | 'CLOSED';
 export type TradeSide = 'BUY' | 'SELL';
 export type HoldingWarningType = 'NO_TRADES_LOGGED' | 'CLOSED_WITHOUT_SELL' | 'QUANTITY_MISMATCH';
-/** `TRADES`: derived from a holding's trades, corrected through them. `MANUAL`: one row entered by hand. */
+/** `TRADES`: a holding's trades, corrected in Positions. `MANUAL`: a manual position's, corrected where it is shown. */
 export type ClosedPositionSource = 'TRADES' | 'MANUAL';
 
 /** A gap between the trades entered and what IB reports. It never blocks anything. */
@@ -44,24 +44,29 @@ export interface TradeRequest {
 }
 
 /**
- * The body of `POST /api/manual-closed-positions` and `PUT /api/manual-closed-positions/{id}`: a whole round trip — one
- * buy and one sell — as the user typed it.
+ * The body of `PUT /api/manual-positions/{id}`: a manual position's own details — a position PortfolioBoss never saw
+ * as a holding, sold before the first sync. Its buys and sells are changed like any trade.
  */
-export interface ManualClosedPositionRequest {
+export interface ManualPositionRequest {
   symbol: string;
   currency: string;
   sector: string | null;
-  /** Greater than 0. */
+  note: string | null;
+}
+
+/** The body of `POST /api/manual-positions`: a new manual position with its first buy and its first sell. */
+export interface NewManualPositionRequest extends ManualPositionRequest {
+  /** Greater than 0; bought and then sold. */
   quantity: number;
   /** 'yyyy-MM-dd', not in the future. */
   buyDate: string;
   buyPrice: number;
+  /** `null` stores the default for that order. */
+  buyCommission: number | null;
   /** 'yyyy-MM-dd', not in the future and not before `buyDate`. */
   sellDate: string;
   sellPrice: number;
-  /** Of the buy and the sell together; `null` stores the default for both orders. */
-  commission: number | null;
-  note: string | null;
+  sellCommission: number | null;
 }
 
 export interface Holding {
@@ -98,11 +103,12 @@ export interface Holding {
 }
 
 /**
- * A stretch of owning a stock, from a buy to the sell that brought it back to zero: derived by the API from a holding's
- * trades, or entered by hand as one row (`source`). A figure that needs a price nobody entered is `null`.
+ * The shares sold in one stretch of owning a stock, at average cost: a stretch a sell brought back to zero, or one still
+ * held that has had a sell already (`remainingQuantity` above 0). Derived by the API from the trades of a holding or of
+ * a manual position (`source`). A figure that needs a price nobody entered is `null`.
  */
 export interface ClosedPosition {
-  /** The holding whose trades it was derived from; `null` for a row entered by hand. */
+  /** The holding whose trades it was derived from; `null` for a manual position. */
   holdingId: number | null;
   symbol: string;
   currency: string;
@@ -112,8 +118,9 @@ export interface ClosedPosition {
   /** 'yyyy-MM-dd' */
   closeDate: string;
   holdingDays: number;
-  /** Every share bought between the two dates. */
+  /** The shares sold so far. */
   quantity: number;
+  /** What the shares sold cost on average. */
   averageBuyPrice: number | null;
   averageSellPrice: number | null;
   realizedPnl: number | null;
@@ -124,10 +131,14 @@ export interface ClosedPosition {
   /** Of every buy and sell in it, already taken off `realizedPnl`. */
   commissions: number;
   source: ClosedPositionSource;
-  /** The row to edit or delete when `MANUAL`; `null` otherwise. */
-  manualClosedPositionId: number | null;
-  /** The row's note when `MANUAL`; `null` otherwise. */
+  /** The manual position it comes from, when `MANUAL`; `null` otherwise. */
+  manualPositionId: number | null;
+  /** The manual position's note; `null` for a holding, whose notes are on its trades. */
   note: string | null;
+  /** Still held: 0 once a sell brought the stretch back to zero. */
+  remainingQuantity: number;
+  /** Every trade of the stretch, by date. */
+  trades: Trade[];
 }
 
 export interface PortfolioSnapshot {

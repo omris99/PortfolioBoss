@@ -166,7 +166,7 @@ class PortfolioReadServiceTest {
         assertThat(portfolio.closedPositions()).singleElement().satisfies(closedPosition -> {
             assertThat(closedPosition.source()).isEqualTo(ClosedPositionSource.TRADES);
             assertThat(closedPosition.holdingId()).isEqualTo(appleHoldingId);
-            assertThat(closedPosition.manualClosedPositionId()).isNull();
+            assertThat(closedPosition.manualPositionId()).isNull();
             assertThat(closedPosition.symbol()).isEqualTo("AAPL");
             assertThat(closedPosition.currency()).isEqualTo("USD");
             assertThat(closedPosition.sector()).isEqualTo("Technology");
@@ -182,6 +182,32 @@ class PortfolioReadServiceTest {
             assertThat(closedPosition.realizedPnlPercent()).isEqualByComparingTo("19.33333333333333");
             assertThat(closedPosition.warning()).isNull();
             assertThat(closedPosition.note()).isNull();
+            assertThat(closedPosition.remainingQuantity()).isEqualByComparingTo("0");
+            // the buy and the sell of this period — not the 2026 buy, which opened the next one
+            assertThat(closedPosition.trades())
+                    .extracting(TradeResponse::tradeDate)
+                    .containsExactly(LocalDate.of(2024, 3, 1), LocalDate.of(2025, 6, 1));
+        });
+    }
+
+    @Test
+    void aPartialSellOfAHoldingStillOpenIsServedWithWhatIsStillHeld() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 100.0)));
+        long appleHoldingId = holdingIdOf(APPLE_CON_ID);
+        insertTrade(appleHoldingId, LocalDate.of(2024, 1, 1), TradeSide.BUY, "15", "100.00", null);
+        insertTrade(appleHoldingId, LocalDate.of(2024, 6, 1), TradeSide.SELL, "5", "130.00", null);
+
+        PortfolioResponse portfolio = readPortfolio().orElseThrow();
+
+        assertThat(portfolio.holdings().get(0).status()).isEqualTo(HoldingStatus.OPEN);
+        assertThat(portfolio.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.quantity()).isEqualByComparingTo("5");
+            assertThat(closedPosition.averageBuyPrice()).isEqualByComparingTo("100");
+            assertThat(closedPosition.averageSellPrice()).isEqualByComparingTo("130");
+            assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("150");
+            assertThat(closedPosition.remainingQuantity()).isEqualByComparingTo("10");
+            assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2024, 6, 1));
+            assertThat(closedPosition.trades()).hasSize(2);
         });
     }
 

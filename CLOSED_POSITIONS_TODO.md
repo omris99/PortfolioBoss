@@ -179,6 +179,15 @@ Controller (קודי סטטוס, ולידציה, JSON בלבד) ו-Service (מה
 
 > **המטרה:** כל סבב שיש בו מכירה הוא שורה — גם אם עוד מחזיקים חלק ממנו — עם עלות ממוצעת; ועסקה ידנית הופכת לפוזיציה ידנית עם קניות
 > ומכירות משלה. **לפני שמתחילים (הצעה, ההחלטה של עומרי):** commit לסשנים 2–3 כפי שהם, כדי שהשינוי הזה יהיה שלב נפרד.
+>
+> **סטטוס (03.10.2026):** 4.1–4.5 נבנו על `maven-spring-boot` (אחרי b4daeab + 634f1b8), עדיין לא committed. `mvn -q test` ירוק — 131 בדיקות.
+> V3 נבדקה על DB זמני עם עותק של הנתונים האמיתיים (5 הפוזיציות עם אותם ids, 10 עסקאות ידניות עם 5 + 5 עמלה, עסקאות ההחזקות לא נגעו,
+> ה-id הבא 7), ורצה על `portfolioboss_test`. **על `portfolioboss` היא תרוץ ב-`./run.sh` הבא — לגבות קודם.** ⚠️ עד סשן 5 ה-UI עדיין
+> קורא ל-`/api/manual-closed-positions` ול-`manualClosedPositionId`: הטבלה מוצגת, אבל הטופס והכפתורים של שורה ידנית לא עובדים.
+> שמות שלא היו בתוכנית: `NewManualPositionRequest` (POST — פרטים, וקנייה ומכירה ראשונות), `ManualPositionRequest` (PUT), `ManualPositionResponse`
+> (התשובה ל-POST, עם ה-id), `Utils.commissionOrDefault` (עבר מ-`HoldingWriteService`, שני ה-services צריכים אותו), `AverageCostCalculator`
+> (מחלקה פנימית ב-`HoldingHistory`; השם "ledger" נדחה). הודעת מכירת היתר אומרת עכשיו "check its trades" — נכון גם לפוזיציה ידנית.
+> מחיקת פוזיציה ידנית מוחקת את העסקאות שלה בקוד, לא רק דרך `ON DELETE CASCADE`.
 
 ### 4.1 🔴 מיגרציה `V3__manual_positions.sql`
 
@@ -253,14 +262,20 @@ DROP TABLE manual_closed_position;
 
 ## סשן 5 — UI: שורה שנפתחת, partial, פוזיציה ידנית
 
+> **סטטוס (03.10.2026):** נבנה, עדיין לא committed (יחד עם סשן 4). `npm run build` ירוק; רינדור בצד השרת של האזור (שורה סגורה, partial,
+> ידנית), של הפאנל של פוזיציה ידנית ושל טופס ההוספה. ⬜ בדיקה בדפדפן — בידי עומרי (`./run.sh` הבא מריץ את V3 על ה-DB האמיתי — לגבות קודם).
+> מבנה: `TradeForm` / `TradesPanel` מקבלים `owner` (`TradeOwner`: החזקה או פוזיציה ידנית) במקום `holding` — אותו פאנל ב-Positions ובשורה
+> הפתוחה; `TradesPanel` מייצא `TradeList` (בלי כפתורים = לקריאה בלבד, לשורה של החזקה). `ManualPositionForms.tsx` (`NewManualPositionForm`,
+> `ManualPositionDetailsForm`) החליף את `ManualClosedPositionForm.tsx`; `ManualPositionPanel.tsx` חדש; `ExpandRowButton.tsx` משותף לשתי
+> הטבלאות. השורה הפתוחה של פוזיציה ידנית נשארת פתוחה גם כשקנייה מוקדמת משנה את תאריך הקנייה שלה.
+
 - **שורה שנפתחת** (חץ, כמו ב-Positions) ← העסקאות של הסבב: תאריך, צד, כמות, מחיר, עמלה, הערה.
   - החזקה: לקריאה בלבד, עם הסבר שעורכים ב-Positions.
   - פוזיציה ידנית: עריכה, מחיקה והוספה של עסקאות (`TradeForm` מוכלל — הוספה לפי בעלים, החזקה או פוזיציה ידנית), עריכת Symbol / Currency /
     Sector / Note, ו"Delete position". ה-✏️/🗑 שבשורה עוברים לשם.
 - תגית **partial · still holding N** בשורה של סבב פתוח; כותרת Qty ← "Qty sold".
 - **"+ Add closed position"** יוצר פוזיציה ידנית: Symbol, Currency, Sector, Note, Quantity, וקנייה ומכירה (תאריך, מחיר, עמלה לכל אחת).
-- ⬜ **באג פתוח מסשן 3:** הקלדת תאריך ידנית (לא דרך לוח השנה) בטופס העסקה הסגורה לא עובדת — לשחזר ולתקן (חשוד: `min`/`max` שמשתנים לפי
-  התאריך השני).
+- ~~באג הקלדת תאריך ידנית~~ — עומרי בדק שוב (03.10.2026): אין באג, הכול בסדר.
 
 ---
 

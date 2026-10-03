@@ -16,8 +16,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * One row of the {@code trade} table: a buy or sell the user entered by hand. The buy date, sell date
- * and holding period of a holding are derived from these, so they are never stored twice.
+ * One row of the {@code trade} table: a buy or sell the user entered by hand, for a holding or for a manual position —
+ * never both, which the table checks. The buy date, sell date, holding period and closed positions are derived from
+ * these, so they are never stored twice.
  *
  * <p>{@code created_at} is filled by the database default and is not mapped.
  */
@@ -29,10 +30,15 @@ public class TradeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** LAZY: loading a trade does not also load its holding until something asks for it. */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    /** LAZY: loading a trade does not also load its holding until something asks for it. {@code null} if manual. */
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "holding_id")
     private HoldingEntity holding;
+
+    /** The manual position it belongs to, or {@code null} for a holding's trade. LAZY too. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "manual_position_id")
+    private ManualPositionEntity manualPosition;
 
     private LocalDate tradeDate;
 
@@ -55,6 +61,13 @@ public class TradeEntity {
     public TradeEntity(HoldingEntity holding, LocalDate tradeDate, TradeSide side, BigDecimal quantity,
                        BigDecimal price, String note, BigDecimal commission) {
         this.holding = holding;
+        changeDetails(tradeDate, side, quantity, price, note, commission);
+    }
+
+    /** A trade the user entered for {@code manualPosition}. {@code price} and {@code note} may be {@code null}. */
+    public TradeEntity(ManualPositionEntity manualPosition, LocalDate tradeDate, TradeSide side, BigDecimal quantity,
+                       BigDecimal price, String note, BigDecimal commission) {
+        this.manualPosition = manualPosition;
         changeDetails(tradeDate, side, quantity, price, note, commission);
     }
 
@@ -97,8 +110,13 @@ public class TradeEntity {
         return commission;
     }
 
-    /** Reduced to just the date, side, quantity, price and commission that {@link portfolioboss.domain.HoldingHistory} needs. */
+    /** {@code null} for a holding's trade. */
+    public ManualPositionEntity manualPosition() {
+        return manualPosition;
+    }
+
+    /** Reduced to what {@link portfolioboss.domain.HoldingHistory} needs: the id, date, side, amounts and commission. */
     public TradeFact toTradeFact() {
-        return new TradeFact(tradeDate, side, quantity, price, commission);
+        return new TradeFact(id, tradeDate, side, quantity, price, commission);
     }
 }

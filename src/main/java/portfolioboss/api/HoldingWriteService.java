@@ -9,14 +9,15 @@ import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.TradeResponse;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
+import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.TradeEntity;
 import portfolioboss.db.TradeRepository;
+import portfolioboss.db.TradeSide;
 import portfolioboss.utils.Utils;
 
-import java.math.BigDecimal;
-
 /**
- * Stores what the user enters by hand — a holding's sector and its trades — in PortfolioBoss's own database. The
+ * Stores what the user enters by hand — a holding's sector and its trades — in PortfolioBoss's own database, and
+ * corrects or deletes any trade, a manual position's too ({@link ManualPositionWriteService} adds those). The
  * write-side twin of {@link PortfolioReadService}. It never creates or deletes a holding: holdings come only from the
  * sync. Each method is one transaction; the request was already validated by the controller ({@code @Valid}).
  *
@@ -45,23 +46,52 @@ public class HoldingWriteService {
         HoldingEntity holding = findHolding(holdingId);
         TradeEntity newTrade = new TradeEntity(holding, tradeRequest.tradeDate(), tradeRequest.side(),
                 tradeRequest.quantity(), tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()),
-                commissionOrDefault(tradeRequest));
+                Utils.commissionOrDefault(tradeRequest.commission(), tradeRequest.quantity()));
         TradeEntity savedTrade = tradeRepository.save(newTrade);   // inserted right away, so it already has its id
         return new TradeResponse(savedTrade);
     }
 
-    /** Without a commission, the default is worked out again from the quantity now entered. */
+    /**
+     * Any trade, a holding's or a manual position's. Without a commission, the default is worked out again from the
+     * quantity now entered. The last sell of a manual position may be corrected, but not turned into a buy.
+     */
     @Transactional
     public TradeResponse changeTrade(long tradeId, TradeRequest tradeRequest) {
         TradeEntity trade = findTrade(tradeId);
+        if (tradeRequest.side() == TradeSide.BUY) {
+            refuseToRemoveTheLastSellOfAManualPosition(trade);
+        }
         trade.changeDetails(tradeRequest.tradeDate(), tradeRequest.side(), tradeRequest.quantity(),
-                tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()), commissionOrDefault(tradeRequest));
+                tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()),
+                Utils.commissionOrDefault(tradeRequest.commission(), tradeRequest.quantity()));
         return new TradeResponse(trade);
     }
 
+    /** Any trade, a holding's or a manual position's — except the last sell of a manual position. */
     @Transactional
     public void deleteTrade(long tradeId) {
-        tradeRepository.delete(findTrade(tradeId));
+        TradeEntity trade = findTrade(tradeId);
+        refuseToRemoveTheLastSellOfAManualPosition(trade);
+        tradeRepository.delete(trade);
+    }
+
+    /**
+     * A manual position shows up only through its sells: without one it would vanish from the closed positions, trades
+     * and all. So its last sell can be corrected but not deleted or turned into a buy — the whole position is deleted
+     * instead. 409 Conflict: the request is valid, but not for the position as it stands.
+     */
+    private void refuseToRemoveTheLastSellOfAManualPosition(TradeEntity trade) {
+        ManualPositionEntity manualPosition = trade.manualPosition();
+        if (manualPosition == null || trade.side() != TradeSide.SELL) {
+            return;
+        }
+        long sellCount = manualPosition.trades().stream()
+                .filter(positionTrade -> positionTrade.side() == TradeSide.SELL)
+                .count();
+        if (sellCount <= 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This is the last sell of a manual position: it "
+                    + "can be corrected, but not deleted or turned into a buy. Delete the whole position instead.");
+        }
     }
 
     private HoldingEntity findHolding(long holdingId) {
@@ -76,13 +106,5 @@ public class HoldingWriteService {
 
     private ResponseStatusException notFound(String message) {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
-    }
-
-    /** The commission entered — 0 included — or, when none was, the default for one order of this many shares. */
-    private BigDecimal commissionOrDefault(TradeRequest tradeRequest) {
-        if (tradeRequest.commission() != null) {
-            return tradeRequest.commission();
-        }
-        return Utils.calculateOrderCommission(tradeRequest.quantity());
     }
 }

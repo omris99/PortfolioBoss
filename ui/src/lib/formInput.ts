@@ -16,6 +16,12 @@ export function isBlank(typedText: string): boolean {
   return typedText.trim() === '';
 }
 
+/** A quantity of shares: a whole number greater than 0, as the API requires. "2.5", "0" and "" are not. */
+export function isPositiveWholeNumber(typedText: string): boolean {
+  const typedNumber = Number(typedText);
+  return !isBlank(typedText) && Number.isInteger(typedNumber) && typedNumber > 0;
+}
+
 /** The number typed, or `null` when the input was left empty. */
 export function numberOrNull(typedText: string): number | null {
   return isBlank(typedText) ? null : Number(typedText);

@@ -6,9 +6,9 @@ package portfolioboss.api.response;
  */
 public enum ClosedPositionSource {
 
-    /** Derived from a holding's trades: a position period a sell brought back to zero. Corrected through its trades. */
+    /** Derived from a holding's trades, which are corrected in the positions table. */
     TRADES,
 
-    /** Entered by hand as one row ({@code manual_closed_position}), and edited or deleted as that row. */
+    /** Derived from the trades of a manual position ({@code manual_position}), corrected where it is shown. */
     MANUAL
 }

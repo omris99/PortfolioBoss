@@ -40,6 +40,11 @@ public final class Utils {
                 .setScale(2, RoundingMode.HALF_UP);
     }
 
+    /** The commission entered for an order — 0 included — or, when none was, the default for this many shares. */
+    public static BigDecimal commissionOrDefault(BigDecimal enteredCommission, BigDecimal quantity) {
+        return enteredCommission != null ? enteredCommission : calculateOrderCommission(quantity);
+    }
+
     /** Surrounding spaces are dropped, and text that is then empty becomes {@code null}: nothing was entered. */
     public static String trimmedOrNull(String typedText) {
         if (typedText == null || typedText.isBlank()) {

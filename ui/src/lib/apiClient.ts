@@ -1,4 +1,4 @@
-import type { ManualClosedPositionRequest, TradeRequest } from '../types/portfolio';
+import type { ManualPositionRequest, NewManualPositionRequest, TradeRequest } from '../types/portfolio';
 
 /** A write the API refused or could not be reached for; `message` is meant to be shown to the user as it is. */
 export class ApiError extends Error {}
@@ -26,19 +26,22 @@ export function deleteTrade(tradeId: number): Promise<void> {
   return sendJson('DELETE', `/api/trades/${tradeId}`);
 }
 
-export function addManualClosedPosition(closedPosition: ManualClosedPositionRequest): Promise<void> {
-  return sendJson('POST', '/api/manual-closed-positions', closedPosition);
+export function addManualPosition(manualPosition: NewManualPositionRequest): Promise<void> {
+  return sendJson('POST', '/api/manual-positions', manualPosition);
 }
 
-export function changeManualClosedPosition(
-  manualClosedPositionId: number,
-  closedPosition: ManualClosedPositionRequest,
-): Promise<void> {
-  return sendJson('PUT', `/api/manual-closed-positions/${manualClosedPositionId}`, closedPosition);
+export function changeManualPosition(manualPositionId: number, details: ManualPositionRequest): Promise<void> {
+  return sendJson('PUT', `/api/manual-positions/${manualPositionId}`, details);
 }
 
-export function deleteManualClosedPosition(manualClosedPositionId: number): Promise<void> {
-  return sendJson('DELETE', `/api/manual-closed-positions/${manualClosedPositionId}`);
+/** Its trades go with it. */
+export function deleteManualPosition(manualPositionId: number): Promise<void> {
+  return sendJson('DELETE', `/api/manual-positions/${manualPositionId}`);
+}
+
+/** A manual position's trades are then corrected and deleted like any trade: `changeTrade`, `deleteTrade`. */
+export function addManualPositionTrade(manualPositionId: number, trade: TradeRequest): Promise<void> {
+  return sendJson('POST', `/api/manual-positions/${manualPositionId}/trades`, trade);
 }
 
 /**

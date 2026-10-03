@@ -4,6 +4,7 @@ import portfolioboss.db.HoldingStatus;
 import portfolioboss.db.TradeSide;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -24,8 +25,8 @@ import java.util.List;
  * @param lastSellDate    the last sell in that same period, or {@code null} if none
  * @param netQuantity     buys minus sells over every trade entered, for the check against IB's own figure
  *                        ({@link #warnings}) — including a sell the dates ignore, so that the check still shows it
- * @param closedPositions every position period a sell brought back to zero, oldest first — the current one too, if
- *                        it is
+ * @param closedPositions the shares sold in every position period that has a sell, oldest first: each one a sell
+ *                        brought back to zero, and the current one too if it has had a sell — at average cost
  */
 public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, BigDecimal netQuantity,
                              List<ClosedPosition> closedPositions) {
@@ -44,10 +45,13 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
      */
     private static final BigDecimal QUANTITY_TOLERANCE = new BigDecimal("0.0001");
 
+    /** 16 significant digits, as in {@link ClosedPosition}: the part of the cost that leaves with a partial sell. */
+    private static final MathContext DIVISION_PRECISION = MathContext.DECIMAL64;
+
     /**
      * Sorts the trades chronologically (a buy before a sell on the same date, so the two never cancel out purely
      * because of entry order) and splits them into position periods ({@link #positionPeriodsOf}). The dates come from
-     * the last period, the closed positions from every period a sell finished. A sell while already flat is a
+     * the last period, the closed positions from every period that has a sell. A sell while already flat is a
      * data-entry mistake and belongs to no period, on the assumption the matching buy simply hasn't been entered
      * yet — the server never rejects it, and {@code netQuantity} still counts it, so the check against IB points at it.
      */
@@ -60,7 +64,7 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         List<PositionPeriod> positionPeriods = positionPeriodsOf(tradesInDateOrder);
         List<ClosedPosition> closedPositions = positionPeriods.stream()
-                .filter(PositionPeriod::isClosed)
+                .filter(PositionPeriod::hasSell)
                 .map(PositionPeriod::toClosedPosition)
                 .toList();
 
@@ -174,37 +178,94 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
             return sells.isEmpty() ? null : sells.getLast().date();
         }
 
-        private ClosedPosition toClosedPosition() {
-            List<TradeFact> buys = tradesOnSide(TradeSide.BUY);
-            List<TradeFact> sells = tradesOnSide(TradeSide.SELL);
-            return new ClosedPosition(firstBuyDate(), lastSellDate(), totalQuantity(buys), totalQuantity(sells),
-                    totalAmount(buys), totalAmount(sells), totalCommissions());
+        /** Only a period with a sell has realized anything: one still open with a partial sell too. */
+        private boolean hasSell() {
+            return lastSellDate() != null;
         }
 
-        /** Of every buy and sell of the period alike. */
-        private BigDecimal totalCommissions() {
-            return trades.stream().map(TradeFact::commission).reduce(BigDecimal.ZERO, BigDecimal::add);
+        private ClosedPosition toClosedPosition() {
+            AverageCostCalculator averageCostCalculator = new AverageCostCalculator();
+            for (TradeFact trade : trades) {
+                if (trade.side() == TradeSide.BUY) {
+                    averageCostCalculator.addBuy(trade);
+                } else {
+                    averageCostCalculator.addSell(trade);
+                }
+            }
+            List<Long> tradeIds = trades.stream().map(TradeFact::id).toList();
+            return averageCostCalculator.toClosedPosition(firstBuyDate(), lastSellDate(), isClosed, tradeIds);
         }
 
         private List<TradeFact> tradesOnSide(TradeSide side) {
             return trades.stream().filter(trade -> trade.side() == side).toList();
         }
+    }
 
-        private BigDecimal totalQuantity(List<TradeFact> sameSideTrades) {
-            return sameSideTrades.stream().map(TradeFact::quantity).reduce(BigDecimal.ZERO, BigDecimal::add);
+    /**
+     * Goes over the trades of one position period, in date order, and works out what the shares sold cost at average
+     * cost. Every share sold costs the average of the shares held at that moment, and takes the same part of the buy
+     * commissions with it; the sell that brings the quantity back to zero takes all that is left, so a closed period
+     * adds up exactly. Static: it is used while the history is being built, before there is one.
+     *
+     * <p>Example: buy 10 at 100, sell 5 at 150, buy 10 at 200, sell 15 at 180. The first sell takes half the cost
+     * (500); the 5 left and the 10 bought then average 166.67, and the last sell takes all of it (2,500). Sold: 20 shares
+     * that cost 3,000 (150 on average) for 3,450 — the same +450 as all the proceeds less all the cost.
+     */
+    private static final class AverageCostCalculator {
+
+        private BigDecimal heldQuantity = BigDecimal.ZERO;
+        /** {@code null} once a buy without a price is held: the average is unknown from then on. */
+        private BigDecimal heldCost = BigDecimal.ZERO;
+        private BigDecimal heldBuyCommissions = BigDecimal.ZERO;
+
+        private BigDecimal boughtQuantity = BigDecimal.ZERO;
+        private BigDecimal soldQuantity = BigDecimal.ZERO;
+        private BigDecimal soldCost = BigDecimal.ZERO;
+        private BigDecimal sellProceeds = BigDecimal.ZERO;
+        private BigDecimal commissions = BigDecimal.ZERO;
+
+        private void addBuy(TradeFact buy) {
+            heldQuantity = heldQuantity.add(buy.quantity());
+            heldCost = sumOrNull(heldCost, buy.amount());
+            heldBuyCommissions = heldBuyCommissions.add(buy.commission());
+            boughtQuantity = boughtQuantity.add(buy.quantity());
         }
 
-        /** Quantity × price over all of them, or {@code null} as soon as one has no price. */
-        private BigDecimal totalAmount(List<TradeFact> sameSideTrades) {
-            BigDecimal total = BigDecimal.ZERO;
-            for (TradeFact trade : sameSideTrades) {
-                BigDecimal amount = trade.amount();
-                if (amount == null) {
-                    return null;
-                }
-                total = total.add(amount);
+        /** A period only takes a sell while something is held, so {@code heldQuantity} is never 0 here. */
+        private void addSell(TradeFact sell) {
+            BigDecimal costLeaving = partLeaving(heldCost, sell.quantity());
+            BigDecimal buyCommissionsLeaving = partLeaving(heldBuyCommissions, sell.quantity());
+            heldCost = heldCost == null ? null : heldCost.subtract(costLeaving);
+            heldBuyCommissions = heldBuyCommissions.subtract(buyCommissionsLeaving);
+            heldQuantity = heldQuantity.subtract(sell.quantity());
+
+            soldQuantity = soldQuantity.add(sell.quantity());
+            soldCost = sumOrNull(soldCost, costLeaving);
+            sellProceeds = sumOrNull(sellProceeds, sell.amount());
+            commissions = commissions.add(sell.commission()).add(buyCommissionsLeaving);
+        }
+
+        /** The part of a held total that leaves with {@code quantitySold} shares: all of it when nothing stays held. */
+        private BigDecimal partLeaving(BigDecimal heldTotal, BigDecimal quantitySold) {
+            if (heldTotal == null) {
+                return null;
             }
-            return total;
+            boolean sellsEverything = heldQuantity.subtract(quantitySold).compareTo(ZERO_TOLERANCE) <= 0;
+            if (sellsEverything) {
+                return heldTotal;
+            }
+            return heldTotal.multiply(quantitySold).divide(heldQuantity, DIVISION_PRECISION);
+        }
+
+        private BigDecimal sumOrNull(BigDecimal runningTotal, BigDecimal amount) {
+            return runningTotal == null || amount == null ? null : runningTotal.add(amount);
+        }
+
+        private ClosedPosition toClosedPosition(LocalDate openDate, LocalDate closeDate, boolean isClosed,
+                                                List<Long> tradeIds) {
+            BigDecimal remainingQuantity = isClosed ? BigDecimal.ZERO : heldQuantity;
+            return new ClosedPosition(openDate, closeDate, boughtQuantity, soldQuantity, soldCost, sellProceeds,
+                    commissions, remainingQuantity, tradeIds);
         }
     }
 }

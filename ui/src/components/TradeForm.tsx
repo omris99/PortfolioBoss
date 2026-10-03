@@ -1,7 +1,15 @@
 import { useState, type FormEvent } from 'react';
-import { addTrade, changeTrade, errorMessageOf } from '../lib/apiClient';
-import { INPUT_CLASS, isBlank, localTodayIsoDate, numberOrNull, trimmedOrNull } from '../lib/formInput';
+import { addManualPositionTrade, addTrade, changeTrade, errorMessageOf } from '../lib/apiClient';
+import { INPUT_CLASS, isBlank, isPositiveWholeNumber, localTodayIsoDate, numberOrNull, trimmedOrNull } from '../lib/formInput';
 import type { Holding, Trade, TradeRequest, TradeSide } from '../types/portfolio';
+
+/**
+ * Whose trades a form or panel works on: a holding's, or a manual position's — one PortfolioBoss never saw as a
+ * holding. Both are corrected and deleted the same way; only adding goes to a different endpoint.
+ */
+export type TradeOwner =
+  | { kind: 'holding'; holding: Holding }
+  | { kind: 'manualPosition'; manualPositionId: number; symbol: string; trades: Trade[] };
 
 const NOTE_MAX_LENGTH = 500;   // the trade.note column
 
@@ -32,14 +40,23 @@ function prefilledPriceText(averageCost: number): string {
 }
 
 /**
- * A holding with no trades yet is almost always being backfilled: the first entry is buying the whole position,
- * so the form starts as that, leaving just the date.
+ * The holding this form backfills, if any. A holding with no trades yet is almost always being backfilled: the first
+ * entry is buying the whole position, so the form starts as that, leaving just the date. Never a manual position: IB
+ * knows nothing about it.
  */
-function isBackfillOf(holding: Holding, tradeBeingEdited: Trade | null): boolean {
-  return tradeBeingEdited === null && holding.trades.length === 0 && holding.position > 0;
+function backfilledHoldingOf(owner: TradeOwner, tradeBeingEdited: Trade | null): Holding | null {
+  if (owner.kind !== 'holding' || tradeBeingEdited !== null) return null;
+  const { holding } = owner;
+  return holding.trades.length === 0 && holding.position > 0 ? holding : null;
 }
 
-function initialFormValues(holding: Holding, tradeBeingEdited: Trade | null, todayIsoDate: string): TradeFormValues {
+function addTradeTo(owner: TradeOwner, tradeRequest: TradeRequest): Promise<void> {
+  return owner.kind === 'holding'
+    ? addTrade(owner.holding.id, tradeRequest)
+    : addManualPositionTrade(owner.manualPositionId, tradeRequest);
+}
+
+function initialFormValues(owner: TradeOwner, tradeBeingEdited: Trade | null, todayIsoDate: string): TradeFormValues {
   if (tradeBeingEdited !== null) {
     return {
       tradeDate: tradeBeingEdited.tradeDate,
@@ -51,12 +68,13 @@ function initialFormValues(holding: Holding, tradeBeingEdited: Trade | null, tod
       note: tradeBeingEdited.note ?? '',
     };
   }
-  if (isBackfillOf(holding, tradeBeingEdited)) {
+  const backfilledHolding = backfilledHoldingOf(owner, tradeBeingEdited);
+  if (backfilledHolding !== null) {
     return {
       tradeDate: todayIsoDate,
       side: 'BUY',
-      quantityText: String(holding.position),
-      priceText: holding.averageCost === null ? '' : prefilledPriceText(holding.averageCost),
+      quantityText: String(backfilledHolding.position),
+      priceText: backfilledHolding.averageCost === null ? '' : prefilledPriceText(backfilledHolding.averageCost),
       commissionText: '',
       note: '',
     };
@@ -68,9 +86,7 @@ function initialFormValues(holding: Holding, tradeBeingEdited: Trade | null, tod
 function problemWithForm(formValues: TradeFormValues, todayIsoDate: string): string | null {
   if (formValues.tradeDate === '') return 'Enter the trade date.';
   if (formValues.tradeDate > todayIsoDate) return 'The trade date cannot be in the future.';
-  if (isBlank(formValues.quantityText) || !(Number(formValues.quantityText) > 0)) {
-    return 'Enter a quantity greater than 0.';
-  }
+  if (!isPositiveWholeNumber(formValues.quantityText)) return 'Enter a whole quantity greater than 0.';
   if (!isBlank(formValues.priceText) && !(Number(formValues.priceText) >= 0)) {
     return 'The price cannot be negative.';
   }
@@ -120,27 +136,27 @@ function SideButton({
 }
 
 /**
- * Adds a trade to `holding`, or corrects `tradeBeingEdited` when one is given. The API is the authority on what is
+ * Adds a trade to `owner`, or corrects `tradeBeingEdited` when one is given. The API is the authority on what is
  * valid; its message is shown as it is. `onSaved` runs after a successful save and reloads the portfolio.
  */
 export function TradeForm({
-  holding,
+  owner,
   tradeBeingEdited,
   onSaved,
   onCancelEditing,
 }: {
-  holding: Holding;
+  owner: TradeOwner;
   tradeBeingEdited: Trade | null;
   onSaved: () => Promise<void>;
   onCancelEditing: () => void;
 }) {
   const todayIsoDate = localTodayIsoDate();
-  const [formValues, setFormValues] = useState(() => initialFormValues(holding, tradeBeingEdited, todayIsoDate));
+  const [formValues, setFormValues] = useState(() => initialFormValues(owner, tradeBeingEdited, todayIsoDate));
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isEditing = tradeBeingEdited !== null;
-  const isBackfill = isBackfillOf(holding, tradeBeingEdited);
+  const isBackfill = backfilledHoldingOf(owner, tradeBeingEdited) !== null;
 
   const updateFormValue = <Field extends keyof TradeFormValues>(field: Field, value: TradeFormValues[Field]) =>
     setFormValues((currentValues) => ({ ...currentValues, [field]: value }));
@@ -157,7 +173,7 @@ export function TradeForm({
     try {
       const tradeRequest = toTradeRequest(formValues);
       if (tradeBeingEdited === null) {
-        await addTrade(holding.id, tradeRequest);
+        await addTradeTo(owner, tradeRequest);
       } else {
         await changeTrade(tradeBeingEdited.id, tradeRequest);
       }
@@ -197,8 +213,8 @@ export function TradeForm({
           Quantity
           <input
             type="number"
-            step="any"
-            min="0"
+            step="1"
+            min="1"
             required
             value={formValues.quantityText}
             onChange={(event) => updateFormValue('quantityText', event.target.value)}

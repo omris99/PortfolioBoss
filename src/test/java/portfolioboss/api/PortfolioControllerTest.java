@@ -47,7 +47,7 @@ class PortfolioControllerTest {
     private static final String ACCOUNT = "U1234567";
     private static final Instant AS_OF = Instant.parse("2026-09-19T08:05:00Z");
     private static final String NO_TRADES_MESSAGE = "No buy entered yet, so the buy date and holding period are unknown.";
-    private static final String SOLD_TOO_MANY = "Sold 7 shares but bought 5 in this period: check this holding's trades.";
+    private static final String SOLD_TOO_MANY = "Sold 7 shares but bought 5 in this period: check its trades.";
 
     @Autowired
     private MockMvc mockMvc;
@@ -147,7 +147,11 @@ class PortfolioControllerTest {
         mockMvc.perform(get("/api/portfolio"))
                 .andExpect(jsonPath("$.closedPositions[0].source").value("TRADES"))
                 .andExpect(jsonPath("$.closedPositions[0].holdingId").value(7))
-                .andExpect(jsonPath("$.closedPositions[0].manualClosedPositionId").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[0].manualPositionId").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[0].remainingQuantity").value(0))
+                .andExpect(jsonPath("$.closedPositions[0].trades[0].side").value("BUY"))
+                .andExpect(jsonPath("$.closedPositions[0].trades[1].side").value("SELL"))
+                .andExpect(jsonPath("$.closedPositions[0].trades[1].price").value(180.0))
                 .andExpect(jsonPath("$.closedPositions[0].symbol").value("AAPL"))
                 .andExpect(jsonPath("$.closedPositions[0].currency").value("USD"))
                 .andExpect(jsonPath("$.closedPositions[0].sector").value("Technology"))
@@ -169,8 +173,9 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.closedPositions[1].realizedPnlPercent").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[2].source").value("MANUAL"))
                 .andExpect(jsonPath("$.closedPositions[2].holdingId").value(nullValue()))
-                .andExpect(jsonPath("$.closedPositions[2].manualClosedPositionId").value(3))
-                .andExpect(jsonPath("$.closedPositions[2].note").value("Sold before PortfolioBoss"));
+                .andExpect(jsonPath("$.closedPositions[2].manualPositionId").value(3))
+                .andExpect(jsonPath("$.closedPositions[2].note").value("Sold before PortfolioBoss"))
+                .andExpect(jsonPath("$.closedPositions[2].remainingQuantity").value(2));
     }
 
     @Test
@@ -186,25 +191,29 @@ class PortfolioControllerTest {
 
     /** 10 bought at 150 and sold at 180, $5 commission on each: +290, or +19.33%. */
     private ClosedPositionResponse appleBoughtAndSold() {
+        TradeResponse buy = new TradeResponse(1, LocalDate.of(2024, 3, 1), TradeSide.BUY, new BigDecimal("10"),
+                new BigDecimal("150.00"), null, new BigDecimal("5"));
+        TradeResponse sell = new TradeResponse(2, LocalDate.of(2025, 6, 1), TradeSide.SELL, new BigDecimal("10"),
+                new BigDecimal("180.00"), null, new BigDecimal("5"));
         return new ClosedPositionResponse(7L, "AAPL", "USD", "Technology", LocalDate.of(2024, 3, 1),
                 LocalDate.of(2025, 6, 1), 457, new BigDecimal("10"), new BigDecimal("150.00"), new BigDecimal("180.00"),
                 new BigDecimal("290.00"), new BigDecimal("19.33333333333333"), null, new BigDecimal("10"),
-                ClosedPositionSource.TRADES, null, null);
+                ClosedPositionSource.TRADES, null, null, BigDecimal.ZERO, List.of(buy, sell));
     }
 
     /** Bought and sold with no price entered for either, no sector, and more sold than bought. */
     private ClosedPositionResponse microsoftSoldWithNoPricesEntered() {
         return new ClosedPositionResponse(8L, "MSFT", "USD", null, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 2, 1),
-                31, new BigDecimal("5"), null, null, null, null, SOLD_TOO_MANY, new BigDecimal("10"),
-                ClosedPositionSource.TRADES, null, null);
+                31, new BigDecimal("7"), null, null, null, null, SOLD_TOO_MANY, new BigDecimal("10"),
+                ClosedPositionSource.TRADES, null, null, BigDecimal.ZERO, List.of());
     }
 
-    /** A round trip entered by hand: no holding, an id of its own and a note. */
+    /** A manual position sold in part: no holding, an id of its own, a note, and 2 shares still held. */
     private ClosedPositionResponse teslaEnteredByHand() {
         return new ClosedPositionResponse(null, "TSLA", "USD", null, LocalDate.of(2022, 1, 10),
                 LocalDate.of(2023, 5, 1), 476, new BigDecimal("5"), new BigDecimal("300"), new BigDecimal("310"),
                 new BigDecimal("40"), new BigDecimal("2.666666666666667"), null, new BigDecimal("10"),
-                ClosedPositionSource.MANUAL, 3L, "Sold before PortfolioBoss");
+                ClosedPositionSource.MANUAL, 3L, "Sold before PortfolioBoss", new BigDecimal("2"), List.of());
     }
 
     /** Bought once, never sold — still OPEN, so holdingDays counts to a made-up snapshot date. */

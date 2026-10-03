@@ -54,19 +54,19 @@ class HoldingWriteControllerTest {
     @Test
     void addsATradeAndAnswers201WithIt() throws Exception {
         TradeRequest expectedRequest = new TradeRequest(LocalDate.of(2025, 1, 15), TradeSide.BUY,
-                new BigDecimal("10.5"), new BigDecimal("150.25"), "Initial position", new BigDecimal("1.25"));
+                new BigDecimal("10"), new BigDecimal("150.25"), "Initial position", new BigDecimal("1.25"));
         given(holdingWriteService.addTrade(APPLE_HOLDING_ID, expectedRequest)).willReturn(new TradeResponse(TRADE_ID,
-                LocalDate.of(2025, 1, 15), TradeSide.BUY, new BigDecimal("10.5"), new BigDecimal("150.25"),
+                LocalDate.of(2025, 1, 15), TradeSide.BUY, new BigDecimal("10"), new BigDecimal("150.25"),
                 "Initial position", new BigDecimal("1.25")));
 
         mockMvc.perform(post("/api/holdings/7/trades").contentType(MediaType.APPLICATION_JSON).content("""
-                        {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10.5, "price": 150.25,
+                        {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10, "price": 150.25,
                          "note": "Initial position", "commission": 1.25}"""))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(TRADE_ID))
                 .andExpect(jsonPath("$.tradeDate").value("2025-01-15"))
                 .andExpect(jsonPath("$.side").value("BUY"))
-                .andExpect(jsonPath("$.quantity").value(10.5))
+                .andExpect(jsonPath("$.quantity").value(10))
                 .andExpect(jsonPath("$.commission").value(1.25));
     }
 
@@ -107,12 +107,12 @@ class HoldingWriteControllerTest {
     }
 
     @Test
-    void rejectsMoreDecimalPlacesThanTheDatabaseKeeps() throws Exception {
+    void rejectsAQuantityThatIsNotAWholeNumber() throws Exception {
         postTrade("""
-                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 0.0000001}""")
+                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 2.5}""")
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail")
-                        .value("quantity: must have at most 6 decimal places (and 14 digits before the point)"));
+                .andExpect(jsonPath("$.detail").value("quantity: must be a whole number (at most 14 digits)"));
+        verifyNoInteractions(holdingWriteService);
     }
 
     /** IB's average cost, as the UI once prefilled it unrounded (the UI now rounds it to 4 places). */
@@ -218,6 +218,18 @@ class HoldingWriteControllerTest {
         mockMvc.perform(delete("/api/trades/42"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.detail").value("No trade with id 42"));
+    }
+
+    @Test
+    void answers409WithTheReasonWhenDeletingTheLastSellOfAManualPosition() throws Exception {
+        String reason = "This is the last sell of a manual position: it can be corrected, but not deleted or turned "
+                + "into a buy. Delete the whole position instead.";
+        willThrow(new ResponseStatusException(HttpStatus.CONFLICT, reason))
+                .given(holdingWriteService).deleteTrade(TRADE_ID);
+
+        mockMvc.perform(delete("/api/trades/42"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(reason));
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────

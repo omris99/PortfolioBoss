@@ -1,27 +1,33 @@
 package portfolioboss.api.response;
 
 import portfolioboss.db.HoldingEntity;
-import portfolioboss.db.ManualClosedPositionEntity;
+import portfolioboss.db.ManualPositionEntity;
+import portfolioboss.db.TradeEntity;
 import portfolioboss.domain.ClosedPosition;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 /**
- * One closed position as the UI receives it: a stretch of owning a stock, from a buy to the sell that brought it back
- * to zero — derived from a holding's trades, or entered by hand as one row ({@code source}). The component names are
- * the JSON keys and must stay stable ({@code ui/src/types/portfolio.ts} mirrors them). A figure that needs a price
- * nobody entered is {@code null}. {@code warning}, then {@code commissions}, {@code source},
- * {@code manualClosedPositionId} and {@code note} were added after the others, and like them are never renamed or
- * removed.
+ * The shares sold in one position period as the UI receives it: a stretch of owning a stock that a sell brought back to
+ * zero, or one still held that has had a sell already ({@code remainingQuantity} above 0), at average cost — of a
+ * holding or of a manual position ({@code source}). The component names are the JSON keys and must stay stable
+ * ({@code ui/src/types/portfolio.ts} mirrors them). A figure that needs a price nobody entered is {@code null}.
+ * {@code warning}, {@code commissions}, {@code source}, {@code manualPositionId}, {@code note},
+ * {@code remainingQuantity} and {@code trades} were added after the others, and like them are never renamed or removed.
  *
- * @param holdingId              the holding whose trades it was derived from; {@code null} for a row entered by hand
- * @param warning                what to fix in its trades (more sold than bought), in English and shown as it is;
- *                               {@code null} when nothing needs checking
- * @param commissions            of every buy and sell in it, already taken off {@code realizedPnl}
- * @param manualClosedPositionId the row to edit or delete when {@code source} is {@code MANUAL}; {@code null} otherwise
- * @param note                   the row's note when {@code MANUAL}; {@code null} otherwise (a derived one has a note
- *                               per trade, not one of its own)
+ * @param holdingId         the holding whose trades it was derived from; {@code null} for a manual position
+ * @param quantity          the shares sold in the period so far
+ * @param averageBuyPrice   the average cost of the shares sold
+ * @param warning           what to fix in its trades (more sold than bought), in English and shown as it is;
+ *                          {@code null} when nothing needs checking
+ * @param commissions       of every sell, and of the buys the part that went with the shares sold — already taken off
+ *                          {@code realizedPnl}
+ * @param manualPositionId  the manual position it comes from, to correct it or add trades; {@code null} otherwise
+ * @param note              the manual position's note; {@code null} for a holding (its notes are on its trades)
+ * @param remainingQuantity the shares of the period still held: 0 once a sell brought it back to zero
+ * @param trades            every trade of the period, by date
  */
 public record ClosedPositionResponse(
         Long holdingId,
@@ -39,25 +45,27 @@ public record ClosedPositionResponse(
         String warning,
         BigDecimal commissions,
         ClosedPositionSource source,
-        Long manualClosedPositionId,
-        String note) {
+        Long manualPositionId,
+        String note,
+        BigDecimal remainingQuantity,
+        List<TradeResponse> trades) {
 
     protected ClosedPositionResponse(HoldingEntity holdingEntity, ClosedPosition closedPosition) {
         this(holdingEntity.id(), holdingEntity.symbol(), holdingEntity.currency(), holdingEntity.sector(),
-                closedPosition, ClosedPositionSource.TRADES, null, null);
+                closedPosition, ClosedPositionSource.TRADES, null, null,
+                tradesOfPeriod(holdingEntity.trades(), closedPosition));
     }
 
-    /** Public: {@code ClosedPositionWriteService} answers a write with the row as the list will show it. */
-    public ClosedPositionResponse(ManualClosedPositionEntity manualClosedPosition) {
-        this(null, manualClosedPosition.symbol(), manualClosedPosition.currency(), manualClosedPosition.sector(),
-                manualClosedPosition.toClosedPosition(), ClosedPositionSource.MANUAL, manualClosedPosition.id(),
-                manualClosedPosition.note());
+    protected ClosedPositionResponse(ManualPositionEntity manualPosition, ClosedPosition closedPosition) {
+        this(null, manualPosition.symbol(), manualPosition.currency(), manualPosition.sector(), closedPosition,
+                ClosedPositionSource.MANUAL, manualPosition.id(), manualPosition.note(),
+                tradesOfPeriod(manualPosition.trades(), closedPosition));
     }
 
     /** What both kinds share: every figure comes from {@link ClosedPosition}, so it is computed the same way. */
     private ClosedPositionResponse(Long holdingId, String symbol, String currency, String sector,
-                                   ClosedPosition closedPosition, ClosedPositionSource source,
-                                   Long manualClosedPositionId, String note) {
+                                   ClosedPosition closedPosition, ClosedPositionSource source, Long manualPositionId,
+                                   String note, List<TradeResponse> trades) {
         this(holdingId,
                 symbol,
                 currency,
@@ -65,7 +73,7 @@ public record ClosedPositionResponse(
                 closedPosition.openDate(),
                 closedPosition.closeDate(),
                 closedPosition.holdingDays(),
-                closedPosition.quantity(),
+                closedPosition.soldQuantity(),
                 closedPosition.averageBuyPrice(),
                 closedPosition.averageSellPrice(),
                 closedPosition.realizedPnl(),
@@ -73,7 +81,20 @@ public record ClosedPositionResponse(
                 closedPosition.warning(),
                 closedPosition.commissions(),
                 source,
-                manualClosedPositionId,
-                note);
+                manualPositionId,
+                note,
+                closedPosition.remainingQuantity(),
+                trades);
+    }
+
+    /**
+     * The trades of this period out of all the owner's trades, which are already in date order. Static: it runs before
+     * the record exists, as an argument of {@code this(...)}.
+     */
+    private static List<TradeResponse> tradesOfPeriod(List<TradeEntity> allTrades, ClosedPosition closedPosition) {
+        return allTrades.stream()
+                .filter(trade -> closedPosition.tradeIds().contains(trade.id()))
+                .map(TradeResponse::new)
+                .toList();
     }
 }

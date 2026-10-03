@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { deleteTrade, errorMessageOf } from '../lib/apiClient';
 import { EMPTY_VALUE, formatMoney, formatQuantity } from '../lib/format';
-import type { Holding, Trade, TradeSide } from '../types/portfolio';
+import type { Trade, TradeSide } from '../types/portfolio';
 import { HoldingWarningList } from './HoldingWarnings';
-import { TradeForm } from './TradeForm';
+import { TradeForm, type TradeOwner } from './TradeForm';
 
 function TradeSideBadge({ side }: { side: TradeSide }) {
   const colorClass =
@@ -12,19 +12,40 @@ function TradeSideBadge({ side }: { side: TradeSide }) {
   return <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${colorClass}`}>{side}</span>;
 }
 
-function TradeRow({
-  trade,
-  isBeingEdited,
-  isDeleting,
-  onEdit,
-  onDelete,
-}: {
-  trade: Trade;
-  isBeingEdited: boolean;
-  isDeleting: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
+/** What the ✏️ and 🗑 of each row do. A list without them is read-only. */
+interface TradeRowActions {
+  tradeIdBeingEdited: number | null;
+  deletingTradeId: number | null;
+  onEdit: (trade: Trade) => void;
+  onDelete: (trade: Trade) => void;
+}
+
+function TradeRowButtons({ trade, rowActions }: { trade: Trade; rowActions: TradeRowActions }) {
+  return (
+    <div className="inline-flex gap-1">
+      <button
+        type="button"
+        title="Edit this trade"
+        onClick={() => rowActions.onEdit(trade)}
+        className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+      >
+        <Pencil size={12} />
+      </button>
+      <button
+        type="button"
+        title="Delete this trade"
+        onClick={() => rowActions.onDelete(trade)}
+        disabled={rowActions.deletingTradeId === trade.id}
+        className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
+      >
+        <Trash2 size={12} />
+      </button>
+    </div>
+  );
+}
+
+function TradeRow({ trade, rowActions }: { trade: Trade; rowActions: TradeRowActions | null }) {
+  const isBeingEdited = rowActions?.tradeIdBeingEdited === trade.id;
   return (
     <tr className={`border-b border-slate-800/60 last:border-b-0 ${isBeingEdited ? 'bg-emerald-500/5' : ''}`}>
       <td className="px-2 py-1 font-mono">{trade.tradeDate}</td>
@@ -35,29 +56,49 @@ function TradeRow({
       <td className="px-2 py-1 text-right font-mono">{formatMoney(trade.price)}</td>
       <td className="px-2 py-1 text-right font-mono">{formatMoney(trade.commission)}</td>
       <td className="px-2 py-1 text-slate-400">{trade.note ?? EMPTY_VALUE}</td>
-      <td className="px-2 py-1 text-right">
-        <div className="inline-flex gap-1">
-          <button
-            type="button"
-            title="Edit this trade"
-            onClick={onEdit}
-            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
-          >
-            <Pencil size={12} />
-          </button>
-          <button
-            type="button"
-            title="Delete this trade"
-            onClick={onDelete}
-            disabled={isDeleting}
-            className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      </td>
+      {rowActions !== null && (
+        <td className="px-2 py-1 text-right">
+          <TradeRowButtons trade={trade} rowActions={rowActions} />
+        </td>
+      )}
     </tr>
   );
+}
+
+/** The trades as a table, by date. With `rowActions` every row can be corrected and deleted; without, it is read-only. */
+export function TradeList({ trades, rowActions = null }: { trades: Trade[]; rowActions?: TradeRowActions | null }) {
+  return (
+    <table className="w-full border-collapse">
+      <thead>
+        <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wide text-slate-500">
+          <th className="px-2 py-1 text-left font-medium">Date</th>
+          <th className="px-2 py-1 text-left font-medium">Side</th>
+          <th className="px-2 py-1 text-right font-medium">Qty</th>
+          <th className="px-2 py-1 text-right font-medium">Price</th>
+          <th className="px-2 py-1 text-right font-medium">Commission</th>
+          <th className="px-2 py-1 text-left font-medium">Note</th>
+          {rowActions !== null && (
+            <th className="px-2 py-1">
+              <span className="sr-only">Actions</span>
+            </th>
+          )}
+        </tr>
+      </thead>
+      <tbody>
+        {trades.map((trade) => (
+          <TradeRow key={trade.id} trade={trade} rowActions={rowActions} />
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function tradesOf(owner: TradeOwner): Trade[] {
+  return owner.kind === 'holding' ? owner.holding.trades : owner.trades;
+}
+
+function symbolOf(owner: TradeOwner): string {
+  return owner.kind === 'holding' ? owner.holding.symbol : owner.symbol;
 }
 
 function confirmDeletion(trade: Trade): boolean {
@@ -65,16 +106,18 @@ function confirmDeletion(trade: Trade): boolean {
 }
 
 /**
- * The trades entered for one holding, and the form under them. The form adds a trade, or corrects the one whose
- * pencil was clicked. Every change reloads the whole portfolio, since the dates and holding period in the row
- * above are derived from these trades on the server.
+ * The trades entered for one owner — a holding, or a manual position — and the form under them. The form adds a
+ * trade, or corrects the one whose pencil was clicked. Every change reloads the whole portfolio, since the dates,
+ * holding period and closed positions are derived from these trades on the server.
  */
-export function TradesPanel({ holding, onDataChanged }: { holding: Holding; onDataChanged: () => Promise<void> }) {
+export function TradesPanel({ owner, onDataChanged }: { owner: TradeOwner; onDataChanged: () => Promise<void> }) {
   const [tradeBeingEdited, setTradeBeingEdited] = useState<Trade | null>(null);
   // A new key remounts the form, so it starts again from fresh values after each save.
   const [formGeneration, setFormGeneration] = useState(0);
   const [deletingTradeId, setDeletingTradeId] = useState<number | null>(null);
   const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
+
+  const trades = tradesOf(owner);
 
   const resetForm = () => {
     setTradeBeingEdited(null);
@@ -86,6 +129,7 @@ export function TradesPanel({ holding, onDataChanged }: { holding: Holding; onDa
     resetForm();
   };
 
+  /** A manual position's last sell is refused (409), and its reason shown here. */
   const handleDelete = async (trade: Trade) => {
     if (!confirmDeletion(trade)) return;
     setDeletingTradeId(trade.id);
@@ -101,47 +145,27 @@ export function TradesPanel({ holding, onDataChanged }: { holding: Holding; onDa
     }
   };
 
+  const rowActions: TradeRowActions = {
+    tradeIdBeingEdited: tradeBeingEdited?.id ?? null,
+    deletingTradeId,
+    onEdit: setTradeBeingEdited,
+    onDelete: (trade) => void handleDelete(trade),
+  };
   const formKey = tradeBeingEdited === null ? `new-${formGeneration}` : `edit-${tradeBeingEdited.id}`;
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
-      <HoldingWarningList warnings={holding.warnings} />
-      {holding.trades.length === 0 ? (
-        <p className="text-slate-500">No trades entered yet for {holding.symbol}.</p>
+      {owner.kind === 'holding' && <HoldingWarningList warnings={owner.holding.warnings} />}
+      {trades.length === 0 ? (
+        <p className="text-slate-500">No trades entered yet for {symbolOf(owner)}.</p>
       ) : (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wide text-slate-500">
-              <th className="px-2 py-1 text-left font-medium">Date</th>
-              <th className="px-2 py-1 text-left font-medium">Side</th>
-              <th className="px-2 py-1 text-right font-medium">Qty</th>
-              <th className="px-2 py-1 text-right font-medium">Price</th>
-              <th className="px-2 py-1 text-right font-medium">Commission</th>
-              <th className="px-2 py-1 text-left font-medium">Note</th>
-              <th className="px-2 py-1">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {holding.trades.map((trade) => (
-              <TradeRow
-                key={trade.id}
-                trade={trade}
-                isBeingEdited={tradeBeingEdited?.id === trade.id}
-                isDeleting={deletingTradeId === trade.id}
-                onEdit={() => setTradeBeingEdited(trade)}
-                onDelete={() => void handleDelete(trade)}
-              />
-            ))}
-          </tbody>
-        </table>
+        <TradeList trades={trades} rowActions={rowActions} />
       )}
       {deleteErrorMessage && <p className="text-[11px] text-rose-400">{deleteErrorMessage}</p>}
 
       <TradeForm
         key={formKey}
-        holding={holding}
+        owner={owner}
         tradeBeingEdited={tradeBeingEdited}
         onSaved={handleSaved}
         onCancelEditing={resetForm}

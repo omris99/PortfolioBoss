@@ -28,6 +28,13 @@ class UtilsTest {
     }
 
     @Test
+    void aCommissionEnteredIsKeptAndOnlyAMissingOneIsTheDefault() {
+        assertThat(Utils.commissionOrDefault(new BigDecimal("1.25"), new BigDecimal("600"))).isEqualByComparingTo("1.25");
+        assertThat(Utils.commissionOrDefault(BigDecimal.ZERO, new BigDecimal("600"))).isEqualByComparingTo("0");
+        assertThat(Utils.commissionOrDefault(null, new BigDecimal("600"))).isEqualByComparingTo("6");
+    }
+
+    @Test
     void blankTextIsNothingEnteredAndOtherTextLosesItsSurroundingSpaces() {
         assertThat(Utils.trimmedOrNull(null)).isNull();
         assertThat(Utils.trimmedOrNull("   ")).isNull();

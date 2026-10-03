@@ -1,26 +1,9 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { deleteManualClosedPosition, errorMessageOf } from '../lib/apiClient';
-import { formatQuantity } from '../lib/format';
 import type { ClosedPosition } from '../types/portfolio';
-import { ClosedPositionsTable, RealizedPnlTotals, type ManualRowActions } from './ClosedPositionsTable';
+import { ClosedPositionsTable, RealizedPnlTotals } from './ClosedPositionsTable';
 import { EmptyBox } from './EmptyBox';
-import { ManualClosedPositionForm } from './ManualClosedPositionForm';
-
-/** The form above the table: hidden, adding a row, or correcting the row entered by hand given. */
-type FormState = { mode: 'hidden' } | { mode: 'adding' } | { mode: 'editing'; rowBeingEdited: ClosedPosition };
-
-function confirmDeletion(closedPosition: ClosedPosition): boolean {
-  return window.confirm(
-    `Delete the closed position of ${formatQuantity(closedPosition.quantity)} ${closedPosition.symbol}, ` +
-      `sold on ${closedPosition.closeDate}?`,
-  );
-}
-
-/** A new key remounts the form, so it starts from the values of the row now chosen. */
-function formKeyOf(formState: FormState): string {
-  return formState.mode === 'editing' ? `edit-${formState.rowBeingEdited.manualClosedPositionId}` : 'new';
-}
+import { NewManualPositionForm } from './ManualPositionForms';
 
 function AddClosedPositionButton({ onClick }: { onClick: () => void }) {
   return (
@@ -36,8 +19,9 @@ function AddClosedPositionButton({ onClick }: { onClick: () => void }) {
 }
 
 /**
- * Every position bought and sold back to zero: derived from the trades entered, of closed holdings and open ones
- * alike, and the ones entered here by hand. Every change reloads the whole portfolio, like the trades panel.
+ * Every stretch of owning a stock that has had a sale, at average cost: of closed holdings and open ones alike, and of
+ * the manual positions added here by hand. A manual position is corrected in its row; every change reloads the whole
+ * portfolio, like the trades panel.
  */
 export function ClosedPositionsSection({
   closedPositions,
@@ -46,41 +30,12 @@ export function ClosedPositionsSection({
   closedPositions: ClosedPosition[];
   onDataChanged: () => Promise<void>;
 }) {
-  const [formState, setFormState] = useState<FormState>({ mode: 'hidden' });
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
-
+  const [isAdding, setIsAdding] = useState(false);
   const hasClosedPositions = closedPositions.length > 0;
-  const idBeingEdited = formState.mode === 'editing' ? formState.rowBeingEdited.manualClosedPositionId : null;
 
-  const hideForm = () => setFormState({ mode: 'hidden' });
-
-  const handleSaved = async () => {
+  const handleAdded = async () => {
     await onDataChanged();
-    hideForm();
-  };
-
-  const handleDelete = async (closedPosition: ClosedPosition) => {
-    const manualClosedPositionId = closedPosition.manualClosedPositionId;
-    if (manualClosedPositionId === null || !confirmDeletion(closedPosition)) return;
-    setDeletingId(manualClosedPositionId);
-    setDeleteErrorMessage(null);
-    try {
-      await deleteManualClosedPosition(manualClosedPositionId);
-      await onDataChanged();
-      if (idBeingEdited === manualClosedPositionId) hideForm();
-    } catch (error) {
-      setDeleteErrorMessage(errorMessageOf(error));
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const manualRowActions: ManualRowActions = {
-    manualClosedPositionIdBeingEdited: idBeingEdited,
-    manualClosedPositionIdBeingDeleted: deletingId,
-    onEdit: (closedPosition) => setFormState({ mode: 'editing', rowBeingEdited: closedPosition }),
-    onDelete: (closedPosition) => void handleDelete(closedPosition),
+    setIsAdding(false);
   };
 
   return (
@@ -89,32 +44,26 @@ export function ClosedPositionsSection({
         <div>
           <div className="text-sm font-semibold text-slate-100">Closed positions</div>
           <div className="mt-1 text-xs text-slate-400">
-            Bought and sold back to zero: from the trades entered, or added here by hand.
+            Shares sold, at average cost: from the trades entered, and from positions added here by hand.
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           {hasClosedPositions && <RealizedPnlTotals closedPositions={closedPositions} />}
-          <AddClosedPositionButton onClick={() => setFormState({ mode: 'adding' })} />
+          <AddClosedPositionButton onClick={() => setIsAdding(true)} />
         </div>
       </div>
 
-      {formState.mode !== 'hidden' && (
+      {isAdding && (
         <div className="mt-4">
-          <ManualClosedPositionForm
-            key={formKeyOf(formState)}
-            rowBeingEdited={formState.mode === 'editing' ? formState.rowBeingEdited : null}
-            onSaved={handleSaved}
-            onCancel={hideForm}
-          />
+          <NewManualPositionForm onSaved={handleAdded} onCancel={() => setIsAdding(false)} />
         </div>
       )}
-      {deleteErrorMessage && <p className="mt-2 text-[11px] text-rose-400">{deleteErrorMessage}</p>}
 
       <div className="mt-4">
         {hasClosedPositions ? (
-          <ClosedPositionsTable closedPositions={closedPositions} manualRowActions={manualRowActions} />
+          <ClosedPositionsTable closedPositions={closedPositions} onDataChanged={onDataChanged} />
         ) : (
-          <EmptyBox message="None yet: a holding shows up here once its trades include a sell back to zero, and a position sold before PortfolioBoss saw it can be added by hand." />
+          <EmptyBox message="None yet: a holding shows up here once one of its trades is a sell, and a position sold before PortfolioBoss saw it can be added by hand." />
         )}
       </div>
     </section>

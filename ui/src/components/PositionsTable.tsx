@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import {
   formatDate,
   formatMoney,
@@ -9,6 +9,7 @@ import {
   profitLossColorClass,
 } from '../lib/format';
 import type { Holding } from '../types/portfolio';
+import { ExpandRowButton } from './ExpandRowButton';
 import { HoldingPeriod } from './HoldingPeriod';
 import { HoldingWarningIcon } from './HoldingWarnings';
 import { SECTOR_OPTIONS_LIST_ID, SectorCell } from './SectorCell';
@@ -234,29 +235,6 @@ function SortableHeaderCell({
   );
 }
 
-function ExpandTradesButton({
-  holding,
-  isExpanded,
-  onToggle,
-}: {
-  holding: Holding;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-expanded={isExpanded}
-      title={isExpanded ? 'Hide trades' : 'Show and enter trades'}
-      aria-label={`${isExpanded ? 'Hide' : 'Show'} the trades of ${holding.symbol}`}
-      onClick={onToggle}
-      className="rounded p-0.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
-    >
-      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-    </button>
-  );
-}
-
 function HoldingRow({
   holding,
   isExpanded,
@@ -275,7 +253,12 @@ function HoldingRow({
       className={`border-b border-slate-800/60 transition-colors last:border-b-0 hover:bg-slate-800/30 ${closedClass}`}
     >
       <td className="w-6 py-2 pl-2">
-        <ExpandTradesButton holding={holding} isExpanded={isExpanded} onToggle={onToggleExpanded} />
+        <ExpandRowButton
+          isExpanded={isExpanded}
+          onToggle={onToggleExpanded}
+          subject={`the trades of ${holding.symbol}`}
+          expandHint="Show and enter trades"
+        />
       </td>
       {COLUMNS.map((column) => {
         const colorClass = column.valueColorClass?.(holding) ?? 'text-slate-300';
@@ -359,7 +342,7 @@ export function PositionsTable({
                 {isExpanded && (
                   <tr className="border-b border-slate-800/60">
                     <td colSpan={COLUMNS.length + 1} className="px-3 pb-3">
-                      <TradesPanel holding={holding} onDataChanged={onDataChanged} />
+                      <TradesPanel owner={{ kind: 'holding', holding }} onDataChanged={onDataChanged} />
                     </td>
                   </tr>
                 )}
