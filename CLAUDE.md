@@ -10,7 +10,8 @@ TWS, syncs the holdings into a local PostgreSQL database on every connection, an
 database to a React UI (`ui/`) that shows the positions table — the API always reads from the
 database, never straight from TWS. In the same table the user enters what IB doesn't know (a holding's
 sector and its buy/sell trades), and below it the closed positions — derived from those trades, plus the manual
-positions sold before PortfolioBoss saw them — which the UI writes to the same database through a few JSON
+positions sold before PortfolioBoss saw them — and, above it, a card per investor for an account several people's
+money shares (each one's cash, value and profit), all of which the UI writes to the same database through a few JSON
 endpoints. It is a Maven / Spring Boot application (Java 21, Spring Boot 4.1.1).
 
 [TODO.md](TODO.md) is the plan of record — the six product principles, the settled architecture
@@ -21,11 +22,12 @@ of Milestone 1 (Postgres, trades, holding details); its sessions 0 (Maven + Spri
 (PostgreSQL, Flyway, schema, entities), 2 (sync at connection, API reads from the database), 3
 (derived buy/sell dates and holding period), 4 (write endpoints for the sector and trades), 5 (UI: the new
 columns and sorting), 6 (UI: entering the sector and trades) and 7 (reconciliation warnings) are done; 8–9 are
-ideas for later. [CLOSED_POSITIONS_TODO.md](CLOSED_POSITIONS_TODO.md) comes next: the shares sold, with their realized
+ideas for later. [CLOSED_POSITIONS_TODO.md](CLOSED_POSITIONS_TODO.md) came next: the shares sold, with their realized
 P&L — sessions 1 (the list derived from the trades already entered), 2 (commission, manual closed positions) and 3
-(their UI) are done; 4 (average cost, partial sells, manual positions with trades of their own) and 5 (its UI) are
-built, with the browser check of 5 still open. [INVESTORS_TODO.md](INVESTORS_TODO.md) plans several investors sharing
-one IB account (each one's cash and profit); it is built after the closed positions.
+(their UI), 4 (average cost, partial sells, manual positions with trades of their own) and 5 (its UI) are done.
+[INVESTORS_TODO.md](INVESTORS_TODO.md), several investors sharing one IB account (each one's cash and profit), followed:
+its sessions 1 (schema, computation, read API), 2 (write endpoints for investors, deposits and a trade's investor) and
+3 (UI) are done; its "out of scope" list holds the ideas for later.
 
 ## Hard invariant: read-only
 
@@ -35,9 +37,10 @@ account-reading callbacks. Do not add `placeOrder`, `cancelOrder`, or order-rela
 callbacks — if a task seems to need them, it is the wrong project.
 
 The local API never touches the IB account either. It writes only to PortfolioBoss's own database — the
-sector and trades the user enters, through `HoldingWriteController`, and the manual positions with their trades,
-through `ManualPositionWriteController` — and never creates or deletes a holding (only the sync does). `PortfolioController` stays GET-only (Spring answers 405 to every other
-method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
+sector and trades the user enters, through `HoldingWriteController`, the manual positions with their trades,
+through `ManualPositionWriteController`, and the investors with their deposits and withdrawals, through
+`InvestorWriteController` — and never creates or deletes a holding (only the sync does). `PortfolioController` stays
+GET-only (Spring answers 405 to every other method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
 `application.properties`), there is **no CORS configuration**, and every write endpoint with a body accepts
 JSON only: a page on another site can make the browser send a request to localhost without asking first
 only as text or a form (415 here), while JSON, PUT and DELETE need a CORS preflight that nothing grants.
@@ -70,19 +73,22 @@ npm run build            # tsc -b && vite build; the type check is the only UI c
 ```
 
 The UI shows the portfolio as of the last sync. It reloads `/api/portfolio` after every write (sector,
-trades, manual positions), but new figures from IB need a new `run.sh` (a refresh button is a later step).
+trades, manual positions, investors, deposits), but new figures from IB need a new `run.sh` (a refresh button is a
+later step).
 
 Tests: `mvn -q test` (JUnit 5; no TWS, but the database tests need `portfolioboss_test` running — see
 above). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc` + `@MockitoBean` on `PortfolioReadService`)
 pins the JSON contract the UI depends on with made-up responses, no database needed; `HoldingTest` covers
 the derived math; `PortfolioWrapperTest` feeds `PortfolioWrapper` IB callbacks directly, no socket.
-`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest` and
-`ManualPositionWriteServiceTest` are `@DataJpaTest`s against the real `portfolioboss_test` database
-(`src/test/resources/application-test.properties`, `@ActiveProfiles("test")`), each test rolled back automatically.
-The write endpoints are tested in the same two halves: `HoldingWriteControllerTest` and
-`ManualPositionWriteControllerTest` (`@WebMvcTest`, service mocked) for status codes, validation messages and the
-JSON-only rule, the `*WriteServiceTest`s for what is stored. `ClosedPositionTest` and `HoldingHistoryTest` cover the
-average-cost math, `UtilsTest` the default commission. There is no whole-app `@SpringBootTest`: it
+`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
+`ManualPositionWriteServiceTest` and `InvestorWriteServiceTest` are `@DataJpaTest`s against the real
+`portfolioboss_test` database (`src/test/resources/application-test.properties`, `@ActiveProfiles("test")`), each test
+rolled back automatically. The write endpoints are tested in the same two halves: `HoldingWriteControllerTest`,
+`ManualPositionWriteControllerTest` and `InvestorWriteControllerTest` (`@WebMvcTest`, service mocked) for status
+codes, validation messages and the JSON-only rule, the `*WriteServiceTest`s for what is stored. `ClosedPositionTest`
+and `HoldingHistoryTest` cover the average-cost math, `InvestorSummaryCalculatorTest` (INVESTORS_TODO.md's worked
+example among them) and `PositionTradesTest` the split between investors, `UtilsTest` the default commission. After a
+change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
 would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
 `target/surefire-reports/` keeps the reports of tests that have since been deleted.
 
@@ -137,7 +143,7 @@ Main (Spring Boot: brings the web server up, then Spring runs the runner)
 
 PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
         │                     (api/response/*Response,                    driven by HTTP requests, not by TWS)
-        │                      +domain/HoldingHistory)
+        │                      +domain/HoldingHistory, InvestorSummaryCalculator)
         └──JSON──> ui/ (React; the dev server proxies /api to :8080)
 
 HoldingWriteController ──writes── HoldingWriteService ──writes── Postgres  (sector and trade rows only;
@@ -148,6 +154,10 @@ HoldingWriteController ──writes── HoldingWriteService ──writes──
 ManualPositionWriteController ──writes── ManualPositionWriteService ──writes── Postgres  (manual_position rows and
         ▲                                                                          their trades; never a holding)
         └──JSON── ui/'s closed positions section (new manual position, its details and trades)
+
+InvestorWriteController ──writes── InvestorWriteService ──writes── Postgres  (investor and investor_cash_movement
+        ▲                                                                    rows; never the account owner's cash)
+        └──JSON── ui/'s investor cards (add, rename) and deposits panel
 ```
 
 The sync-at-connection lifecycle, which is the part worth knowing:
@@ -198,21 +208,27 @@ holding, syncedAt)`) or refreshed (`refreshFromIb` — IB's figures only, `statu
 so the sector and trades typed in by hand survive; a `CLOSED` holding that reappears is reopened
 automatically. `AccountStateEntity` holds one row, replaced by a new instance (`new AccountStateEntity(snapshot)`)
 on every sync. All of this runs in one `@Transactional` method, so a snapshot is stored whole or not at all.
-The hand-entered side is written only by `api.HoldingWriteService` and `api.ManualPositionWriteService` (below),
-through `HoldingEntity.changeSector`, the `TradeEntity` constructors and `TradeEntity.changeDetails`, and
-`ManualPositionEntity`'s constructor and `changeDetails`. `V2__closed_positions.sql` added `trade.commission`
+The hand-entered side is written only by `api.HoldingWriteService`, `api.ManualPositionWriteService` and
+`api.InvestorWriteService` (below), through `HoldingEntity.changeSector`, the `TradeEntity` constructors,
+`changeDetails` and `changeInvestor`, `ManualPositionEntity`'s constructor and `changeDetails`, `InvestorEntity`'s
+constructor and `changeName`, and `InvestorCashMovementEntity`'s constructor and `changeDetails`. `V2__closed_positions.sql` added `trade.commission`
 (`NOT NULL`: a trade entered without one stores the default, `Utils.calculateOrderCommission` — 1 cent a share, at
 least $5 an order, IBBot's rule — worked out at write time). `V3__manual_positions.sql` added `manual_position`
 (`ManualPositionEntity`): a position PortfolioBoss never saw as a holding, sold before the first sync, kept apart from
 `holding` because only the sync creates holdings. Its buys and sells are ordinary `trade` rows — a trade belongs to a
 holding **or** a manual position (`holding_id` / `manual_position_id`, exactly one set, checked by the table) — so they
-are computed and corrected the same way; `ManualPositionEntity.tradeHistory()` mirrors `HoldingEntity`'s. V3 also
-turned V2's one-row-per-round-trip `manual_closed_position` into manual positions (same ids, one buy and one sell) and
-dropped it. `HoldingRepository`, `TradeRepository`, `ManualPositionRepository` and `AccountStateRepository` are the
-repositories.
+are computed and corrected the same way. V3 also turned V2's one-row-per-round-trip `manual_closed_position` into
+manual positions (same ids, one buy and one sell) and dropped it. `V4__investors.sql` added `investor`
+(`InvestorEntity`: a name, unique, and `is_account_owner` — at most one, the row "Me" the migration created) and
+`investor_cash_movement` (`InvestorCashMovementEntity`: date, `CashMovementType` `DEPOSIT` / `WITHDRAWAL`, amount, note
+— only for investors other than the owner), and made `trade.investor_id` `NOT NULL`, every trade entered before it
+the owner's. `TradeEntity.investorId()` is a plain id, not a link to the entity: the computation needs only the id,
+and the UI gets the names from `investors`. `HoldingRepository`, `TradeRepository`, `ManualPositionRepository`,
+`InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the default method
+`accountOwner()`), `InvestorCashMovementRepository` and `AccountStateRepository` are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V4__….sql`.
+  checksum): a schema change is a new `V5__….sql`.
 - `ddl-auto=validate` makes Hibernate check the entities against the tables at startup and change nothing;
   never set it to `update` or `create`.
 - Figures from IB are `DOUBLE PRECISION` columns under `Double` fields; amounts typed in by hand
@@ -223,13 +239,17 @@ Things that are easy to break:
   row (`NULL` → `NaN`) so the derived math is never duplicated outside `Holding`.
 - `scripts/backup-db.sh` dumps the database to `~/PortfolioBossBackups`, outside the repo.
 - Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
-  `ManualPositionWriteServiceTest`) are `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) —
-  never PostgreSQL is mocked out.
-- A migration that moves real data (V3) is tried first on a scratch database holding a copy of the real one, and
-  `scripts/backup-db.sh` runs before the `./run.sh` that applies it.
+  `ManualPositionWriteServiceTest`, `InvestorWriteServiceTest`) are `@DataJpaTest`s against the real
+  `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
+- A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
+  `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
+  database and compared table by table first). A live check that writes test data (a made-up investor) runs against a
+  scratch copy too, pointed at with `SPRING_DATASOURCE_URL`: there is no way to delete an investor.
 
-`portfolioboss.domain` holds `HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning` and
-`HoldingWarningType` — pure computation, no Spring and no database, so it is unit tested directly. A holding's
+`portfolioboss.domain` holds `HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`,
+and for the investors `PositionTrades`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`,
+`InvestorWarning` and `InvestorWarningType` — pure computation, no Spring and no database, so it is unit tested
+directly. A holding's
 `firstBuyDate`, `lastSellDate`, `holdingDays` and closed positions are derived from its `trade` rows, never stored:
 `HoldingHistory.of(List<TradeFact>)` walks them in chronological order (a buy before a sell on the same date) tracking
 a running quantity, and splits them into **position periods** (the private record `PositionPeriod`): a buy while flat
@@ -251,9 +271,28 @@ not the system clock, so the number doesn't drift between page loads) when `OPEN
 buy dated after that sync (entered today while serving an older sync, e.g. with TWS off) counts as 0 days. `HoldingRepository
 .findByAccountOrderById`'s `@EntityGraph(attributePaths = "trades")` loads a holding's trades in the same
 query instead of one extra query per holding (`ManualPositionRepository.findAllByOrderById` does the same);
-`TradeEntity.toTradeFact()` reduces a row to what the computation needs (id, date, side, quantity, price, commission),
-and `HoldingEntity.tradeHistory()` / `ManualPositionEntity.tradeHistory()` do the whole conversion, so
-`HoldingResponse` and the closed positions of both derive it the same way.
+`TradeEntity.toTradeFact()` reduces a row to what the computation needs (id, investor, date, side, quantity, price,
+commission). `HoldingEntity.tradeHistory()` is the history of all of a holding's trades together — its dates and
+warnings in `HoldingResponse`. `toPositionTrades()`, on `HoldingEntity` and `ManualPositionEntity` alike, builds a
+`PositionTrades` (symbol, currency, the IB figures or `null` for a manual position, every trade) that splits them by
+investor: `historyOf(investorId)` runs `HoldingHistory.of` on one investor's trades only, so the **closed positions are
+per investor** (one investor can sell out of a holding the other still holds), and `quantitiesByInvestor` gives each
+other investor the sum of their trades and the account owner IB's position minus those.
+
+The investors (INVESTORS_TODO.md): the **account owner is the residual** — the owner's cash, total value and shares cost
+are IB's minus the other investors', so the cards always add up to exactly what IB reports, missing trades or not.
+Another investor's cash = deposits − withdrawals − buys + sells − commissions (`TradeFact.cashFlow()`,
+`CashMovementFact`), derived on every read and never stored; their shares value is their quantity × IB's market price,
+their cost `HoldingHistory.heldCost` (the average cost of the shares still held, from the same `AverageCostCalculator`).
+Profit is from the shares only, the same for everyone: unrealized = value − cost, realized = their closed positions,
+**per currency** (`realizedPnlByCurrency`); everything else is USD only. `InvestorSummaryCalculator` (its inputs as
+record components: the owner's id, the investor ids, every `PositionTrades`, the cash movements, IB's cash and NAV)
+returns an `InvestorSummary` per investor (`depositsMinusWithdrawals` — `null` for the owner —, `cash`, `sharesValue`,
+`totalValue`, `sharesCost`, `realizedPnlByCurrency`, `warnings`; derived `unrealizedPnl`, its percent and `totalPnl`). A
+missing price makes what depends on it `null`, never a guess. `InvestorWarning(type, message)` — several at once, shown,
+never blocking: `TRADES_WITHOUT_PRICE`, `TRADES_NOT_IN_USD` (left out of the cash), `NEGATIVE_CASH`,
+`MORE_SHARES_THAN_IB`, `CLOSED_POSITIONS_NOT_COUNTED` (no realized P&L to add). Dividends, interest and IB's own fees
+are in IB's cash, so they land on the owner; they count toward no one's profit.
 
 `HoldingHistory.warnings(status, ibPosition)` checks the trades entered against IB, which stays the source of truth
 for the quantity — a gap is shown next to the holding, never a reason to reject a trade. It returns **at most one**
@@ -278,14 +317,19 @@ fields, `HoldingResponse` also carries `id`, `conId`, `sector`, `status`, and �
 (a `List<TradeResponse>`, one entry per `trade` row), and `warnings` (a `List<domain.HoldingWarning>`, see above);
 the UI reads all of them. `HoldingWarning` and its enum go into the JSON as they are, with no `*Response` copy — the
 same as `HoldingStatus` and `TradeSide` — so their names are JSON keys and values too.
-`PortfolioResponse.closedPositions` (added last, at the top level) is every holding's and then every manual position's
-`HoldingHistory.closedPositions` as `ClosedPositionResponse`s (`holdingId`, `symbol`, `currency`, `sector`, the
+`PortfolioResponse.closedPositions` (at the top level) is every holding's and then every manual position's closed
+positions, each investor's apart, as `ClosedPositionResponse`s (`holdingId`, `symbol`, `currency`, `sector`, the
 dates, `holdingDays`, `quantity` — the shares **sold** —, the average prices, `realizedPnl`, `realizedPnlPercent`,
 `warning` — `null`, or the over-sell message, which the UI shows as it is in an orange row under the position —,
 `commissions`, `source` (`ClosedPositionSource`: `TRADES` for a holding, `MANUAL`), `manualPositionId`, `note` (the
-manual position's), `remainingQuantity` and `trades` — the period's own `TradeResponse`s, picked by `tradeIds`) — from
-open holdings as well as closed ones, since a holding still open today may have been sold in full or in part before.
-The UI sums the realized P&L per currency. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
+manual position's), `remainingQuantity`, `trades` — the period's own `TradeResponse`s, picked by `tradeIds` — and
+`investorId`) — from open holdings as well as closed ones, since a holding still open today may have been sold in full
+or in part before. The UI sums the realized P&L per currency. `PortfolioResponse.investors` (added last) is one
+`InvestorResponse` per investor, the account owner first: `id`, `name`, `accountOwner`, the `InvestorSummary` figures
+and its derived ones, `realizedPnlByCurrency` (a `{"HKD": 950, "USD": 500}` map), `cashMovements`
+(`CashMovementResponse`s) and `warnings` (`domain.InvestorWarning`, as it is). `HoldingResponse.investorQuantities`
+(`InvestorQuantityResponse(investorId, quantity)`, only investors holding some of it) and `TradeResponse.investorId`
+were appended for the split. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
 in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.
@@ -301,9 +345,18 @@ not before buy date, is an `@AssertTrue` private method), `PUT /api/manual-posit
 `ManualPositionRequest`), `DELETE /api/manual-positions/{id}` (204, its trades deleted with it) and `POST
 /api/manual-positions/{id}/trades` (201, a `TradeRequest`). The symbol and currency of a manual position are stored in
 capitals. A manual position's **last sell** can be corrected but not deleted or turned into a buy — it would vanish
-from the closed positions — so `HoldingWriteService` answers that with 409 Conflict. After a write the UI reloads all
-of `/api/portfolio`, so the endpoints stay small. The bodies are the `api/request/` records (`SectorRequest`,
-`TradeRequest`, `NewManualPositionRequest`, `ManualPositionRequest`), checked by `@Valid` before the method runs, with
+from the closed positions — so `HoldingWriteService` answers that with 409 Conflict. `InvestorWriteController` /
+`InvestorWriteService` serve `POST /api/investors` (201 + an `AddedInvestorResponse`) and `PUT
+/api/investors/{investorId}` (204, a rename — the owner too) with an `InvestorRequest(name)`; a name already taken,
+ignoring case, is 409, and the account owner is created only by V4, never by the API. `POST
+/api/investors/{investorId}/cash-movements` (201), `PUT /api/cash-movements/{movementId}` (200) and `DELETE
+/api/cash-movements/{movementId}` (204) take a `CashMovementRequest(movementDate, type, amount, note)`; a deposit for the
+account owner is 400 — the owner's cash comes from IB. `TradeRequest` and `NewManualPositionRequest` gained an optional
+`investorId`: a new trade without one is the account owner's, a **correction without one keeps the trade's investor**,
+and an id that doesn't exist is 400 (`InvestorWriteService.investorOfTrade`, used by both trade services). After a
+write the UI reloads all of `/api/portfolio`, so the endpoints stay small. The bodies are the `api/request/` records
+(`SectorRequest`, `TradeRequest`, `NewManualPositionRequest`, `ManualPositionRequest`, `InvestorRequest`,
+`CashMovementRequest`), checked by `@Valid` before the method runs, with
 limits that mirror the columns (`@Digits(integer = 14, fraction = 6)` for a price or commission in `NUMERIC(20,6)`,
 with its own readable message; a quantity is a **whole number** of shares, `@Digits(integer = 14, fraction = 0)` —
 "must be a whole number (at most 14 digits)", which also rejects a raw `10.0` since it counts the decimals as
@@ -353,8 +406,9 @@ Things that are easy to break:
 - API response types go in `portfolioboss.api.response`, request bodies in `portfolioboss.api.request`; the
   accessors, derived-math and write methods another package needs (`Holding.costBasis()`,
   `HoldingEntity.id()`/`sector()`/`trades()`/`toIbHolding()`/`changeSector()`, `TradeEntity`'s constructors and
-  `changeDetails()`, `ManualPositionEntity`'s constructor and `changeDetails()`, `TradeResponse(TradeEntity)` — built
-  by the write services in `api`, …) are
+  `changeDetails()`/`changeInvestor()`, `ManualPositionEntity`'s constructor and `changeDetails()`, `InvestorEntity`'s
+  constructor and `changeName()`, `toPositionTrades()`, `TradeResponse(TradeEntity)` — built by the write services in
+  `api`, …) are
   `public`. Everything internal to a class's own package — `HoldingEntity`'s and `AccountStateEntity`'s
   from-a-snapshot constructors, `refreshFromIb`, `markClosed`, `HoldingResponse.from`'s entity-to-response
   conversion, `TwsPortfolioRunner`'s own constructor — is marked `protected` rather than
@@ -376,8 +430,8 @@ Things that are easy to break:
   TODO.md.
 - Milestone 1 direction: Maven, Spring Boot REST, the PostgreSQL schema and entities, the sync at connection,
   deriving buy/sell dates and holding period from `trade` rows, the write endpoints for the sector and trades,
-  the UI to show and enter them, the reconciliation warnings, and the closed positions (commissions, average cost,
-  manual positions) are in; the API reads only from the database.
+  the UI to show and enter them, the reconciliation warnings, the closed positions (commissions, average cost,
+  manual positions) and the investors sharing the account are in; the API reads only from the database.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

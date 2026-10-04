@@ -12,6 +12,7 @@ import {
 import type { ClosedPosition } from '../types/portfolio';
 import { ExpandRowButton } from './ExpandRowButton';
 import { HoldingPeriod } from './HoldingPeriod';
+import { hasSeveralInvestors, investorNameOf, useInvestors } from './InvestorsContext';
 import { ManualPositionPanel } from './ManualPositionPanel';
 import { TradeList } from './TradesPanel';
 
@@ -25,6 +26,13 @@ interface ColumnDefinition {
   renderValue: (closedPosition: ClosedPosition) => ReactNode;
   /** Text colour classes for the cell; a neutral grey when omitted. */
   valueColorClass?: (closedPosition: ClosedPosition) => string;
+  /** Left out while the account owner is the only investor: every row would say the same. */
+  onlyWithSeveralInvestors?: boolean;
+}
+
+/** Whose shares were sold: each investor's trades make closed positions of their own. */
+function InvestorName({ investorId }: { investorId: number }) {
+  return <>{investorNameOf(useInvestors(), investorId)}</>;
 }
 
 /** "—", and hovering says why: a buy or a sell of the position has no price entered. */
@@ -84,6 +92,13 @@ const COLUMNS: ColumnDefinition[] = [
     alignment: 'left',
     renderValue: (closedPosition) => <SymbolWithTags closedPosition={closedPosition} />,
     valueColorClass: () => 'font-semibold text-slate-100',
+  },
+  {
+    title: 'Investor',
+    alignment: 'left',
+    renderValue: (closedPosition) => <InvestorName investorId={closedPosition.investorId} />,
+    valueColorClass: () => 'font-sans text-slate-300',
+    onlyWithSeveralInvestors: true,
   },
   {
     title: 'Sector',
@@ -151,6 +166,10 @@ function alignmentClass(column: ColumnDefinition): string {
   return column.alignment === 'right' ? 'text-right' : 'text-left';
 }
 
+function columnsToShow(showsInvestor: boolean): ColumnDefinition[] {
+  return showsInvestor ? COLUMNS : COLUMNS.filter((column) => !column.onlyWithSeveralInvestors);
+}
+
 // ── table ───────────────────────────────────────────────────────────────────────────────────────
 
 /** The most recent sale first, and the same day's in symbol order. 'yyyy-MM-dd' sorts correctly as text. */
@@ -159,30 +178,33 @@ function compareNewestClosedFirst(first: ClosedPosition, second: ClosedPosition)
 }
 
 /**
- * Unique: a manual position or holding, and the buy that opened the stretch — two stretches of the same owner never
- * open on the same day, because all of a day's buys are counted before its sells.
+ * Unique: a manual position or holding, the investor, and the buy that opened the stretch — two stretches of the same
+ * investor in the same holding never open on the same day, because all of a day's buys are counted before its sells.
+ * Two investors' stretches can, so the investor is part of it.
  */
 function rowKeyOf(closedPosition: ClosedPosition): string {
   return `${expansionKeyOf(closedPosition)}-${closedPosition.openDate}`;
 }
 
 /**
- * Which row is open, kept across reloads. A manual position's by its id alone: adding a buy dated before its first one
- * moves the row's buy date, and the row should stay open while its trades are being entered.
+ * Which row is open, kept across reloads. A manual position's by its id and investor alone: adding a buy dated before
+ * its first one moves the row's buy date, and the row should stay open while its trades are being entered.
  */
 function expansionKeyOf(closedPosition: ClosedPosition): string {
   return closedPosition.source === 'MANUAL'
-    ? `manual-${closedPosition.manualPositionId}`
-    : `holding-${closedPosition.holdingId}-${closedPosition.openDate}`;
+    ? `manual-${closedPosition.manualPositionId}-${closedPosition.investorId}`
+    : `holding-${closedPosition.holdingId}-${closedPosition.investorId}-${closedPosition.openDate}`;
 }
 
 /** A row with a warning leaves the line under it to the warning, so the two read as one. */
 function ClosedPositionRow({
   closedPosition,
+  columns,
   isExpanded,
   onToggleExpanded,
 }: {
   closedPosition: ClosedPosition;
+  columns: ColumnDefinition[];
   isExpanded: boolean;
   onToggleExpanded: () => void;
 }) {
@@ -198,7 +220,7 @@ function ClosedPositionRow({
           expandHint="Show its trades"
         />
       </td>
-      {COLUMNS.map((column) => {
+      {columns.map((column) => {
         const colorClass = column.valueColorClass?.(closedPosition) ?? 'text-slate-300';
         return (
           <td
@@ -213,14 +235,14 @@ function ClosedPositionRow({
   );
 }
 
-/** Every column, plus the chevron's. */
-const COLUMN_COUNT_WITH_CHEVRON = COLUMNS.length + 1;
-
-/** Under the row it belongs to, always visible: the same orange as a holding's warnings. */
-function ClosedPositionWarningRow({ message }: { message: string }) {
+/**
+ * Under the row it belongs to, always visible: the same orange as a holding's warnings. `columnCount` includes the
+ * chevron's.
+ */
+function ClosedPositionWarningRow({ message, columnCount }: { message: string; columnCount: number }) {
   return (
     <tr className="border-b border-slate-800/60 last:border-b-0">
-      <td colSpan={COLUMN_COUNT_WITH_CHEVRON} className="px-3 pb-2 text-xs text-orange-500">
+      <td colSpan={columnCount} className="px-3 pb-2 text-xs text-orange-500">
         <div className="flex items-center gap-1">
           <TriangleAlert size={12} className="shrink-0" />
           {message}
@@ -250,15 +272,17 @@ function HoldingTradesOfStretch({ closedPosition }: { closedPosition: ClosedPosi
 /** What opens under a row: a manual position, to correct; a holding's trades, to read. */
 function ClosedPositionDetailsRow({
   closedPosition,
+  columnCount,
   onDataChanged,
 }: {
   closedPosition: ClosedPosition;
+  columnCount: number;
   onDataChanged: () => Promise<void>;
 }) {
   const manualPositionId = closedPosition.manualPositionId;
   return (
     <tr className="border-b border-slate-800/60 last:border-b-0">
-      <td colSpan={COLUMN_COUNT_WITH_CHEVRON} className="px-3 pb-3">
+      <td colSpan={columnCount} className="px-3 pb-3">
         {manualPositionId === null ? (
           <HoldingTradesOfStretch closedPosition={closedPosition} />
         ) : (
@@ -287,6 +311,8 @@ export function ClosedPositionsTable({
   // One row open at a time, as in the positions table.
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const newestFirst = [...closedPositions].sort(compareNewestClosedFirst);
+  const columns = columnsToShow(hasSeveralInvestors(useInvestors()));
+  const columnCountWithChevron = columns.length + 1;
 
   const toggleExpanded = (expansionKey: string) =>
     setExpandedKey((currentKey) => (currentKey === expansionKey ? null : expansionKey));
@@ -299,7 +325,7 @@ export function ClosedPositionsTable({
             <th className="w-6">
               <span className="sr-only">Trades</span>
             </th>
-            {COLUMNS.map((column) => (
+            {columns.map((column) => (
               <th key={column.title} className={`px-3 py-2 font-medium ${alignmentClass(column)}`}>
                 {column.title}
               </th>
@@ -314,11 +340,20 @@ export function ClosedPositionsTable({
               <Fragment key={rowKeyOf(closedPosition)}>
                 <ClosedPositionRow
                   closedPosition={closedPosition}
+                  columns={columns}
                   isExpanded={isExpanded}
                   onToggleExpanded={() => toggleExpanded(expansionKey)}
                 />
-                {closedPosition.warning !== null && <ClosedPositionWarningRow message={closedPosition.warning} />}
-                {isExpanded && <ClosedPositionDetailsRow closedPosition={closedPosition} onDataChanged={onDataChanged} />}
+                {closedPosition.warning !== null && (
+                  <ClosedPositionWarningRow message={closedPosition.warning} columnCount={columnCountWithChevron} />
+                )}
+                {isExpanded && (
+                  <ClosedPositionDetailsRow
+                    closedPosition={closedPosition}
+                    columnCount={columnCountWithChevron}
+                    onDataChanged={onDataChanged}
+                  />
+                )}
               </Fragment>
             );
           })}

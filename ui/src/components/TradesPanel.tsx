@@ -4,6 +4,7 @@ import { deleteTrade, errorMessageOf } from '../lib/apiClient';
 import { EMPTY_VALUE, formatMoney, formatQuantity } from '../lib/format';
 import type { Trade, TradeSide } from '../types/portfolio';
 import { HoldingWarningList } from './HoldingWarnings';
+import { hasSeveralInvestors, investorNameOf, useInvestors } from './InvestorsContext';
 import { TradeForm, type TradeOwner } from './TradeForm';
 
 function TradeSideBadge({ side }: { side: TradeSide }) {
@@ -44,10 +45,20 @@ function TradeRowButtons({ trade, rowActions }: { trade: Trade; rowActions: Trad
   );
 }
 
-function TradeRow({ trade, rowActions }: { trade: Trade; rowActions: TradeRowActions | null }) {
+function TradeRow({
+  trade,
+  investorName,
+  rowActions,
+}: {
+  trade: Trade;
+  /** `null` while the account owner is the only investor: the column is then left out. */
+  investorName: string | null;
+  rowActions: TradeRowActions | null;
+}) {
   const isBeingEdited = rowActions?.tradeIdBeingEdited === trade.id;
   return (
     <tr className={`border-b border-slate-800/60 last:border-b-0 ${isBeingEdited ? 'bg-emerald-500/5' : ''}`}>
+      {investorName !== null && <td className="px-2 py-1">{investorName}</td>}
       <td className="px-2 py-1 font-mono">{trade.tradeDate}</td>
       <td className="px-2 py-1">
         <TradeSideBadge side={trade.side} />
@@ -65,12 +76,18 @@ function TradeRow({ trade, rowActions }: { trade: Trade; rowActions: TradeRowAct
   );
 }
 
-/** The trades as a table, by date. With `rowActions` every row can be corrected and deleted; without, it is read-only. */
+/**
+ * The trades as a table, by date. With `rowActions` every row can be corrected and deleted; without, it is read-only.
+ * Whose each trade is shows in a first column once there is more than one investor.
+ */
 export function TradeList({ trades, rowActions = null }: { trades: Trade[]; rowActions?: TradeRowActions | null }) {
+  const investors = useInvestors();
+  const showsInvestor = hasSeveralInvestors(investors);
   return (
     <table className="w-full border-collapse">
       <thead>
         <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wide text-slate-500">
+          {showsInvestor && <th className="px-2 py-1 text-left font-medium">Investor</th>}
           <th className="px-2 py-1 text-left font-medium">Date</th>
           <th className="px-2 py-1 text-left font-medium">Side</th>
           <th className="px-2 py-1 text-right font-medium">Qty</th>
@@ -86,7 +103,12 @@ export function TradeList({ trades, rowActions = null }: { trades: Trade[]; rowA
       </thead>
       <tbody>
         {trades.map((trade) => (
-          <TradeRow key={trade.id} trade={trade} rowActions={rowActions} />
+          <TradeRow
+            key={trade.id}
+            trade={trade}
+            investorName={showsInvestor ? investorNameOf(investors, trade.investorId) : null}
+            rowActions={rowActions}
+          />
         ))}
       </tbody>
     </table>

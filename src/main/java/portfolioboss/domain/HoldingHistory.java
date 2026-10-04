@@ -27,9 +27,12 @@ import java.util.List;
  *                        ({@link #warnings}) — including a sell the dates ignore, so that the check still shows it
  * @param closedPositions the shares sold in every position period that has a sell, oldest first: each one a sell
  *                        brought back to zero, and the current one too if it has had a sell — at average cost
+ * @param heldCost        what the shares still held in the current position period cost, at average cost and with the
+ *                        part of the buy commissions that stays with them — as IB's average cost counts it. 0 when
+ *                        nothing is held; {@code null} if a buy still held has no price entered
  */
 public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, BigDecimal netQuantity,
-                             List<ClosedPosition> closedPositions) {
+                             List<ClosedPosition> closedPositions, BigDecimal heldCost) {
 
     /**
      * Below this, a quantity counts as "flat" (zero). Needed because summed {@code BigDecimal}s rarely
@@ -41,9 +44,10 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
 
     /**
      * How far the trades entered may be from IB's quantity and still count as matching: IB reports fractional
-     * shares as a {@code double}, which is rarely the exact decimal that was typed in.
+     * shares as a {@code double}, which is rarely the exact decimal that was typed in. Also used by
+     * {@link InvestorSummaryCalculator}.
      */
-    private static final BigDecimal QUANTITY_TOLERANCE = new BigDecimal("0.0001");
+    protected static final BigDecimal QUANTITY_TOLERANCE = new BigDecimal("0.0001");
 
     /** 16 significant digits, as in {@link ClosedPosition}: the part of the cost that leaves with a partial sell. */
     private static final MathContext DIVISION_PRECISION = MathContext.DECIMAL64;
@@ -69,11 +73,11 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
                 .toList();
 
         if (positionPeriods.isEmpty()) {
-            return new HoldingHistory(null, null, netQuantity, closedPositions);
+            return new HoldingHistory(null, null, netQuantity, closedPositions, BigDecimal.ZERO);
         }
         PositionPeriod currentPeriod = positionPeriods.getLast();
         return new HoldingHistory(currentPeriod.firstBuyDate(), currentPeriod.lastSellDate(), netQuantity,
-                closedPositions);
+                closedPositions, currentPeriod.heldCost());
     }
 
     /**
@@ -184,6 +188,17 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
         }
 
         private ClosedPosition toClosedPosition() {
+            List<Long> tradeIds = trades.stream().map(TradeFact::id).toList();
+            return averageCost().toClosedPosition(firstBuyDate(), lastSellDate(), isClosed, tradeIds);
+        }
+
+        /** What the shares still held cost: nothing once the period is closed. */
+        private BigDecimal heldCost() {
+            return isClosed ? BigDecimal.ZERO : averageCost().heldCostWithBuyCommissions();
+        }
+
+        /** Every trade of the period through an {@link AverageCostCalculator}, in date order. */
+        private AverageCostCalculator averageCost() {
             AverageCostCalculator averageCostCalculator = new AverageCostCalculator();
             for (TradeFact trade : trades) {
                 if (trade.side() == TradeSide.BUY) {
@@ -192,8 +207,7 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
                     averageCostCalculator.addSell(trade);
                 }
             }
-            List<Long> tradeIds = trades.stream().map(TradeFact::id).toList();
-            return averageCostCalculator.toClosedPosition(firstBuyDate(), lastSellDate(), isClosed, tradeIds);
+            return averageCostCalculator;
         }
 
         private List<TradeFact> tradesOnSide(TradeSide side) {
@@ -255,6 +269,14 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
                 return heldTotal;
             }
             return heldTotal.multiply(quantitySold).divide(heldQuantity, DIVISION_PRECISION);
+        }
+
+        /**
+         * What the shares still held cost, with the part of the buy commissions that stays with them. In the example
+         * above, after the first sell: 500 for the 5 left, plus half of the first buy's commission.
+         */
+        private BigDecimal heldCostWithBuyCommissions() {
+            return heldCost == null ? null : heldCost.add(heldBuyCommissions);
         }
 
         private BigDecimal sumOrNull(BigDecimal runningTotal, BigDecimal amount) {

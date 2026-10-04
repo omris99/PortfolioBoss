@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.tuple;
 class HoldingHistoryTest {
 
     private static final LocalDate SNAPSHOT_DATE = LocalDate.of(2026, 9, 22);
+    private static final long INVESTOR_ID = 1;
 
     @Test
     void everythingIsNullWithNoTrades() {
@@ -440,6 +441,70 @@ class HoldingHistoryTest {
                 .containsExactly(List.of(1L, 2L), List.of(4L, 5L));
     }
 
+    // ── what the shares still held cost ─────────────────────────────────────────────────────────
+
+    @Test
+    void nothingIsHeldWithNoTrades() {
+        assertThat(HoldingHistory.of(List.of()).heldCost()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void sharesBoughtAreHeldAtWhatTheyCostWithTheirCommissions() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                trade("2026-01-01", TradeSide.BUY, "10", "100", "5"),
+                trade("2026-02-01", TradeSide.BUY, "10", "200", "5")));
+
+        assertThat(history.heldCost()).isEqualByComparingTo("3010");
+    }
+
+    /** The example in INVESTORS_TODO.md, decision 5. */
+    @Test
+    void aPartialSellLeavesTheRestAtTheSameAverageCost() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2026-01-01", 24, "120"),
+                sell("2026-02-01", 4, "180")));
+
+        assertThat(history.heldCost()).isEqualByComparingTo("2400");
+        assertThat(history.closedPositions().getFirst().realizedPnl()).isEqualByComparingTo("240");
+    }
+
+    @Test
+    void theSharesLeftKeepTheirPartOfTheBuyCommission() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                trade("2026-01-01", TradeSide.BUY, "10", "100", "6"),
+                trade("2026-02-01", TradeSide.SELL, "5", "150", "5")));
+
+        assertThat(history.heldCost()).isEqualByComparingTo("503");
+    }
+
+    @Test
+    void onlyTheCurrentPositionPeriodIsHeld() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2025-01-01", 10, "100"),
+                sell("2025-06-01", 10, "150"),
+                buy("2026-01-01", 5, "200")));
+
+        assertThat(history.heldCost()).isEqualByComparingTo("1000");
+    }
+
+    @Test
+    void aPositionSoldInFullHoldsNothing() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2025-01-01", 10, "100"),
+                sell("2025-06-01", 10, "150")));
+
+        assertThat(history.heldCost()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void aBuyStillHeldWithNoPriceLeavesTheCostUnknown() {
+        HoldingHistory history = HoldingHistory.of(List.of(
+                buy("2026-01-01", 10, "100"),
+                buy("2026-02-01", 10)));
+
+        assertThat(history.heldCost()).isNull();
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
     /** Each trade gets the next id, in the order a test creates them; JUnit makes a new instance for every test. */
@@ -474,9 +539,10 @@ class HoldingHistoryTest {
         return trade(date, side, quantity, price, "0");
     }
 
+    /** Every trade here is one investor's: which investor makes no difference to the history itself. */
     private TradeFact trade(String date, TradeSide side, String quantity, String price, String commission) {
         BigDecimal priceOrNull = price == null ? null : new BigDecimal(price);
-        return new TradeFact(nextTradeId++, LocalDate.parse(date), side, new BigDecimal(quantity), priceOrNull,
-                new BigDecimal(commission));
+        return new TradeFact(nextTradeId++, INVESTOR_ID, LocalDate.parse(date), side, new BigDecimal(quantity),
+                priceOrNull, new BigDecimal(commission));
     }
 }

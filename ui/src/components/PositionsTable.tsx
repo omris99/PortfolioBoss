@@ -12,6 +12,7 @@ import type { Holding } from '../types/portfolio';
 import { ExpandRowButton } from './ExpandRowButton';
 import { HoldingPeriod } from './HoldingPeriod';
 import { HoldingWarningIcon } from './HoldingWarnings';
+import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
 import { SECTOR_OPTIONS_LIST_ID, SectorCell } from './SectorCell';
 import { TradesPanel } from './TradesPanel';
 
@@ -122,6 +123,31 @@ function SymbolWithStatus({ holding }: { holding: Holding }) {
   );
 }
 
+/**
+ * "39 (15 · 24)": IB's quantity, and how it divides — the account owner's part first, then each other investor's.
+ * Hovering names them: "Me 15 · Avi 24". Just "39" while nobody but the account owner holds any of it.
+ */
+function QuantityWithSplit({ holding }: { holding: Holding }) {
+  const investors = useInvestors();
+  const accountOwner = accountOwnerOf(investors);
+  const otherInvestorsParts = holding.investorQuantities.filter((part) => part.investorId !== accountOwner?.id);
+  if (accountOwner === null || otherInvestorsParts.length === 0) return <>{formatQuantity(holding.position)}</>;
+
+  // 0 when the others hold all of it: the account owner's part is still shown, so the split reads the same way.
+  const accountOwnerQuantity =
+    holding.investorQuantities.find((part) => part.investorId === accountOwner.id)?.quantity ?? 0;
+  const parts = [{ investorId: accountOwner.id, quantity: accountOwnerQuantity }, ...otherInvestorsParts];
+  const split = parts.map((part) => formatQuantity(part.quantity)).join(' · ');
+  const namedSplit = parts
+    .map((part) => `${investorNameOf(investors, part.investorId)} ${formatQuantity(part.quantity)}`)
+    .join(' · ');
+  return (
+    <span title={namedSplit}>
+      {formatQuantity(holding.position)} <span className="text-slate-500">({split})</span>
+    </span>
+  );
+}
+
 // The console report's columns in its order, with the sector after the symbol and the dates and
 // holding period, which are derived from the trades entered by hand, at the end.
 const COLUMNS: ColumnDefinition[] = [
@@ -144,7 +170,7 @@ const COLUMNS: ColumnDefinition[] = [
     field: 'position',
     title: 'Qty',
     alignment: 'right',
-    renderValue: (holding) => formatQuantity(holding.position),
+    renderValue: (holding) => <QuantityWithSplit holding={holding} />,
   },
   {
     field: 'averageCost',

@@ -38,6 +38,8 @@
     אוטומטית (קנייה אחת + מכירה אחת, העמלה חצי-חצי); את שלוש השורות של 9988.HK עומרי מאחד אחר כך ביד (או דרך ה-API, באישורו).
 12. **איפה עורכים:** עסקאות של פוזיציה ידנית — בשורה הפתוחה בטבלת העסקאות הסגורות. עסקאות של החזקה — רק ב-Positions, כמו היום (בשורה
     הפתוחה הן לקריאה בלבד).
+13. **כמות היא תמיד מספר שלם** (עומרי, 03.10.2026): ב-API (`@Digits(fraction = 0)` ב-`TradeRequest` וב-`NewManualPositionRequest`) ובטפסים
+    (`step="1"`, `isPositiveWholeNumber`). העמודה נשארת `NUMERIC(20,6)`, בלי `CHECK` ב-DB; לא היו כמויות שבורות באף DB.
 6. **UI:** אזור "Closed positions" מתחת לטבלת ה-Positions. המתג "Show closed" נשאר — שם משלימים עסקאות של החזקה סגורה.
 7. **לא משתמשים ב-`realizedPnl` של IB:** הוא לא מבחין בין סבבים, ואין אותו לעסקאות ידניות.
 
@@ -53,8 +55,8 @@
 
 > **המטרה:** כל position period שנסגר מופיע ב-API וב-UI עם הרווח שלו. עובד על הנתונים שכבר ב-DB.
 >
-> **סטטוס (02.10.2026):** 1.1–1.5 נבנו על branch `maven-spring-boot`, עדיין לא committed. `mvn -q test` ירוק — 88 בדיקות (15 חדשות);
-> `npm run build` ירוק; רינדור בצד השרת של הטבלה והסכומים עם נתונים לדוגמה. ⬜ בדיקה בדפדפן — בידי עומרי. תוספות קטנות שלא היו בתוכנית:
+> **סטטוס (02.10.2026):** 1.1–1.5 נבנו על branch `maven-spring-boot` — committed f18caf9 (0.10.0), ותיקון מכירת היתר 69ceff3 (0.10.1).
+> `mvn -q test` ירוק — 88 בדיקות (15 חדשות); `npm run build` ירוק. ✅ בדיקה בדפדפן — עומרי (03.10.2026, מצאה את מכירת היתר שלמטה). תוספות קטנות שלא היו בתוכנית:
 > `HoldingEntity.symbol()` / `currency()` (accessors), `TradeFact.amount()`, ו-`HoldingPeriod` עבר מ-`PositionsTable` לקובץ משלו כי שתי הטבלאות משתמשות בו.
 >
 > **תיקון אחרי בדיקת הדפדפן (03.10.2026):** סבב שנמכר בו יותר ממה שנקנה (15 נקנו, 25 נמכרו) הראה רווח מנופח (+1,400 במקום +200) ומחיר
@@ -62,7 +64,7 @@
 > ו-`ClosedPositionResponse.warning` (בסוף) מחזיר הודעה שמוצגת בשורה כתומה גלויה מתחת לשורה ("Sold 25 shares but bought 15…"). בכותרת:
 > "(n without prices)" ו-"(n to check)" בנפרד.
 
-### 1.1 🟡 `domain`: `ClosedPosition` וחלוקה ל-position periods ב-`HoldingHistory`
+### 1.1 🟡✅ `domain`: `ClosedPosition` וחלוקה ל-position periods ב-`HoldingHistory`
 
 - `TradeFact` מקבל `price` (יכול להיות `null`).
 - `record ClosedPosition(openDate, closeDate, quantity, buyCost, sellProceeds)` — הסכומים הגולמיים; ממנו נגזרים
@@ -73,23 +75,23 @@
 - **⚠️ שינוי התנהגות קטן ומכוון:** מכירה שמורידה את הכמות *מתחת* לאפס (מכירת יתר — טעות הזנה) סוגרת את ה-period, כמו שהתוכנית המקורית
   (3.1) הגדירה. עד היום הכמות נשארה שלילית והקנייה הבאה לא פתחה period חדש. `netQuantity` לא משתנה, ולכן `QUANTITY_MISMATCH` ממשיך להצביע על הטעות.
 
-### 1.2 🟢 `HoldingEntity.tradeHistory()`
+### 1.2 🟢✅ `HoldingEntity.tradeHistory()`
 
 `HoldingHistory` של השורה, מחושב מהעסקאות שלה — כך ש-`HoldingResponse` והעסקאות הסגורות לא משכפלים את ההמרה
 `TradeEntity → TradeFact → HoldingHistory` (באותה רוח של `toIbHolding()`).
 
-### 1.3 🟢 API: `ClosedPositionResponse` ו-`PortfolioResponse.closedPositions`
+### 1.3 🟢✅ API: `ClosedPositionResponse` ו-`PortfolioResponse.closedPositions`
 
 - `ClosedPositionResponse(holdingId, symbol, currency, sector, openDate, closeDate, holdingDays, quantity, averageBuyPrice,
   averageSellPrice, realizedPnl, realizedPnlPercent)`.
 - `closedPositions` נוסף **בסוף** `PortfolioResponse` (ברמה העליונה — בסשן 2 יצטרפו שורות ידניות שלא שייכות לאף החזקה).
 
-### 1.4 🟢 בדיקות
+### 1.4 🟢✅ בדיקות
 
 `ClosedPositionTest` (החישובים), `HoldingHistoryTest` (חלוקה לסבבים), `PortfolioReadServiceTest` (מה-DB ועד ה-response),
 `PortfolioControllerTest` (שמות השדות ב-JSON).
 
-### 1.5 🟡 UI: אזור "Closed positions"
+### 1.5 🟡✅ UI: אזור "Closed positions"
 
 - `types/portfolio.ts`: `ClosedPosition` ו-`closedPositions`.
 - `components/ClosedPositionsTable.tsx`: ממוין לפי תאריך מכירה, החדש קודם (סדר קבוע בגרסה הראשונה). עמודות: Symbol, Sector, Bought,
@@ -102,8 +104,8 @@
 
 ## סשן 2 — backend: עמלות ועסקאות סגורות ידניות
 
-> **סטטוס (03.10.2026):** 2.1–2.4 נבנו על branch `maven-spring-boot`, עדיין לא committed. `mvn -q test` ירוק — 118 בדיקות (29 חדשות).
-> V2 רצה על `portfolioboss_test`; על ה-DB האמיתי היא תרוץ ב-`./run.sh` הבא (7 העסקאות שם יקבלו 5$ כל אחת). ה-UI לא נגע (סשן 3).
+> **סטטוס (03.10.2026):** 2.1–2.4 נבנו על branch `maven-spring-boot` — committed b4daeab (יחד עם סשן 3; ה-changelog 0.11.0 ב-634f1b8).
+> `mvn -q test` ירוק — 118 בדיקות (29 חדשות). V2 רצה על `portfolioboss_test` ועל `portfolioboss`. ה-UI לא נגע (סשן 3).
 > שינויים מהתוכנית, כולם אושרו לפני הבנייה: עמלת ברירת מחדל (החלטה 8) במקום 0; `ClosedPositionResponse` קיבל גם `commissions` ו-`note`
 > (טופס העריכה של סשן 3 צריך אותם — PUT מחליף הכול) ו-`holdingId` נעשה `Long` (`null` בשורה ידנית); ה-endpoints ב-
 > `ClosedPositionWriteController` / `ClosedPositionWriteService` חדשים ולא ב-`HoldingWrite*`; "מכירה לא לפני קנייה" היא `@AssertTrue`
@@ -157,8 +159,8 @@ Controller (קודי סטטוס, ולידציה, JSON בלבד) ו-Service (מה
 
 ## סשן 3 — UI: עמלה בטופס העסקה וטופס עסקה סגורה ידנית
 
-> **סטטוס (03.10.2026):** נבנה על branch `maven-spring-boot`, עדיין לא committed (יחד עם סשן 2). `npm run build` ירוק; רינדור בצד השרת
-> של האזור, טופס העריכה ופאנל העסקאות עם נתונים לדוגמה. ⬜ בדיקה בדפדפן — בידי עומרי (`./run.sh` הבא מריץ גם את V2 על ה-DB האמיתי).
+> **סטטוס (03.10.2026):** נבנה על branch `maven-spring-boot` — committed b4daeab (יחד עם סשן 2). `npm run build` ירוק; רינדור בצד השרת
+> של האזור, טופס העריכה ופאנל העסקאות עם נתונים לדוגמה. ✅ בדיקה בדפדפן — עומרי (03.10.2026, עם התיקונים שלמטה).
 > קבצים: `ManualClosedPositionForm.tsx` חדש; `ClosedPositionsSection` עבר מ-`App.tsx` לקובץ משלו (עם ה-state של הטופס והמחיקה), ו-`EmptyBox`
 > לקובץ משלו. תוספת שלא הייתה בתוכנית: `lib/formInput.ts` — `localTodayIsoDate`, `numberOrNull`, `trimmedOrNull`, `INPUT_CLASS`, שעברו
 > מ-`TradeForm` כי שני הטפסים צריכים אותם. ב-`ClosedPositionsTable` עמודת Commission, תגית "manual", ועמודת פעולות (✏️/🗑 בשורה ידנית,
@@ -180,16 +182,15 @@ Controller (קודי סטטוס, ולידציה, JSON בלבד) ו-Service (מה
 > **המטרה:** כל סבב שיש בו מכירה הוא שורה — גם אם עוד מחזיקים חלק ממנו — עם עלות ממוצעת; ועסקה ידנית הופכת לפוזיציה ידנית עם קניות
 > ומכירות משלה. **לפני שמתחילים (הצעה, ההחלטה של עומרי):** commit לסשנים 2–3 כפי שהם, כדי שהשינוי הזה יהיה שלב נפרד.
 >
-> **סטטוס (03.10.2026):** 4.1–4.5 נבנו על `maven-spring-boot` (אחרי b4daeab + 634f1b8), עדיין לא committed. `mvn -q test` ירוק — 131 בדיקות.
-> V3 נבדקה על DB זמני עם עותק של הנתונים האמיתיים (5 הפוזיציות עם אותם ids, 10 עסקאות ידניות עם 5 + 5 עמלה, עסקאות ההחזקות לא נגעו,
-> ה-id הבא 7), ורצה על `portfolioboss_test`. **על `portfolioboss` היא תרוץ ב-`./run.sh` הבא — לגבות קודם.** ⚠️ עד סשן 5 ה-UI עדיין
-> קורא ל-`/api/manual-closed-positions` ול-`manualClosedPositionId`: הטבלה מוצגת, אבל הטופס והכפתורים של שורה ידנית לא עובדים.
+> **סטטוס (03.10.2026):** 4.1–4.5 נבנו על `maven-spring-boot` — committed 6947913 (0.12.0, יחד עם סשן 5 והכמות השלמה, החלטה 13).
+> `mvn -q test` ירוק — 131 בדיקות. V3 נבדקה על DB זמני עם עותק של הנתונים האמיתיים (5 הפוזיציות עם אותם ids, 10 עסקאות ידניות עם 5 + 5
+> עמלה, עסקאות ההחזקות לא נגעו, ה-id הבא 7), ורצה על `portfolioboss_test` ועל `portfolioboss`. שלוש השורות של 9988.HK אוחדו לפוזיציה אחת.
 > שמות שלא היו בתוכנית: `NewManualPositionRequest` (POST — פרטים, וקנייה ומכירה ראשונות), `ManualPositionRequest` (PUT), `ManualPositionResponse`
 > (התשובה ל-POST, עם ה-id), `Utils.commissionOrDefault` (עבר מ-`HoldingWriteService`, שני ה-services צריכים אותו), `AverageCostCalculator`
 > (מחלקה פנימית ב-`HoldingHistory`; השם "ledger" נדחה). הודעת מכירת היתר אומרת עכשיו "check its trades" — נכון גם לפוזיציה ידנית.
 > מחיקת פוזיציה ידנית מוחקת את העסקאות שלה בקוד, לא רק דרך `ON DELETE CASCADE`.
 
-### 4.1 🔴 מיגרציה `V3__manual_positions.sql`
+### 4.1 🔴✅ מיגרציה `V3__manual_positions.sql`
 
 ```sql
 CREATE TABLE manual_position (
@@ -221,7 +222,7 @@ DROP TABLE manual_closed_position;
 - היא ממירה נתונים אמיתיים, ולכן: לבדוק אותה קודם על DB זמני עם עותק של 5 השורות האמיתיות, ולהריץ `scripts/backup-db.sh` לפני
   ה-`./run.sh` שמריץ אותה על `portfolioboss`.
 
-### 4.2 🟡 `domain`: מחיר ממוצע וסבבים פתוחים עם מכירות
+### 4.2 🟡✅ `domain`: מחיר ממוצע וסבבים פתוחים עם מכירות
 
 - `HoldingHistory` עובר על העסקאות של כל סבב ומחזיק כמות ועלות של מה שמוחזק. **קנייה** מוסיפה לשתיהן. **מכירה** מוציאה מהעלות את החלק
   היחסי (כמות שנמכרה ÷ כמות מוחזקת); המכירה שמחזירה את הכמות לאפס מוציאה את כל מה שנשאר — כך סבב סגור יוצא מדויק, בלי עיגול.
@@ -231,14 +232,14 @@ DROP TABLE manual_closed_position;
   עמלות, כמה עוד מוחזק (0 בסבב שנסגר), וה-ids של העסקאות של הסבב. Avg buy = עלות שנמכרה ÷ כמות שנמכרה; הרווח והאחוז — כמו היום.
 - `TradeFact` מקבל `id`, כדי שהשורה תדע אילו עסקאות שלה. מכירת יתר ומחיר חסר — כמו היום (אזהרה / "—").
 
-### 4.3 🟡 `db`: `ManualPositionEntity` ועסקה של אחת משתיים
+### 4.3 🟡✅ `db`: `ManualPositionEntity` ועסקה של אחת משתיים
 
 - `ManualPositionEntity` (symbol, currency, sector, note, `trades`) עם `tradeHistory()` כמו של `HoldingEntity`, ו-`ManualPositionRepository`
   (`@EntityGraph` על `trades`, כמו `findByAccountOrderById`).
 - `TradeEntity`: `holding` או `manualPosition` — בנאי לכל אחד.
 - `ManualClosedPositionEntity` / `Repository` של סשן 2 נמחקים.
 
-### 4.4 🟡 `api`
+### 4.4 🟡✅ `api`
 
 - **קריאה:** `ClosedPositionResponse` לכל סבב עם מכירה, מהחזקות ומפוזיציות ידניות דרך אותו חישוב. שינויים מסשן 2 (שלא יצא החוצה, לכן מותר):
   `manualClosedPositionId` ← `manualPositionId`; `quantity` = מניות שנמכרו; חדשים בסוף: `remainingQuantity` (0 בסבב שנסגר), `trades`
@@ -252,7 +253,7 @@ DROP TABLE manual_closed_position;
     את המכירה האחרונה של פוזיציה ידנית** (409: "delete the whole position instead"), אחרת היא נעלמת מהטבלה. **לערוך אותה כן אפשר**
     (עומרי, 03.10.2026): תאריך, כמות, מחיר, עמלה והערה — רק שינוי הצד ל-BUY נחסם. בדיקה לכל אחד מהשלושה.
 
-### 4.5 🟢 בדיקות
+### 4.5 🟢✅ בדיקות
 
 `HoldingHistoryTest` / `ClosedPositionTest` (ממוצע, מכירה חלקית, קנייה אחרי מכירה חלקית, עמלות ביחס, מחיר חסר, מכירת יתר);
 `PortfolioReadServiceTest` (שורה פתוחה עם `remainingQuantity`, `trades` של הסבב, פוזיציה ידנית); controller + service לפוזיציה ידנית ולכלל
@@ -262,8 +263,8 @@ DROP TABLE manual_closed_position;
 
 ## סשן 5 — UI: שורה שנפתחת, partial, פוזיציה ידנית
 
-> **סטטוס (03.10.2026):** נבנה, עדיין לא committed (יחד עם סשן 4). `npm run build` ירוק; רינדור בצד השרת של האזור (שורה סגורה, partial,
-> ידנית), של הפאנל של פוזיציה ידנית ושל טופס ההוספה. ⬜ בדיקה בדפדפן — בידי עומרי (`./run.sh` הבא מריץ את V3 על ה-DB האמיתי — לגבות קודם).
+> **סטטוס (03.10.2026):** נבנה — committed 6947913 (יחד עם סשן 4). `npm run build` ירוק; רינדור בצד השרת של האזור (שורה סגורה, partial,
+> ידנית), של הפאנל של פוזיציה ידנית ושל טופס ההוספה. ✅ בדיקה בדפדפן — עומרי (03.10.2026; מאז נוספו 8 פוזיציות ידניות חדשות).
 > מבנה: `TradeForm` / `TradesPanel` מקבלים `owner` (`TradeOwner`: החזקה או פוזיציה ידנית) במקום `holding` — אותו פאנל ב-Positions ובשורה
 > הפתוחה; `TradesPanel` מייצא `TradeList` (בלי כפתורים = לקריאה בלבד, לשורה של החזקה). `ManualPositionForms.tsx` (`NewManualPositionForm`,
 > `ManualPositionDetailsForm`) החליף את `ManualClosedPositionForm.tsx`; `ManualPositionPanel.tsx` חדש; `ExpandRowButton.tsx` משותף לשתי

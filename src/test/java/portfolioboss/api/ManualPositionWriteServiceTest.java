@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.server.ResponseStatusException;
+import portfolioboss.api.request.InvestorRequest;
 import portfolioboss.api.request.ManualPositionRequest;
 import portfolioboss.api.request.NewManualPositionRequest;
 import portfolioboss.api.request.TradeRequest;
@@ -40,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
 @Import({PortfolioSyncService.class, PortfolioReadService.class, HoldingWriteService.class,
-        ManualPositionWriteService.class})
+        ManualPositionWriteService.class, InvestorWriteService.class})
 class ManualPositionWriteServiceTest {
 
     private static final String ACCOUNT = "U1234567";
@@ -58,6 +59,9 @@ class ManualPositionWriteServiceTest {
 
     @Autowired
     private ManualPositionWriteService writeService;
+
+    @Autowired
+    private InvestorWriteService investorWriteService;
 
     @Autowired
     private TestEntityManager entityManager;
@@ -79,7 +83,7 @@ class ManualPositionWriteServiceTest {
         long manualPositionId = writeService.addManualPosition(new NewManualPositionRequest(" msft ", " usd ",
                 "  Technology ", " Sold before PortfolioBoss ", new BigDecimal("5"), LocalDate.of(2022, 1, 10),
                 new BigDecimal("300"), new BigDecimal("2"), LocalDate.of(2023, 5, 1), new BigDecimal("310"),
-                new BigDecimal("3"))).id();
+                new BigDecimal("3"), null)).id();
 
         assertThat(readManualClosedPositions()).singleElement().satisfies(closedPosition -> {
             assertThat(closedPosition.source()).isEqualTo(ClosedPositionSource.MANUAL);
@@ -99,7 +103,37 @@ class ManualPositionWriteServiceTest {
             assertThat(closedPosition.remainingQuantity()).isEqualByComparingTo("0");
             assertThat(closedPosition.trades()).extracting(TradeResponse::side)
                     .containsExactly(TradeSide.BUY, TradeSide.SELL);
+            // the request names no investor: both trades are the account owner's
+            assertThat(closedPosition.investorId()).isEqualTo(accountOwnerId());
+            assertThat(closedPosition.trades()).extracting(TradeResponse::investorId)
+                    .containsOnly(accountOwnerId());
         });
+    }
+
+    @Test
+    void aNewManualPositionForAnotherInvestorIsTheirs() {
+        long aviId = investorWriteService.addInvestor(new InvestorRequest("Avi")).id();
+
+        writeService.addManualPosition(new NewManualPositionRequest("MSFT", "USD", null, null, new BigDecimal("5"),
+                LocalDate.of(2022, 1, 10), new BigDecimal("300"), null, LocalDate.of(2023, 5, 1),
+                new BigDecimal("310"), null, aviId));
+
+        assertThat(readManualClosedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.investorId()).isEqualTo(aviId);
+            assertThat(closedPosition.trades()).extracting(TradeResponse::investorId).containsOnly(aviId);
+        });
+    }
+
+    @Test
+    void aNewManualPositionForAnInvestorThatDoesNotExistIs400AndStoresNothing() {
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> writeService.addManualPosition(new NewManualPositionRequest("MSFT", "USD", null, null,
+                        new BigDecimal("5"), LocalDate.of(2022, 1, 10), new BigDecimal("300"), null,
+                        LocalDate.of(2023, 5, 1), new BigDecimal("310"), null, MISSING_ID)));
+
+        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(exception.getReason()).isEqualTo("No investor with id " + MISSING_ID);
+        assertThat(readManualClosedPositions()).isEmpty();
     }
 
     /** 600 shares: $6 to buy and $6 to sell. */
@@ -122,14 +156,15 @@ class ManualPositionWriteServiceTest {
     void threeBuysAndOneSellAreOneClosedPositionAtTheAverageBuyPrice() {
         long manualPositionId = writeService.addManualPosition(new NewManualPositionRequest("9988.HK", "HKD",
                 "E-commerce", null, new BigDecimal("100"), LocalDate.of(2021, 4, 21), new BigDecimal("221"),
-                new BigDecimal("5"), LocalDate.of(2025, 9, 30), new BigDecimal("177.7"), new BigDecimal("5"))).id();
+                new BigDecimal("5"), LocalDate.of(2025, 9, 30), new BigDecimal("177.7"), new BigDecimal("5"),
+                null)).id();
         writeService.addTrade(manualPositionId, buyOf("100", "162.1", LocalDate.of(2021, 8, 19)));
         writeService.addTrade(manualPositionId, buyOf("100", "140.4", LocalDate.of(2021, 11, 19)));
         long sellId = sellIdOf(manualPositionId);
         forgetWhatHibernateLoaded();
 
         holdingWriteService.changeTrade(sellId, new TradeRequest(LocalDate.of(2025, 9, 30), TradeSide.SELL,
-                new BigDecimal("300"), new BigDecimal("177.7"), null, new BigDecimal("5")));
+                new BigDecimal("300"), new BigDecimal("177.7"), null, new BigDecimal("5"), null));
 
         assertThat(readManualClosedPositions()).singleElement().satisfies(closedPosition -> {
             assertThat(closedPosition.quantity()).isEqualByComparingTo("300");
@@ -139,6 +174,9 @@ class ManualPositionWriteServiceTest {
             assertThat(closedPosition.realizedPnl()).isEqualByComparingTo("940");   // 53,310 − 52,350 − 20
             assertThat(closedPosition.openDate()).isEqualTo(LocalDate.of(2021, 4, 21));
             assertThat(closedPosition.trades()).hasSize(4);
+            // a trade added to the position later is the account owner's too
+            assertThat(closedPosition.trades()).extracting(TradeResponse::investorId)
+                    .containsOnly(accountOwnerId());
         });
     }
 
@@ -193,7 +231,7 @@ class ManualPositionWriteServiceTest {
         forgetWhatHibernateLoaded();
 
         holdingWriteService.changeTrade(sellId, new TradeRequest(LocalDate.of(2023, 6, 1), TradeSide.SELL,
-                new BigDecimal("5"), new BigDecimal("320"), "Sold higher", new BigDecimal("1")));
+                new BigDecimal("5"), new BigDecimal("320"), "Sold higher", new BigDecimal("1"), null));
 
         assertThat(readManualClosedPositions()).singleElement().satisfies(closedPosition -> {
             assertThat(closedPosition.closeDate()).isEqualTo(LocalDate.of(2023, 6, 1));
@@ -224,7 +262,7 @@ class ManualPositionWriteServiceTest {
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> holdingWriteService.changeTrade(sellId, new TradeRequest(LocalDate.of(2023, 5, 1),
-                        TradeSide.BUY, new BigDecimal("5"), new BigDecimal("310"), null, null)));
+                        TradeSide.BUY, new BigDecimal("5"), new BigDecimal("310"), null, null, null)));
 
         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
@@ -236,7 +274,7 @@ class ManualPositionWriteServiceTest {
         long firstSellId = sellIdOf(manualPositionId);
         writeService.addTrade(manualPositionId, buyOf("10", "305", LocalDate.of(2022, 2, 1)));
         writeService.addTrade(manualPositionId, new TradeRequest(LocalDate.of(2023, 6, 1), TradeSide.SELL,
-                new BigDecimal("10"), new BigDecimal("315"), null, null));
+                new BigDecimal("10"), new BigDecimal("315"), null, null, null));
         forgetWhatHibernateLoaded();
 
         holdingWriteService.deleteTrade(firstSellId);
@@ -253,7 +291,7 @@ class ManualPositionWriteServiceTest {
         long appleHoldingId = readService.currentPortfolio().orElseThrow().holdings().get(0).id();
         holdingWriteService.addTrade(appleHoldingId, buyOf("10", "150", LocalDate.of(2024, 1, 1)));
         long sellId = holdingWriteService.addTrade(appleHoldingId, new TradeRequest(LocalDate.of(2024, 6, 1),
-                TradeSide.SELL, new BigDecimal("10"), new BigDecimal("180"), null, null)).id();
+                TradeSide.SELL, new BigDecimal("10"), new BigDecimal("180"), null, null, null)).id();
         forgetWhatHibernateLoaded();
 
         holdingWriteService.deleteTrade(sellId);
@@ -268,6 +306,11 @@ class ManualPositionWriteServiceTest {
     private void forgetWhatHibernateLoaded() {
         entityManager.flush();
         entityManager.clear();
+    }
+
+    /** The investor V4__investors.sql created. */
+    private long accountOwnerId() {
+        return jdbc.queryForObject("select id from investor where is_account_owner", Long.class);
     }
 
     private List<ClosedPositionResponse> readManualClosedPositions() {
@@ -287,11 +330,11 @@ class ManualPositionWriteServiceTest {
     private NewManualPositionRequest microsoftRoundTrip(String quantity) {
         return new NewManualPositionRequest("MSFT", "USD", null, null, new BigDecimal(quantity),
                 LocalDate.of(2022, 1, 10), new BigDecimal("300"), null, LocalDate.of(2023, 5, 1), new BigDecimal("310"),
-                null);
+                null, null);
     }
 
     private TradeRequest buyOf(String quantity, String price, LocalDate tradeDate) {
         return new TradeRequest(tradeDate, TradeSide.BUY, new BigDecimal(quantity), new BigDecimal(price), null,
-                new BigDecimal("5"));
+                new BigDecimal("5"), null);
     }
 }

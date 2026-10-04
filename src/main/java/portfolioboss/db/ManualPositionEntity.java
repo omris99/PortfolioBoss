@@ -7,7 +7,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
-import portfolioboss.domain.HoldingHistory;
+import portfolioboss.domain.PositionTrades;
+import portfolioboss.domain.TradeFact;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +17,7 @@ import java.util.List;
  * One row of the {@code manual_position} table: a position PortfolioBoss never saw as a holding — sold before the
  * first sync — entered by hand with its own buys and sells ({@link TradeEntity} rows). It is not a
  * {@link HoldingEntity}: only the sync creates holdings. Its closed positions are derived from its trades exactly like a
- * holding's ({@link #tradeHistory()}).
+ * holding's ({@link #toPositionTrades()}).
  *
  * <p>{@code created_at} is filled by the database default and is not mapped. Deleting the row deletes its trades
  * ({@code ON DELETE CASCADE}).
@@ -80,8 +81,13 @@ public class ManualPositionEntity {
         return List.copyOf(trades);
     }
 
-    /** What its trades add up to, derived the same way as {@link HoldingEntity#tradeHistory()}. */
-    public HoldingHistory tradeHistory() {
-        return HoldingHistory.of(trades.stream().map(TradeEntity::toTradeFact).toList());
+    /** Like {@link HoldingEntity#toPositionTrades()}, without IB's reading: IB never reported it. */
+    public PositionTrades toPositionTrades() {
+        return new PositionTrades(symbol, currency, null, getTradeFacts());
+    }
+
+    /** Its trades reduced to what the computation in {@code domain} needs ({@link TradeEntity#toTradeFact()}). */
+    private List<TradeFact> getTradeFacts() {
+        return trades.stream().map(TradeEntity::toTradeFact).toList();
     }
 }

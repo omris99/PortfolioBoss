@@ -3,6 +3,8 @@ import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { ClosedPositionsSection } from './components/ClosedPositionsSection';
 import { EmptyBox } from './components/EmptyBox';
 import { needsAttention } from './components/HoldingWarnings';
+import { InvestorsProvider } from './components/InvestorsContext';
+import { InvestorsSummary } from './components/InvestorsSummary';
 import { PositionsTable } from './components/PositionsTable';
 import { SummaryBar } from './components/SummaryBar';
 import { usePortfolio } from './hooks/usePortfolio';
@@ -135,48 +137,53 @@ function App() {
     : 'The portfolio as of the last sync from TWS.';
 
   return (
-    <div className="min-h-full">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-6">
-        <header>
-          <h1 className="text-xl font-semibold text-slate-100">PortfolioBoss</h1>
-          <p className="mt-1 text-xs text-slate-400">
-            Read-only against Interactive Brokers · sector and trades are stored locally.
-          </p>
-        </header>
+    // Every component below can read the investors with useInvestors(), without receiving them as a prop.
+    <InvestorsProvider investors={snapshot?.investors ?? []}>
+      <div className="min-h-full">
+        <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-6">
+          <header>
+            <h1 className="text-xl font-semibold text-slate-100">PortfolioBoss</h1>
+            <p className="mt-1 text-xs text-slate-400">
+              Read-only against Interactive Brokers · sector and trades are stored locally.
+            </p>
+          </header>
 
-        {errorMessage && <ErrorBanner message={errorMessage} onRetry={() => void reload()} />}
+          {errorMessage && <ErrorBanner message={errorMessage} onRetry={() => void reload()} />}
 
-        {snapshot && <SummaryBar snapshot={snapshot} openHoldings={openHoldings} />}
+          {snapshot && <SummaryBar snapshot={snapshot} openHoldings={openHoldings} />}
 
-        <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-100">Positions</div>
-              <div className="mt-1 text-xs text-slate-400">{sectionSubtitle}</div>
-              {attentionSummary && <AttentionSummary summary={attentionSummary} />}
-            </div>
-            <div className="flex items-center gap-4">
-              <ShowClosedToggle closedCount={closedCount} showClosed={showClosed} onChange={setShowClosed} />
-              <div className="flex items-center gap-1 text-xs">
-                <span className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_COLORS[loadStatus]}`} />
-                <span className="capitalize text-slate-300">{loadStatus}</span>
+          {snapshot && <InvestorsSummary investors={snapshot.investors} onDataChanged={reload} />}
+
+          <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-100">Positions</div>
+                <div className="mt-1 text-xs text-slate-400">{sectionSubtitle}</div>
+                {attentionSummary && <AttentionSummary summary={attentionSummary} />}
+              </div>
+              <div className="flex items-center gap-4">
+                <ShowClosedToggle closedCount={closedCount} showClosed={showClosed} onChange={setShowClosed} />
+                <div className="flex items-center gap-1 text-xs">
+                  <span className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_COLORS[loadStatus]}`} />
+                  <span className="capitalize text-slate-300">{loadStatus}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-4">
-            <PositionsContent
-              snapshot={snapshot}
-              visibleHoldings={visibleHoldings}
-              isLoading={isLoading}
-              onDataChanged={reload}
-            />
-          </div>
-        </section>
+            <div className="mt-4">
+              <PositionsContent
+                snapshot={snapshot}
+                visibleHoldings={visibleHoldings}
+                isLoading={isLoading}
+                onDataChanged={reload}
+              />
+            </div>
+          </section>
 
-        {snapshot && <ClosedPositionsSection closedPositions={snapshot.closedPositions} onDataChanged={reload} />}
-      </main>
-    </div>
+          {snapshot && <ClosedPositionsSection closedPositions={snapshot.closedPositions} onDataChanged={reload} />}
+        </main>
+      </div>
+    </InvestorsProvider>
   );
 }
 

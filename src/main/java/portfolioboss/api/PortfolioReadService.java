@@ -7,6 +7,8 @@ import portfolioboss.db.AccountStateEntity;
 import portfolioboss.db.AccountStateRepository;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
+import portfolioboss.db.InvestorEntity;
+import portfolioboss.db.InvestorRepository;
 import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.ManualPositionRepository;
 
@@ -23,12 +25,15 @@ public class PortfolioReadService {
     private final HoldingRepository holdingRepository;
     private final AccountStateRepository accountStateRepository;
     private final ManualPositionRepository manualPositionRepository;
+    private final InvestorRepository investorRepository;
 
     public PortfolioReadService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository,
-                                ManualPositionRepository manualPositionRepository) {
+                                ManualPositionRepository manualPositionRepository,
+                                InvestorRepository investorRepository) {
         this.holdingRepository = holdingRepository;
         this.accountStateRepository = accountStateRepository;
         this.manualPositionRepository = manualPositionRepository;
+        this.investorRepository = investorRepository;
     }
 
     /**
@@ -43,6 +48,7 @@ public class PortfolioReadService {
     private PortfolioResponse toResponse(AccountStateEntity accountState) {
         List<HoldingEntity> storedHoldings = holdingRepository.findByAccountOrderById(accountState.account());
         List<ManualPositionEntity> manualPositions = manualPositionRepository.findAllByOrderById();
-        return PortfolioResponse.from(accountState, storedHoldings, manualPositions);
+        List<InvestorEntity> investors = investorRepository.findAllByOrderById();
+        return PortfolioResponse.from(accountState, storedHoldings, manualPositions, investors);
     }
 }

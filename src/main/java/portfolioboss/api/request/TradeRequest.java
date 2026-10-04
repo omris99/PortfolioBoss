@@ -17,7 +17,9 @@ import java.time.LocalDate;
  * match the {@code trade} table: {@code NUMERIC(20,6)} holds 14 digits before the decimal point and 6 after it,
  * {@code note} is {@code VARCHAR(500)}. The quantity is a whole number of shares, so it has no decimal places at all.
  * {@code price}, {@code note} and {@code commission} are optional; without a commission the default for one order is
- * stored ({@code Utils.calculateOrderCommission}), and 0 is a commission too.
+ * stored ({@code Utils.calculateOrderCommission}), and 0 is a commission too. {@code investorId}, added later, is
+ * optional too: a new trade without one is the account owner's, and a correction without one keeps the trade's
+ * investor.
  */
 public record TradeRequest(
         @NotNull @PastOrPresent LocalDate tradeDate,
@@ -25,7 +27,8 @@ public record TradeRequest(
         @NotNull @Positive @Digits(integer = 14, fraction = 0, message = WHOLE_NUMBER) BigDecimal quantity,
         @PositiveOrZero @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal price,
         @Size(max = 500) String note,
-        @PositiveOrZero @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal commission) {
+        @PositiveOrZero @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal commission,
+        Long investorId) {
 
     /**
      * Replaces Hibernate Validator's "numeric value out of bounds (<14 digits>.<6 digits> expected)", which the UI shows.

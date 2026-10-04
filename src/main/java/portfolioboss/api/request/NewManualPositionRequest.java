@@ -20,7 +20,8 @@ import static portfolioboss.api.request.TradeRequest.WHOLE_NUMBER;
  * {@link ManualPositionRequest} — with its first buy and its first sell of the same quantity, so it always has a
  * closed position to show. More buys and sells are added through {@code POST /api/manual-positions/{id}/trades}.
  * Checked by {@code @Valid} with the same limits as {@link TradeRequest}. {@code sector}, {@code note} and both
- * commissions are optional; a commission left empty is stored as the default for that order.
+ * commissions are optional; a commission left empty is stored as the default for that order. {@code investorId}, added
+ * later, is optional too: whose buy and sell they are, the account owner's without one.
  */
 public record NewManualPositionRequest(
         @NotBlank @Size(max = 32) String symbol,
@@ -33,7 +34,8 @@ public record NewManualPositionRequest(
         @PositiveOrZero @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal buyCommission,
         @NotNull @PastOrPresent LocalDate sellDate,
         @NotNull @PositiveOrZero @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal sellPrice,
-        @PositiveOrZero @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal sellCommission) {
+        @PositiveOrZero @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal sellCommission,
+        Long investorId) {
 
     /**
      * The one rule that spans two fields, so no annotation on a single field can check it. {@code @AssertTrue} makes

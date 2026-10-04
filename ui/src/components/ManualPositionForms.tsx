@@ -9,6 +9,8 @@ import {
   trimmedOrNull,
 } from '../lib/formInput';
 import type { ClosedPosition, ManualPositionRequest, NewManualPositionRequest } from '../types/portfolio';
+import { InvestorSelect } from './InvestorSelect';
+import { accountOwnerOf, useInvestors } from './InvestorsContext';
 import { SECTOR_OPTIONS_LIST_ID } from './SectorCell';
 
 // The lengths of the manual_position columns.
@@ -120,7 +122,8 @@ function toManualPositionRequest(values: DetailsValues): ManualPositionRequest {
   };
 }
 
-function toNewManualPositionRequest(values: NewPositionValues): NewManualPositionRequest {
+/** `investorId`: whose first buy and sell they are — the account owner's unless another investor was picked. */
+function toNewManualPositionRequest(values: NewPositionValues, investorId: number | null): NewManualPositionRequest {
   return {
     ...toManualPositionRequest(values),
     quantity: Number(values.quantityText),
@@ -130,6 +133,7 @@ function toNewManualPositionRequest(values: NewPositionValues): NewManualPositio
     sellDate: values.sellDate,
     sellPrice: Number(values.sellPriceText),
     sellCommission: numberOrNull(values.sellCommissionText),
+    investorId,
   };
 }
 
@@ -251,6 +255,8 @@ function AmountInput({
 export function NewManualPositionForm({ onSaved, onCancel }: { onSaved: () => Promise<void>; onCancel: () => void }) {
   const todayIsoDate = localTodayIsoDate();
   const [formValues, setFormValues] = useState(EMPTY_NEW_POSITION);
+  const accountOwnerId = accountOwnerOf(useInvestors())?.id ?? null;
+  const [investorId, setInvestorId] = useState(accountOwnerId);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -267,7 +273,7 @@ export function NewManualPositionForm({ onSaved, onCancel }: { onSaved: () => Pr
     setIsSaving(true);
     setErrorMessage(null);
     try {
-      await addManualPosition(toNewManualPositionRequest(formValues));
+      await addManualPosition(toNewManualPositionRequest(formValues, investorId));
       await onSaved();
     } catch (error) {
       setErrorMessage(errorMessageOf(error));
@@ -292,6 +298,7 @@ export function NewManualPositionForm({ onSaved, onCancel }: { onSaved: () => Pr
       </div>
 
       <div className="flex flex-wrap items-end gap-2">
+        <InvestorSelect investorId={investorId} onChange={setInvestorId} />
         <FormField label="Quantity">
           <AmountInput
             required

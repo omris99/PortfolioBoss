@@ -176,9 +176,10 @@ class PortfolioSyncServiceTest {
         return ((Number) rowOf(conId).get("id")).longValue();
     }
 
+    /** The account owner's, the investor V4__investors.sql created. */
     private void insertTrade(long holdingId) {
-        jdbc.update("insert into trade (holding_id, trade_date, side, quantity, commission) "
-                        + "values (?, DATE '2024-03-14', 'BUY', 10, 5)",
+        jdbc.update("insert into trade (holding_id, investor_id, trade_date, side, quantity, commission) "
+                        + "values (?, (select id from investor where is_account_owner), DATE '2024-03-14', 'BUY', 10, 5)",
                 holdingId);
     }
 

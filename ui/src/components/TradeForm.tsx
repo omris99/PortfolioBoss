@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { addManualPositionTrade, addTrade, changeTrade, errorMessageOf } from '../lib/apiClient';
 import { INPUT_CLASS, isBlank, isPositiveWholeNumber, localTodayIsoDate, numberOrNull, trimmedOrNull } from '../lib/formInput';
 import type { Holding, Trade, TradeRequest, TradeSide } from '../types/portfolio';
+import { InvestorSelect } from './InvestorSelect';
+import { accountOwnerOf, useInvestors } from './InvestorsContext';
 
 /**
  * Whose trades a form or panel works on: a holding's, or a manual position's — one PortfolioBoss never saw as a
@@ -26,6 +28,8 @@ interface TradeFormValues {
   priceText: string;
   commissionText: string;
   note: string;
+  /** Whose trade it is: the account owner's unless another investor is picked. `null` only before the first load. */
+  investorId: number | null;
 }
 
 /**
@@ -56,7 +60,13 @@ function addTradeTo(owner: TradeOwner, tradeRequest: TradeRequest): Promise<void
     : addManualPositionTrade(owner.manualPositionId, tradeRequest);
 }
 
-function initialFormValues(owner: TradeOwner, tradeBeingEdited: Trade | null, todayIsoDate: string): TradeFormValues {
+/** A new trade starts as the account owner's; one being corrected keeps its own investor until another is picked. */
+function initialFormValues(
+  owner: TradeOwner,
+  tradeBeingEdited: Trade | null,
+  todayIsoDate: string,
+  accountOwnerId: number | null,
+): TradeFormValues {
   if (tradeBeingEdited !== null) {
     return {
       tradeDate: tradeBeingEdited.tradeDate,
@@ -66,6 +76,7 @@ function initialFormValues(owner: TradeOwner, tradeBeingEdited: Trade | null, to
       // The commission stored — the default, if none was entered. Emptying it works the default out again.
       commissionText: String(tradeBeingEdited.commission),
       note: tradeBeingEdited.note ?? '',
+      investorId: tradeBeingEdited.investorId,
     };
   }
   const backfilledHolding = backfilledHoldingOf(owner, tradeBeingEdited);
@@ -77,9 +88,18 @@ function initialFormValues(owner: TradeOwner, tradeBeingEdited: Trade | null, to
       priceText: backfilledHolding.averageCost === null ? '' : prefilledPriceText(backfilledHolding.averageCost),
       commissionText: '',
       note: '',
+      investorId: accountOwnerId,
     };
   }
-  return { tradeDate: todayIsoDate, side: 'BUY', quantityText: '', priceText: '', commissionText: '', note: '' };
+  return {
+    tradeDate: todayIsoDate,
+    side: 'BUY',
+    quantityText: '',
+    priceText: '',
+    commissionText: '',
+    note: '',
+    investorId: accountOwnerId,
+  };
 }
 
 /** The same rules the API enforces, checked first so the common mistakes don't need a round trip. */
@@ -104,6 +124,7 @@ function toTradeRequest(formValues: TradeFormValues): TradeRequest {
     price: numberOrNull(formValues.priceText),
     note: trimmedOrNull(formValues.note),
     commission: numberOrNull(formValues.commissionText),
+    investorId: formValues.investorId,
   };
 }
 
@@ -151,7 +172,10 @@ export function TradeForm({
   onCancelEditing: () => void;
 }) {
   const todayIsoDate = localTodayIsoDate();
-  const [formValues, setFormValues] = useState(() => initialFormValues(owner, tradeBeingEdited, todayIsoDate));
+  const accountOwnerId = accountOwnerOf(useInvestors())?.id ?? null;
+  const [formValues, setFormValues] = useState(() =>
+    initialFormValues(owner, tradeBeingEdited, todayIsoDate, accountOwnerId),
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -192,6 +216,11 @@ export function TradeForm({
       </div>
 
       <div className="flex flex-wrap items-end gap-2">
+        <InvestorSelect
+          investorId={formValues.investorId}
+          onChange={(investorId) => updateFormValue('investorId', investorId)}
+        />
+
         <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500">
           Date
           <input

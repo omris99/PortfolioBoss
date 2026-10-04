@@ -10,9 +10,12 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.server.ResponseStatusException;
+import portfolioboss.api.request.InvestorRequest;
 import portfolioboss.api.request.SectorRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.HoldingResponse;
+import portfolioboss.api.response.InvestorQuantityResponse;
+import portfolioboss.api.response.InvestorResponse;
 import portfolioboss.api.response.TradeResponse;
 import portfolioboss.db.PortfolioSyncService;
 import portfolioboss.db.TradeSide;
@@ -25,6 +28,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -35,7 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
-@Import({PortfolioSyncService.class, PortfolioReadService.class, HoldingWriteService.class})
+@Import({PortfolioSyncService.class, PortfolioReadService.class, HoldingWriteService.class,
+        InvestorWriteService.class})
 class HoldingWriteServiceTest {
 
     private static final String ACCOUNT = "U1234567";
@@ -53,6 +58,9 @@ class HoldingWriteServiceTest {
     private HoldingWriteService writeService;
 
     @Autowired
+    private InvestorWriteService investorWriteService;
+
+    @Autowired
     private TestEntityManager entityManager;
 
     private long appleHoldingId;
@@ -67,7 +75,7 @@ class HoldingWriteServiceTest {
     void anAddedTradeIsServedWithTheHoldingAndSetsItsBuyDate() {
         TradeResponse addedTrade = writeService.addTrade(appleHoldingId,
                 new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal("10.5"),
-                        new BigDecimal("150.25"), "Initial position", new BigDecimal("1.25")));
+                        new BigDecimal("150.25"), "Initial position", new BigDecimal("1.25"), null));
 
         HoldingResponse apple = readApple();
 
@@ -81,12 +89,15 @@ class HoldingWriteServiceTest {
         assertThat(storedTrade.price()).isEqualByComparingTo("150.25");
         assertThat(storedTrade.note()).isEqualTo("Initial position");
         assertThat(storedTrade.commission()).isEqualByComparingTo("1.25");
+        // the request names no investor: the trade is the account owner's
+        assertThat(storedTrade.investorId()).isEqualTo(addedTrade.investorId()).isEqualTo(accountOwnerId());
     }
 
     @Test
     void aTradeWithoutPriceOrNoteIsStoredWithBothNull() {
         writeService.addTrade(appleHoldingId,
-                new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal("10"), null, "   ", null));
+                new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal("10"), null, "   ", null,
+                        null));
 
         TradeResponse storedTrade = readApple().trades().get(0);
 
@@ -105,7 +116,7 @@ class HoldingWriteServiceTest {
     @Test
     void aCommissionOfZeroIsKeptNotReplacedByTheDefault() {
         writeService.addTrade(appleHoldingId, new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY,
-                new BigDecimal("10"), new BigDecimal("150"), null, BigDecimal.ZERO));
+                new BigDecimal("10"), new BigDecimal("150"), null, BigDecimal.ZERO, null));
 
         assertThat(readApple().trades().get(0).commission()).isEqualByComparingTo("0");
     }
@@ -135,7 +146,7 @@ class HoldingWriteServiceTest {
         forgetWhatHibernateLoaded();
 
         writeService.changeTrade(tradeId, new TradeRequest(LocalDate.of(2024, 5, 2), TradeSide.SELL,
-                new BigDecimal("4"), new BigDecimal("190"), "Trimmed after earnings", new BigDecimal("2.5")));
+                new BigDecimal("4"), new BigDecimal("190"), "Trimmed after earnings", new BigDecimal("2.5"), null));
 
         TradeResponse storedTrade = readApple().trades().get(0);
         assertThat(storedTrade.id()).isEqualTo(tradeId);
@@ -208,6 +219,56 @@ class HoldingWriteServiceTest {
         assertThat(apple.trades()).hasSize(1);
     }
 
+    // ── whose trade ─────────────────────────────────────────────────────────────────────────────
+
+    /** IB reports 10 Apple: 4 bought by Avi leave the account owner 6. */
+    @Test
+    void aTradeForAnotherInvestorIsTheirsAndSplitsTheHolding() {
+        long aviId = addAvi();
+
+        TradeResponse addedTrade = writeService.addTrade(appleHoldingId, buyOfFour(aviId));
+
+        assertThat(addedTrade.investorId()).isEqualTo(aviId);
+        HoldingResponse apple = readApple();
+        assertThat(apple.trades()).extracting(TradeResponse::investorId).containsExactly(aviId);
+        assertThat(apple.investorQuantities())
+                .extracting(InvestorQuantityResponse::investorId, quantity -> quantity.quantity().intValue())
+                .containsExactly(tuple(accountOwnerId(), 6), tuple(aviId, 4));
+    }
+
+    @Test
+    void aTradeForAnInvestorThatDoesNotExistIs400() {
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> writeService.addTrade(appleHoldingId, buyOfFour(MISSING_ID)));
+
+        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(exception.getReason()).isEqualTo("No investor with id " + MISSING_ID);
+    }
+
+    @Test
+    void correctingATradeWithoutNamingAnInvestorKeepsItsInvestor() {
+        long aviId = addAvi();
+        long tradeId = writeService.addTrade(appleHoldingId, buyOfFour(aviId)).id();
+        forgetWhatHibernateLoaded();
+
+        writeService.changeTrade(tradeId, new TradeRequest(LocalDate.of(2024, 3, 15), TradeSide.BUY,
+                new BigDecimal("4"), new BigDecimal("155"), null, null, null));
+
+        assertThat(readApple().trades()).extracting(TradeResponse::investorId).containsExactly(aviId);
+    }
+
+    @Test
+    void correctingATradeWithAnInvestorMovesItToThem() {
+        long aviId = addAvi();
+        long tradeId = writeService.addTrade(appleHoldingId, buyOfFour(aviId)).id();
+        forgetWhatHibernateLoaded();
+
+        writeService.changeTrade(tradeId, new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY,
+                new BigDecimal("4"), new BigDecimal("150"), null, null, accountOwnerId()));
+
+        assertThat(readApple().trades()).extracting(TradeResponse::investorId).containsExactly(accountOwnerId());
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
     /** Every request is its own transaction in the app; this makes the next read come from the database. */
@@ -221,13 +282,34 @@ class HoldingWriteServiceTest {
         return readService.currentPortfolio().orElseThrow().holdings().get(0);
     }
 
+    /** The investor V4__investors.sql created, as the API serves it. */
+    private long accountOwnerId() {
+        return readService.currentPortfolio().orElseThrow().investors().stream()
+                .filter(InvestorResponse::accountOwner)
+                .findFirst()
+                .orElseThrow()
+                .id();
+    }
+
     private TradeRequest buyOfTen(LocalDate tradeDate) {
-        return new TradeRequest(tradeDate, TradeSide.BUY, new BigDecimal("10"), new BigDecimal("150"), null, null);
+        return new TradeRequest(tradeDate, TradeSide.BUY, new BigDecimal("10"), new BigDecimal("150"), null, null,
+                null);
+    }
+
+    private TradeRequest buyOfFour(Long investorId) {
+        return new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal("4"), new BigDecimal("150"),
+                null, null, investorId);
+    }
+
+    private long addAvi() {
+        long aviId = investorWriteService.addInvestor(new InvestorRequest("Avi")).id();
+        forgetWhatHibernateLoaded();
+        return aviId;
     }
 
     private TradeRequest buyWithoutCommission(String quantity) {
         return new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal(quantity),
-                new BigDecimal("150"), null, null);
+                new BigDecimal("150"), null, null, null);
     }
 
     private PortfolioSnapshot snapshotWithApple(Instant asOf) {

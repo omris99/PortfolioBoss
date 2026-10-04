@@ -1,4 +1,9 @@
-import type { ManualPositionRequest, NewManualPositionRequest, TradeRequest } from '../types/portfolio';
+import type {
+  CashMovementRequest,
+  ManualPositionRequest,
+  NewManualPositionRequest,
+  TradeRequest,
+} from '../types/portfolio';
 
 /** A write the API refused or could not be reached for; `message` is meant to be shown to the user as it is. */
 export class ApiError extends Error {}
@@ -42,6 +47,29 @@ export function deleteManualPosition(manualPositionId: number): Promise<void> {
 /** A manual position's trades are then corrected and deleted like any trade: `changeTrade`, `deleteTrade`. */
 export function addManualPositionTrade(manualPositionId: number, trade: TradeRequest): Promise<void> {
   return sendJson('POST', `/api/manual-positions/${manualPositionId}/trades`, trade);
+}
+
+/** Never a second account owner: the API adds other investors only. A taken name is refused (409). */
+export function addInvestor(name: string): Promise<void> {
+  return sendJson('POST', '/api/investors', { name });
+}
+
+/** The account owner's name too. */
+export function renameInvestor(investorId: number, name: string): Promise<void> {
+  return sendJson('PUT', `/api/investors/${investorId}`, { name });
+}
+
+/** Never for the account owner, whose cash comes from IB (400). */
+export function addCashMovement(investorId: number, cashMovement: CashMovementRequest): Promise<void> {
+  return sendJson('POST', `/api/investors/${investorId}/cash-movements`, cashMovement);
+}
+
+export function changeCashMovement(movementId: number, cashMovement: CashMovementRequest): Promise<void> {
+  return sendJson('PUT', `/api/cash-movements/${movementId}`, cashMovement);
+}
+
+export function deleteCashMovement(movementId: number): Promise<void> {
+  return sendJson('DELETE', `/api/cash-movements/${movementId}`);
 }
 
 /**

@@ -56,7 +56,7 @@ class ManualPositionWriteControllerTest {
     void addsAManualPositionAndAnswers201WithIt() throws Exception {
         NewManualPositionRequest expectedRequest = new NewManualPositionRequest("MSFT", "USD", "Technology",
                 "Sold before PortfolioBoss", new BigDecimal("5"), LocalDate.of(2022, 1, 10), new BigDecimal("300"),
-                new BigDecimal("2"), LocalDate.of(2023, 5, 1), new BigDecimal("310"), null);
+                new BigDecimal("2"), LocalDate.of(2023, 5, 1), new BigDecimal("310"), null, null);
         given(manualPositionWriteService.addManualPosition(expectedRequest)).willReturn(
                 new ManualPositionResponse(MANUAL_POSITION_ID, "MSFT", "USD", "Technology", "Sold before PortfolioBoss"));
 
@@ -147,10 +147,10 @@ class ManualPositionWriteControllerTest {
     @Test
     void addsATradeAndAnswers201WithIt() throws Exception {
         TradeRequest expectedRequest = new TradeRequest(LocalDate.of(2021, 8, 19), TradeSide.BUY,
-                new BigDecimal("100"), new BigDecimal("162.1"), null, null);
+                new BigDecimal("100"), new BigDecimal("162.1"), null, null, null);
         given(manualPositionWriteService.addTrade(MANUAL_POSITION_ID, expectedRequest)).willReturn(new TradeResponse(
                 42, LocalDate.of(2021, 8, 19), TradeSide.BUY, new BigDecimal("100"), new BigDecimal("162.1"), null,
-                new BigDecimal("5")));
+                new BigDecimal("5"), 1));
 
         mockMvc.perform(post("/api/manual-positions/3/trades").contentType(MediaType.APPLICATION_JSON).content("""
                         {"tradeDate": "2021-08-19", "side": "BUY", "quantity": 100, "price": 162.1}"""))

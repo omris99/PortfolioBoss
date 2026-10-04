@@ -10,6 +10,8 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import portfolioboss.domain.HoldingHistory;
+import portfolioboss.domain.PositionTrades;
+import portfolioboss.domain.TradeFact;
 import portfolioboss.model.Holding;
 import portfolioboss.utils.Utils;
 
@@ -143,7 +145,15 @@ public class HoldingEntity {
      * stored, and here so that everything that reads it derives it the same way.
      */
     public HoldingHistory tradeHistory() {
-        return HoldingHistory.of(trades.stream().map(TradeEntity::toTradeFact).toList());
+        return HoldingHistory.of(getTradeFacts());
+    }
+
+    /**
+     * Its trades with IB's last reading, for what is worked out investor by investor: how its quantity divides between
+     * them, their closed positions, their summary cards.
+     */
+    public PositionTrades toPositionTrades() {
+        return new PositionTrades(symbol, currency, toIbHolding(), getTradeFacts());
     }
 
     /**
@@ -154,5 +164,10 @@ public class HoldingEntity {
         return new Holding(symbol, conId, secType, currency, position,
                 Utils.nanIfNull(averageCost), Utils.nanIfNull(marketPrice), Utils.nanIfNull(marketValue),
                 Utils.nanIfNull(unrealizedPnl), Utils.nanIfNull(realizedPnl), account);
+    }
+
+    /** Its trades reduced to what the computation in {@code domain} needs ({@link TradeEntity#toTradeFact()}). */
+    private List<TradeFact> getTradeFacts() {
+        return trades.stream().map(TradeEntity::toTradeFact).toList();
     }
 }

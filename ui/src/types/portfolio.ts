@@ -9,6 +9,13 @@ export type TradeSide = 'BUY' | 'SELL';
 export type HoldingWarningType = 'NO_TRADES_LOGGED' | 'CLOSED_WITHOUT_SELL' | 'QUANTITY_MISMATCH';
 /** `TRADES`: a holding's trades, corrected in Positions. `MANUAL`: a manual position's, corrected where it is shown. */
 export type ClosedPositionSource = 'TRADES' | 'MANUAL';
+export type CashMovementType = 'DEPOSIT' | 'WITHDRAWAL';
+export type InvestorWarningType =
+  | 'TRADES_WITHOUT_PRICE'
+  | 'TRADES_NOT_IN_USD'
+  | 'NEGATIVE_CASH'
+  | 'MORE_SHARES_THAN_IB'
+  | 'CLOSED_POSITIONS_NOT_COUNTED';
 
 /** A gap between the trades entered and what IB reports. It never blocks anything. */
 export interface HoldingWarning {
@@ -28,6 +35,8 @@ export interface Trade {
   note: string | null;
   /** Never `null`: a trade entered without one was stored with the default (1 cent a share, at least $5). */
   commission: number;
+  /** Whose trade it is: one of `PortfolioSnapshot.investors`. */
+  investorId: number;
 }
 
 /** The body of `POST /api/holdings/{id}/trades` and `PUT /api/trades/{id}`: a trade as the user typed it. */
@@ -41,6 +50,8 @@ export interface TradeRequest {
   note: string | null;
   /** `null` stores the default for this many shares; 0 is a commission too. */
   commission: number | null;
+  /** A new trade without one is the account owner's; a correction without one keeps the trade's investor. */
+  investorId: number | null;
 }
 
 /**
@@ -67,6 +78,14 @@ export interface NewManualPositionRequest extends ManualPositionRequest {
   sellDate: string;
   sellPrice: number;
   sellCommission: number | null;
+  /** Whose buy and sell they are; `null` is the account owner. */
+  investorId: number | null;
+}
+
+/** An investor's part of a holding's quantity: the other investors' trades, and the account owner the rest. */
+export interface InvestorQuantity {
+  investorId: number;
+  quantity: number;
 }
 
 export interface Holding {
@@ -100,6 +119,8 @@ export interface Holding {
   trades: Trade[];
   /** Empty when the trades entered match IB; otherwise the one gap to fix first. */
   warnings: HoldingWarning[];
+  /** How `position` divides between the investors, by investor id — only those holding some of it. */
+  investorQuantities: InvestorQuantity[];
 }
 
 /**
@@ -139,6 +160,66 @@ export interface ClosedPosition {
   remainingQuantity: number;
   /** Every trade of the stretch, by date. */
   trades: Trade[];
+  /** Whose shares were sold: a stretch is made of one investor's trades only. */
+  investorId: number;
+}
+
+/** A deposit into the IB account for an investor, or a withdrawal. */
+export interface CashMovement {
+  id: number;
+  /** 'yyyy-MM-dd' */
+  movementDate: string;
+  type: CashMovementType;
+  /** Always above 0: `type` says which way the money went. */
+  amount: number;
+  note: string | null;
+}
+
+/** The body of `POST /api/investors/{id}/cash-movements` and `PUT /api/cash-movements/{id}`. */
+export interface CashMovementRequest {
+  /** 'yyyy-MM-dd', not in the future. */
+  movementDate: string;
+  type: CashMovementType;
+  /** Greater than 0. */
+  amount: number;
+  note: string | null;
+}
+
+/** Something to check in what was entered for an investor. It never blocks anything. */
+export interface InvestorWarning {
+  type: InvestorWarningType;
+  /** In English, shown as it is. */
+  message: string;
+}
+
+/**
+ * One investor's summary card. The account owner's figures are IB's less the other investors', so all of them always
+ * add up to IB's own. Everything is in USD except the realized P&L, which is by currency. A figure that needs something
+ * unknown — a trade without a price — is `null`.
+ */
+export interface Investor {
+  id: number;
+  name: string;
+  /** Exactly one: the investor whose cash comes from IB, and who gets whatever the others' entries don't explain. */
+  accountOwner: boolean;
+  /** `null` for the account owner, who has no deposits. */
+  depositsMinusWithdrawals: number | null;
+  cash: number | null;
+  sharesValue: number | null;
+  /** Cash and shares; for the account owner IB's net liquidation value less the others'. */
+  totalValue: number | null;
+  /** What their shares cost, at average cost with their buy commissions. */
+  sharesCost: number | null;
+  unrealizedPnl: number | null;
+  /** Of `sharesCost`. */
+  unrealizedPnlPercent: number | null;
+  /** `{"HKD": 950, "USD": 500}`; empty with no closed position yet. */
+  realizedPnlByCurrency: Record<string, number>;
+  /** Unrealized and realized, in USD only. */
+  totalPnl: number | null;
+  /** By date; always empty for the account owner. */
+  cashMovements: CashMovement[];
+  warnings: InvestorWarning[];
 }
 
 export interface PortfolioSnapshot {
@@ -150,4 +231,6 @@ export interface PortfolioSnapshot {
   holdings: Holding[];
   /** From every holding, open or closed: one still open today may have been sold in full before. */
   closedPositions: ClosedPosition[];
+  /** Every investor's card, the account owner first. */
+  investors: Investor[];
 }

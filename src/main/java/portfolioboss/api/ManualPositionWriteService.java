@@ -9,6 +9,7 @@ import portfolioboss.api.request.NewManualPositionRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.ManualPositionResponse;
 import portfolioboss.api.response.TradeResponse;
+import portfolioboss.db.InvestorEntity;
 import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.ManualPositionRepository;
 import portfolioboss.db.TradeEntity;
@@ -30,23 +31,31 @@ public class ManualPositionWriteService {
 
     private final ManualPositionRepository manualPositionRepository;
     private final TradeRepository tradeRepository;
+    private final InvestorWriteService investorWriteService;
 
     public ManualPositionWriteService(ManualPositionRepository manualPositionRepository,
-                                      TradeRepository tradeRepository) {
+                                      TradeRepository tradeRepository, InvestorWriteService investorWriteService) {
         this.manualPositionRepository = manualPositionRepository;
         this.tradeRepository = tradeRepository;
+        this.investorWriteService = investorWriteService;
     }
 
-    /** The position, then its first buy and first sell; a commission left empty is the default for that order. */
+    /**
+     * The position, then its first buy and first sell; a commission left empty is the default for that order. Both
+     * trades are the investor's the request names, or the account owner's when it names none.
+     */
     @Transactional
     public ManualPositionResponse addManualPosition(NewManualPositionRequest request) {
+        InvestorEntity investor = investorWriteService.investorOfTrade(request.investorId());   // 400 before any write
         ManualPositionEntity newPosition = manualPositionRepository.save(new ManualPositionEntity(
                 upperCaseCode(request.symbol()), upperCaseCode(request.currency()),
                 Utils.trimmedOrNull(request.sector()), Utils.trimmedOrNull(request.note())));
-        tradeRepository.save(new TradeEntity(newPosition, request.buyDate(), TradeSide.BUY, request.quantity(),
-                request.buyPrice(), null, Utils.commissionOrDefault(request.buyCommission(), request.quantity())));
-        tradeRepository.save(new TradeEntity(newPosition, request.sellDate(), TradeSide.SELL, request.quantity(),
-                request.sellPrice(), null, Utils.commissionOrDefault(request.sellCommission(), request.quantity())));
+        tradeRepository.save(new TradeEntity(newPosition, investor, request.buyDate(), TradeSide.BUY,
+                request.quantity(), request.buyPrice(), null,
+                Utils.commissionOrDefault(request.buyCommission(), request.quantity())));
+        tradeRepository.save(new TradeEntity(newPosition, investor, request.sellDate(), TradeSide.SELL,
+                request.quantity(), request.sellPrice(), null,
+                Utils.commissionOrDefault(request.sellCommission(), request.quantity())));
         return new ManualPositionResponse(newPosition);
     }
 
@@ -66,10 +75,12 @@ public class ManualPositionWriteService {
         manualPositionRepository.delete(manualPosition);
     }
 
+    /** The investor the request names, or the account owner — like {@link HoldingWriteService#addTrade}. */
     @Transactional
     public TradeResponse addTrade(long manualPositionId, TradeRequest tradeRequest) {
         ManualPositionEntity manualPosition = findManualPosition(manualPositionId);
-        TradeEntity newTrade = new TradeEntity(manualPosition, tradeRequest.tradeDate(), tradeRequest.side(),
+        InvestorEntity investor = investorWriteService.investorOfTrade(tradeRequest.investorId());
+        TradeEntity newTrade = new TradeEntity(manualPosition, investor, tradeRequest.tradeDate(), tradeRequest.side(),
                 tradeRequest.quantity(), tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()),
                 Utils.commissionOrDefault(tradeRequest.commission(), tradeRequest.quantity()));
         return new TradeResponse(tradeRepository.save(newTrade));

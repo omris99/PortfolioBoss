@@ -32,17 +32,17 @@ fits, leave it out.
 
 *In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection, derived buy/sell dates,
 write endpoints for the sector and trades, the UI that shows the positions and enters the sector and trades, the
-reconciliation warnings, and the closed positions — commissions, average cost, and manual positions with their own
-trades):*
+reconciliation warnings, the closed positions — commissions, average cost, and manual positions with their own
+trades — and several investors sharing the account, with their deposits):*
 
 | Scope | Covers |
 |---|---|
 | `ib` | `IbGateway`, `PortfolioWrapper`, `TwsPortfolioRunner` — socket, reader loop, EWrapper callbacks, and the startup read from TWS |
 | `model` | `Holding`, `PortfolioSnapshot` and the derived portfolio math |
 | `report` | the console snapshot report and its formatting |
-| `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
+| `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
-| `domain` | `portfolioboss.domain` (`HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`) — pure computation over trades (derived dates, closed positions and realized P&L, reconciliation warnings), no Spring |
+| `domain` | `portfolioboss.domain` (`HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`, `PositionTrades`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `InvestorWarning`, `InvestorWarningType`) — pure computation over trades (derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit), no Spring |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 
@@ -74,7 +74,7 @@ Tests (`src/test/`) take the scope of the code they cover.
 - The body should explain *what* and *why*, not restate the diff line by line
 - This project is **read-only toward IB by design** — a commit that adds `placeOrder`, `cancelOrder`, any
   order-related callback, an API endpoint that writes anything other than PortfolioBoss's own hand-entered
-  data (sector, trades, manual positions), CORS configuration, a write endpoint that accepts something other than JSON, or
+  data (sector, trades, manual positions, investors and their deposits), CORS configuration, a write endpoint that accepts something other than JSON, or
   binding beyond localhost is a signal something is wrong; flag it instead of committing
 - If `$ARGUMENTS` is provided, use it as the commit message (skip analysis)
 

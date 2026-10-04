@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.12.0";
+    public static final String VERSION = "0.13.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,20 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.13.0: [Several investors in one account]
+ * V4 migration: investor (one account owner, "Me", created by the migration), investor_cash_movement for deposits and withdrawals, and trade.investor_id; every trade entered before is the owner's.
+ * InvestorSummaryCalculator added (domain): each investor's cash, shares value, total value, cost and P&L; the owner gets IB's figures minus the others', so the cards always add up to IB.
+ * Another investor's cash = deposits − withdrawals − buys + sells − commissions, derived on every read; their cost is at average cost (HoldingHistory.heldCost); a missing price gives null, never a guess.
+ * Profit is from the shares only, the same for everyone: unrealized in USD, realized per currency; dividends and interest stay in IB's cash, so they land on the account owner.
+ * InvestorWarning added: trades without a price, trades not in USD, negative cash, more shares than IB reports, closed positions with no P&L to count — shown on the card, never blocking.
+ * Closed positions are now per investor (PositionTrades splits a position's trades by investor): one investor selling out of a holding the other still holds is a closed position of their own.
+ * GET /api/portfolio gains investors (the cards, with deposits and warnings), investorQuantities on each holding, and investorId on every trade and closed position.
+ * InvestorWriteController added: POST/PUT /api/investors (a name already taken, ignoring case, is 409) and POST/PUT/DELETE for deposits; a deposit for the account owner is 400, their cash comes from IB.
+ * TradeRequest and NewManualPositionRequest gain an optional investorId: a new trade without one is the owner's, a correction without one keeps its investor, an unknown id is 400.
+ * InvestorsSummary added (UI): a card per investor under the account summary, rename, "+ Add investor" and a deposits panel; with the owner alone only "+ Add investor" shows.
+ * With more than one investor: Qty in Positions reads "39 (15 · 24)" with names on hover, an Investor column in the trades and closed positions tables, and an Investor field in the trade forms.
+ * New tests: InvestorSummaryCalculatorTest (with INVESTORS_TODO.md's worked example), PositionTradesTest, InvestorWriteControllerTest, InvestorWriteServiceTest; heldCost in HoldingHistoryTest.
+ *
  * VERSION 0.12.0: [Average cost, partial sells and manual positions]
  * HoldingHistory: a period still held after a partial sell is now a closed position of the shares sold; before, only a sell back to zero counted. Tagged "partial · still holding N".
  * ClosedPosition: the shares sold are measured at average cost (each costs the average of the shares held then, with its part of the buy commissions); a closed period adds up exactly.

@@ -2,8 +2,11 @@
 
 > **למי שקורא זאת בסשן חדש:** מדריך מימוש לפיצ'ר "כמה משקיעים בחשבון אחד": משקיע נוסף שהכסף שלו נמצא בחשבון ה-IB, שיוך
 > מניות לכל משקיע (גם חלוקה של החזקה אחת — 39 NVDA: 15 של בעל החשבון, 24 של המשקיע השני), ותצוגה מהירה של המזומן שנשאר לכל
-> אחד והרווח של כל אחד. נבנה **אחרי** סשנים 2–3 של [CLOSED_POSITIONS_TODO.md](CLOSED_POSITIONS_TODO.md) (עמלות ועסקאות סגורות
-> ידניות): העמלה משפיעה על המזומן ועל העלות של כל משקיע, וטבלת העסקאות הסגורות הידניות מקבלת עמודת משקיע כבר מההתחלה.
+> אחד והרווח של כל אחד. נבנה **אחרי** [CLOSED_POSITIONS_TODO.md](CLOSED_POSITIONS_TODO.md) (כל חמשת הסשנים): העמלה משפיעה על
+> המזומן ועל העלות של כל משקיע, והעסקאות של פוזיציה ידנית הן שורות ב-`trade` — ולכן מקבלות משקיע כמו כל עסקה.
+>
+> **עודכן 03.10.2026, לפני סשן 1:** התוכנית נכתבה לפני העיצוב מחדש של העסקאות הסגורות (V3, עלות ממוצעת, מכירה חלקית, פוזיציות
+> ידניות עם עסקאות). מה שהשתנה בגלל זה: החלטה 5 (מכירה חלקית נכללת), החלטות 11–12 החדשות, 1.1–1.4 ו"מחוץ לתחום".
 > שייך לעקרון 6 ב-[TODO.md](TODO.md) (מדידה עצמית כנה): כל משקיע רואה כמה הרוויח על המניות שלו.
 >
 > סיכון לכל פריט: 🟢 נמוך | 🟡 בינוני | 🔴 גבוה. **✅ ליד מספר הפריט = בוצע.**
@@ -28,30 +31,41 @@
 5. **רווח — מהמניות בלבד, אותה הגדרה לשני המשקיעים (עקביות):**
    - **רווח לא ממומש** = שווי המניות שלו היום (כמות × מחיר השוק של IB) − העלות שלהן. אחוז = רווח לא ממומש ÷ עלות, כמו העמודה
      של IB.
-   - **רווח ממומש** = סך הרווח של העסקאות הסגורות שלו (החלטה 8, ולפי CLOSED_POSITIONS_TODO.md: מכירות − קניות − עמלות).
-   - **סה"כ** = לא ממומש + ממומש (בדולרים, בלי אחוז).
-   - **העלות של משקיע נוסף** = המחיר הממוצע של הקניות בסבב הנוכחי שלו (כולל עמלות) × הכמות שנשארה לו. מכירה חלקית לא משנה את
-     הממוצע — כמו שיטת העלות הממוצעת של IB. **העלות של בעל החשבון** = העלות ב-IB (`position × averageCost`) פחות העלות של
+   - **רווח ממומש** = סך הרווח של העסקאות הסגורות שלו (החלטה 8, ולפי CLOSED_POSITIONS_TODO.md: מכירות − עלות ממוצעת − עמלות),
+     **כולל מכירה חלקית**: מאז החלטות 9–10 שם, כל סבב שיש בו מכירה הוא עסקה סגורה. לפי מטבע (החלטה 11).
+   - **סה"כ** = לא ממומש + ממומש בדולרים (בלי אחוז).
+   - **העלות של משקיע נוסף** = העלות הממוצעת של המניות שנשארו לו בסבב הנוכחי (כולל עמלות הקנייה) — אותו חישוב כמו של העסקאות
+     הסגורות. מכירה חלקית לא משנה את הממוצע — כמו שיטת העלות הממוצעת של IB. דוגמה: קנה 24 NVDA ב-$120 ומכר 4 ב-$180 ← רווח
+     ממומש +$240, ו-20 המניות שנשארו עולות $2,400. **העלות של בעל החשבון** = העלות ב-IB (`position × averageCost`) פחות העלות של
      האחרים (החלטה 1).
-   - **לא נכלל:** דיבידנדים, ריבית, ורווח ממכירה חלקית בתוך החזקה שעדיין פתוחה. אולי נרחיב בהמשך (ראה "מחוץ לתחום").
+   - **לא נכלל:** דיבידנדים וריבית. אולי נרחיב בהמשך (ראה "מחוץ לתחום").
 6. **מחיר חסר בעסקה של משקיע נוסף ← מה שתלוי בה `null` + אזהרה:** המזומן שלו (וגם של בעל החשבון, שנגזר ממנו), והעלות והרווח
    הלא ממומש באותה החזקה, אם הקנייה בסבב הנוכחי. לא מנחשים.
 7. **דיבידנדים, ריבית ועמלות ש-IB גובה** נכנסים למזומן של החשבון ולא ליומן של אף משקיע — בגרסה הזו הם נזקפים למזומן של בעל
    החשבון (החלטה 1), ולא לרווח של אף אחד (החלטה 5).
-8. **עסקאות סגורות לפי משקיע:** `HoldingHistory.of` רץ על העסקאות של כל משקיע בנפרד. אם בעל החשבון מכר את ה-15 שלו והמשקיע
+8. **עסקאות סגורות לפי משקיע:** `HoldingHistory.of` רץ על העסקאות של כל משקיע בנפרד — בהחזקה ובפוזיציה ידנית. אם בעל החשבון מכר את ה-15 שלו והמשקיע
    השני נשאר עם 24 — זו עסקה סגורה של בעל החשבון, למרות שההחזקה לא ירדה לאפס. התאריכים והאזהרות של ההחזקה עצמה
    (`firstBuyDate`, `QUANTITY_MISMATCH`…) ממשיכים להיות מחושבים מכל העסקאות יחד.
 9. **אזהרות משקיע** (מוצגות, לא חוסמות — כמו בסשן 7 של HOLDING_DETAILS_TODO.md): עסקה בלי מחיר; מזומן שלילי; החזקה שבה העסקאות
    שלו מסתכמות ביותר מניות ממה ש-IB מדווח. בניגוד לאזהרות ההחזקה, יכולות להיות כמה בבת אחת.
 10. **UI:** כרטיס סיכום לכל משקיע — מזומן, שווי מניות, הון (מזומן + מניות), רווח לא ממומש ($ ו-%), רווח ממומש, סה"כ; בכרטיס של
     משקיע נוסף גם סך ההפקדות נטו. החלוקה בעמודת הכמות: `39 (15 · 24)`. מסנן "הצג לפי משקיע" — לא בגרסה הזו.
+11. **מטבע** (עומרי, 03.10.2026): הרווח הממומש בכרטיס — **לפי מטבע** (`+500 USD · +950 HKD`), כמו הסכומים בטבלת העסקאות
+    הסגורות; היום רק פוזיציה ידנית אחת, 9988.HK, ב-HKD. המזומן, שווי המניות, ההון, העלות והסה"כ — בדולרים בלבד: עסקה של משקיע נוסף
+    במטבע אחר לא נספרת במזומן שלו, ומקבלת אזהרה.
+12. **פרטים שנקבעו לפני הבנייה (03.10.2026):**
+    - ההון של בעל החשבון = ה-NAV פחות ההון של האחרים (החלטה 1), ולכן הוא לא בדיוק מזומן + מניות: ב-DB האמיתי ה-NAV גבוה ב-$15.72
+      ממזומן + שווי המניות (כנראה דיבידנד או ריבית שנצברו — של בעל החשבון, החלטה 7).
+    - עסקה סגורה בלי רווח (מחיר חסר או מכירת יתר) לא נספרת ברווח הממומש, ואזהרה אומרת כמה כאלה יש — כמו "(n without prices)" בטבלת
+      העסקאות הסגורות. בלי זה עסקה אחת בלי מחיר הייתה מוחקת את כל הרווח הממומש.
+    - `trade.investor_id` חובה, ולכן כבר בסשן 1 העסקאות החדשות מה-UI של היום (וגם פוזיציה ידנית חדשה) משויכות לבעל החשבון.
 
 ## עקרונות קבועים
 
 - כל עקרונות HOLDING_DETAILS_TODO.md בתוקף: read-only מול IB, `GET /api/portfolio` רק מתווסף, JSON בלבד בכתיבה, להסביר לפני
   עריכה. ה-endpoints החדשים כותבים רק נתונים שהוזנו ידנית (משקיעים והפקדות) — מותר לפי CLAUDE.md.
 - **החישוב כתוב פעם אחת:** ב-`domain` (בלי Spring ובלי DB), עם בדיקות יחידה. הדוגמה למטה היא גם בדיקה.
-- **USD בלבד:** כל ההחזקות היום ב-USD (נבדק ב-DB, 03.10.2026).
+- **USD:** כל ההחזקות היום ב-USD (נבדק ב-DB, 03.10.2026); פוזיציה ידנית אחת (9988.HK) ב-HKD — ראה החלטה 11.
 - שמות מחלקות ושדות בתוכנית הם הצעה — כל שם חדש מוסבר כשיוצרים אותו.
 - Git / changelog / "עדכונים של סוף סשן" — רק ביוזמת המשתמש.
 
@@ -76,10 +90,21 @@
 
 > **המטרה:** `GET /api/portfolio` מחזיר את המשקיעים עם המזומן, ההון והרווח של כל אחד, ואת החלוקה בכל החזקה. עדיין אין דרך
 > להזין משקיע או הפקדה מה-API — הבדיקות מכניסות אותם ישירות ל-DB.
+>
+> **סטטוס (04.10.2026):** 1.1–1.5 נבנו על `maven-spring-boot`, עדיין לא committed. `mvn -q test` ירוק — 161 בדיקות (29 חדשות:
+> `InvestorSummaryCalculatorTest` 13, `PositionTradesTest` 7, `heldCost` 7 ב-`HoldingHistoryTest`, ואחת ב-`PortfolioControllerTest` וב-
+> `PortfolioReadServiceTest`). V4 רצה על `portfolioboss_test`, ונבדקה על עותק זמני של ה-DB האמיתי (38 העסקאות שויכו ל-"Me"; העותק נמחק).
+> ✅ גיבוי (`~/PortfolioBossBackups/portfolioboss-2026-10-04.sql.gz`, שוחזר ל-DB זמני וכל הטבלאות זהות למקור — שורות ותוכן), ואז
+> `./run.sh 7599` מול `portfolioboss`: V4 רצה, ו-`/api/portfolio` מחזיר את "Me" עם המספרים של IB בדיוק (מזומן 11,486.74, ערך כולל
+> 69,554.49 = ה-NAV), רווח ממומש USD ‏+19,180.45 ו-HKD ‏+950 — אותו סכום כמו טבלת העסקאות הסגורות.
+> שינויים מהתוכנית: השמות (החלטה 12 ו-1.3); `Utils.decimalOrNull` (מספר של IB ל-`BigDecimal`, `null` כש-IB לא דיווח); `getTradeFacts()`
+> ב-`HoldingEntity` / `ManualPositionEntity` (השם — עומרי); `ManualPositionEntity.tradeHistory()` נמחק — העסקאות הסגורות עוברות עכשיו
+> דרך `toPositionTrades()`, לכל משקיע; `InvestorRepository.accountOwner()` לשני ה-services של הכתיבה.
 
-### 1.1 🟡 מיגרציה `V3__investors.sql`
+### 1.1 🟡 מיגרציה `V4__investors.sql`
 
-V2 הוא של העסקאות הסגורות. אם הסדר ישתנה — המספר הפנוי הבא, ושורות `manual_closed_position` רק אם הטבלה כבר קיימת.
+V1–V3 כבר רצו (V3 = פוזיציות ידניות, שמחקה את `manual_closed_position`). העסקאות של פוזיציה ידנית הן שורות ב-`trade`, ולכן
+`trade.investor_id` מכסה גם אותן — אין עמודת משקיע על `manual_position`.
 **לפני ההרצה הראשונה מול ה-DB האמיתי:** `scripts/backup-db.sh`.
 
 ```sql
@@ -98,10 +123,6 @@ ALTER TABLE trade ADD COLUMN investor_id BIGINT REFERENCES investor (id);
 UPDATE trade SET investor_id = (SELECT id FROM investor WHERE is_account_owner);
 ALTER TABLE trade ALTER COLUMN investor_id SET NOT NULL;
 
-ALTER TABLE manual_closed_position ADD COLUMN investor_id BIGINT REFERENCES investor (id);
-UPDATE manual_closed_position SET investor_id = (SELECT id FROM investor WHERE is_account_owner);
-ALTER TABLE manual_closed_position ALTER COLUMN investor_id SET NOT NULL;
-
 -- Only for investors other than the account owner, whose cash comes from IB (checked by the API).
 CREATE TABLE investor_cash_movement (
     id             BIGSERIAL     PRIMARY KEY,
@@ -117,35 +138,45 @@ CREATE INDEX investor_cash_movement_investor_date ON investor_cash_movement (inv
 
 ### 1.2 🟢 `db`: entities ו-repositories
 
-- `InvestorEntity` (`id`, `name`, `accountOwner`), `InvestorCashMovementEntity`, `CashMovementType` (`DEPOSIT` / `WITHDRAWAL`),
-  והאחסון שלהם (repositories).
-- `TradeEntity` ו-`ManualClosedPositionEntity` מקבלים את המשקיע (חובה). `TradeEntity.toTradeFact()` מוסיף את ה-id שלו.
+- `InvestorEntity` (`id`, `name`, `accountOwner`, `cashMovements`), `InvestorCashMovementEntity`, `CashMovementType` (`DEPOSIT` /
+  `WITHDRAWAL`), ו-`InvestorRepository` (המשקיעים עם היומנים שלהם באותה שאילתה). ה-repository של ההפקדות — בסשן 2, עם הכתיבה.
+- `TradeEntity.investorId` (חובה) — מספר ולא קישור ל-entity: העסקה לא צריכה את השם של המשקיע (ה-UI מקבל אותו מ-`investors`),
+  וקישור היה עולה בשאילתה נוספת. `TradeEntity.toTradeFact()` מעביר אותו.
+- `HoldingWriteService` ו-`ManualPositionWriteService` משייכים כל עסקה חדשה לבעל החשבון (החלטה 12); בחירת משקיע — סשן 2.
 
 ### 1.3 🟡 `domain`: החישוב
 
-- `TradeFact` מקבל `investorId`.
-- `HoldingHistory` מוסיף את העלות של המניות שנשארו בסבב הנוכחי (החלטה 5: ממוצע הקניות בסבב, כולל עמלות, × הכמות שנשארה;
-  `null` אם לאחת הקניות בסבב אין מחיר).
-- `record InvestorFigures(netDeposits, cash, sharesValue, costBasis, realizedPnl)` — הסכומים הגולמיים; נגזרים ממנו `equity()`,
-  `unrealizedPnl()`, `unrealizedPnlPercent()`, `totalPnl()` (באותה רוח כמו `ClosedPosition`). רכיב `null` ← הנגזרים ממנו
-  `null`. `netDeposits` הוא `null` לבעל החשבון (אין לו יומן).
-- `InvestorSplit.of(...)` — מקבל לכל החזקה רשומה פשוטה בלי JPA (כמות, מחיר שוק, שווי שוק ועלות מ-IB, והעסקאות עם המשקיע של
-  כל אחת), את יומני ההפקדות, את המזומן וה-NAV מ-IB ואת ה-id של בעל החשבון. מחזיר לכל משקיע `InvestorFigures` ואזהרות
-  (`InvestorWarning(type, message)` + `InvestorWarningType`), ולכל החזקה את הכמות של כל משקיע.
+- `TradeFact` מקבל `investorId`, ו-`cashFlow()`: מה שהעסקה עשתה למזומן (קנייה: −כמות × מחיר − עמלה; מכירה: +כמות × מחיר −
+  עמלה; `null` בלי מחיר).
+- `HoldingHistory.heldCost` — העלות של המניות שנשארו בסבב הנוכחי (החלטה 5), מאותו `AverageCostCalculator` של העסקאות הסגורות;
+  `null` אם לאחת הקניות שעוד מוחזקות אין מחיר.
+- `CashMovementFact(investorId, type, amount)` — הפקדה או משיכה, מצומצמת למה שהחישוב צריך (כמו `TradeFact`).
+- `PositionTrades(symbol, currency, ibHolding, trades)` — החזקה (עם המספרים של IB) או פוזיציה ידנית (`ibHolding` = `null`) עם כל
+  העסקאות שלה, בלי JPA; `HoldingEntity` ו-`ManualPositionEntity` בונים אותה. נותנת לכל משקיע את העסקאות, ה-`HoldingHistory` (החלטה 8)
+  והכמות שלו — ולבעל החשבון: הכמות של IB פחות של האחרים.
+- `record InvestorSummary(depositsMinusWithdrawals, cash, sharesValue, totalValue, sharesCost, realizedPnlByCurrency, warnings)` —
+  המספרים של כרטיס הסיכום (החלטה 10), הסכומים הגולמיים; נגזרים ממנו `unrealizedPnl()`, `unrealizedPnlPercent()`, `totalPnl()` (באותה
+  רוח כמו `ClosedPosition`). רכיב `null` ← הנגזרים ממנו `null`. `depositsMinusWithdrawals` הוא `null` לבעל החשבון (אין לו יומן).
+  `totalValue` (ההון: מזומן + מניות) הוא רכיב ולא נגזר: של בעל החשבון מגיע מה-NAV (החלטה 12). השמות נבחרו עם עומרי (04.10.2026)
+  במקום `InvestorFigures` / `netDeposits` / `equity` / `costBasis`.
+- `InvestorSummaryCalculator` (במקום `InvestorSplit`) — מקבל את ה-`PositionTrades` של כל ההחזקות והפוזיציות הידניות, את ההפקדות,
+  את המשקיעים ואת המזומן וה-NAV מ-IB, ומחזיר `InvestorSummary` לכל משקיע.
   - משקיע נוסף: מזומן לפי החלטה 4; שווי מניות = הכמות שלו × מחיר השוק של IB, בכל החזקה; עלות ורווח ממומש — מ-`HoldingHistory`
     של העסקאות שלו.
   - בעל החשבון: מזומן, שווי מניות, הון ועלות — של IB פחות של האחרים (החלטה 1); רווח ממומש — מהעסקאות הסגורות שלו.
+  - אזהרות (`InvestorWarning(type, message)` + `InvestorWarningType`): עסקה בלי מחיר, מזומן שלילי, יותר מניות ממה ש-IB מדווח
+    (החלטה 9), עסקה שלא בדולר (החלטה 11), עסקאות סגורות שלא נספרו (החלטה 12).
   - ⚠️ החזקה `CLOSED`: הסנכרון מאפס בה את הכמות ואת שווי השוק, אבל מחיר השוק נשאר האחרון שנראה. משקיע נוסף שהעסקאות שלו עדיין
     מראות מניות שם נספר לפי המחיר הזה, ומקבל את אזהרת "יותר מניות ממה ש-IB מדווח" — שאומרת להזין את המכירה. הסכום מול IB
     נשמר (בעל החשבון מקבל את ההפרש).
-- `HoldingEntity`: היסטוריית העסקאות לכל משקיע בנפרד, ו-`PortfolioResponse.closedPositionsOf` לוקח ממנה את העסקאות הסגורות
-  (החלטה 8).
+- `PortfolioResponse.closedPositionsOf` לוקח את העסקאות הסגורות מההיסטוריה של כל משקיע בנפרד (החלטה 8), בהחזקות ובפוזיציות
+  הידניות.
 
 ### 1.4 🟢 API (קריאה)
 
-- `PortfolioResponse.investors` (בסוף): `InvestorResponse(id, name, accountOwner, netDeposits, cash, sharesValue, equity,
-  costBasis, unrealizedPnl, unrealizedPnlPercent, realizedPnl, totalPnl, cashMovements, warnings)`, ו-`CashMovementResponse(id,
-  movementDate, type, amount, note)`.
+- `PortfolioResponse.investors` (בסוף): `InvestorResponse(id, name, accountOwner, depositsMinusWithdrawals, cash, sharesValue,
+  totalValue, sharesCost, unrealizedPnl, unrealizedPnlPercent, realizedPnlByCurrency, totalPnl, cashMovements, warnings)` —
+  `realizedPnlByCurrency` הוא `{"HKD": 950, "USD": 500}` (החלטה 11) — ו-`CashMovementResponse(id, movementDate, type, amount, note)`.
 - `HoldingResponse.investorQuantities` (בסוף): `InvestorQuantityResponse(investorId, quantity)` — רק משקיעים שהכמות שלהם בהחזקה
   אינה 0.
 - `TradeResponse.investorId` ו-`ClosedPositionResponse.investorId` (בסוף).
@@ -165,6 +196,15 @@ CREATE INDEX investor_cash_movement_investor_date ON investor_cash_movement (inv
 
 ## סשן 2 — backend: הזנת משקיעים, הפקדות, ומשקיע לעסקה
 
+> **סטטוס (04.10.2026):** 2.1–2.3 נבנו על `maven-spring-boot`, עדיין לא committed. `mvn -q clean test` ירוק — 193 בדיקות (32 חדשות:
+> `InvestorWriteControllerTest` 14, `InvestorWriteServiceTest` 12, ארבע ב-`HoldingWriteServiceTest` ושתיים ב-`ManualPositionWriteServiceTest`).
+> בדיקת curl — על **עותק זמני** של ה-DB האמיתי (האפליקציה עם `SPRING_DATASOURCE_URL`, בלי לשנות קובץ), כדי לא להשאיר "Avi" מזויף ב-DB
+> האמיתי (אין עדיין מחיקת משקיע): Avi + הפקדה 30,000 + 24 NVDA ב-120 ← מזומן 27,120, עלות 2,880, ‏NVDA ‏`31 → 7 · 24`, וסכום המזומן
+> וסכום הערך הכולל של שניהם = של IB בדיוק. 409 / 400 / 415 כמצופה; עריכה בלי `investorId` השאירה את העסקה של Avi. העותק נמחק.
+> שמות שלא היו בתוכנית: `AddedInvestorResponse` (התשובה ל-POST; `InvestorResponse` תפוס על ידי הכרטיס), `InvestorCashMovementRepository`,
+> `InvestorEntity.changeName`, `InvestorCashMovementEntity.changeDetails`, `TradeEntity.changeInvestor`, `InvestorWriteService.investorOfTrade`.
+> שם תפוס נבדק בלי הבדל בין אותיות גדולות לקטנות ("avi" = "Avi").
+
 ### 2.1 🟡 משקיעים והפקדות
 
 `InvestorWriteController` + `InvestorWriteService`, באותה תבנית כמו `HoldingWriteController` / `HoldingWriteService` — JSON בלבד,
@@ -179,9 +219,10 @@ CREATE INDEX investor_cash_movement_investor_date ON investor_cash_movement (inv
 
 ### 2.2 🟢 משקיע לעסקה
 
-- `TradeRequest.investorId` — אופציונלי; `null` = בעל החשבון (ברירת המחדל, וכך ה-UI הנוכחי ממשיך לעבוד עד סשן 3). id שלא
-  קיים ← 400.
-- אותו דבר ב-request של העסקה הסגורה הידנית.
+- `TradeRequest.investorId` — אופציונלי. **ביצירת עסקה** `null` = בעל החשבון (ברירת המחדל, וכך ה-UI הנוכחי ממשיך לעבוד עד סשן 3);
+  **בעריכה** (`PUT /api/trades/{id}`) `null` = העסקה נשארת של המשקיע שהיה לה, ומשקיע משתנה רק כששולחים אותו (עומרי, 04.10.2026).
+  id שלא קיים ← 400. הבדיקה במקום אחד: `InvestorWriteService.investorOfTrade`; `TradeEntity.changeInvestor` נפרד מ-`changeDetails`.
+- אותו דבר ב-`NewManualPositionRequest` (הקנייה והמכירה הראשונות של פוזיציה ידנית).
 
 ### 2.3 🟢 בדיקות
 
@@ -193,6 +234,14 @@ Controller (קודי סטטוס, ולידציה, JSON בלבד, 409 על שם ת
 ---
 
 ## סשן 3 — UI
+
+> **סטטוס (04.10.2026):** נבנה על `maven-spring-boot`, עדיין לא committed. `npm run build` ירוק; רינדור בצד השרת (בלי דפדפן) של הכרטיסים,
+> הטבלאות והטפסים עם הדוגמה — 13 בדיקות עברו. ✅ בדיקה בדפדפן — עומרי (04.10.2026): הכול תקין.
+> קבצים חדשים: `InvestorsSummary.tsx` (האזור, הכרטיסים, הוספה ושינוי שם), `CashMovementsPanel.tsx` (יומן ההפקדות: רשימה + טופס),
+> `InvestorsContext.tsx` (רשימת המשקיעים לכל רכיב בלי להעביר אותה דרך כל הרמות — React context — ועזרים: `accountOwnerOf`,
+> `investorNameOf`, `hasSeveralInvestors`), `InvestorSelect.tsx` (שדה "Investor" בטופס העסקה ובטופס הפוזיציה הידנית).
+> בדרך: המפתח של שורה בטבלת העסקאות הסגורות (ושל השורה הפתוחה) כולל עכשיו את המשקיע — אחרת שני משקיעים שקנו אותה מניה באותו יום
+> קיבלו אותו מפתח. טופס העסקה שולח תמיד את המשקיע שנבחר (ברירת מחדל: בעל החשבון; בעריכה — של העסקה).
 
 - `types/portfolio.ts`: `Investor`, `CashMovement`, `investors`, `investorQuantities`, `investorId`.
 - `components/InvestorsSummary.tsx`: כרטיס לכל משקיע מתחת ל-`SummaryBar` (החלטה 10), עם האזהרות שלו. מוצג כשיש יותר ממשקיע
@@ -221,8 +270,7 @@ Controller (קודי סטטוס, ולידציה, JSON בלבד, 409 על שם ת
 
 - **רווח כולל מול הכסף שהופקד** (הון − הפקדות נטו), שכולל גם דיבידנדים, ריבית ומכירות חלקיות — דורש יומן הפקדות גם לבעל
   החשבון. הטבלה `investor_cash_movement` כבר מתאימה לזה; כשנרחיב, מורידים את ה-400 של 2.1.
-- רווח ממומש ממכירה חלקית בתוך החזקה פתוחה (FIFO / tax lots).
 - דיבידנדים, ריבית ועמלות IB לפי משקיע.
 - מסנן "הצג לפי משקיע" בטבלת ה-Positions.
 - תשואה משוקללת זמן (TWR) לכל משקיע.
-- מטבע שאינו USD, כמה חשבונות IB, מחיקת משקיע.
+- מזומן ושווי במטבע שאינו USD (החלטה 11), כמה חשבונות IB, מחיקת משקיע.

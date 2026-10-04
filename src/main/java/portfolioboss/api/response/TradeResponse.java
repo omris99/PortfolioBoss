@@ -8,7 +8,9 @@ import java.time.LocalDate;
 
 /**
  * One trade as the UI receives it. {@code price} and {@code note} are {@code null} when not entered; {@code commission}
- * never is (the default was stored instead), and was added after the others.
+ * never is (the default was stored instead). {@code commission} and {@code investorId} were added after the others.
+ *
+ * @param investorId whose trade it is — one of {@code PortfolioResponse.investors}
  */
 public record TradeResponse(
         long id,
@@ -17,10 +19,11 @@ public record TradeResponse(
         BigDecimal quantity,
         BigDecimal price,
         String note,
-        BigDecimal commission) {
+        BigDecimal commission,
+        long investorId) {
 
     public TradeResponse(TradeEntity trade) {
         this(trade.id(), trade.tradeDate(), trade.side(), trade.quantity(), trade.price(), trade.note(),
-                trade.commission());
+                trade.commission(), trade.investorId());
     }
 }

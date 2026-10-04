@@ -5,20 +5,27 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import portfolioboss.api.response.CashMovementResponse;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
 import portfolioboss.api.response.HoldingResponse;
+import portfolioboss.api.response.InvestorQuantityResponse;
+import portfolioboss.api.response.InvestorResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.TradeResponse;
+import portfolioboss.db.CashMovementType;
 import portfolioboss.db.HoldingStatus;
 import portfolioboss.db.TradeSide;
 import portfolioboss.domain.HoldingWarning;
 import portfolioboss.domain.HoldingWarningType;
+import portfolioboss.domain.InvestorWarning;
+import portfolioboss.domain.InvestorWarningType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.hamcrest.Matchers.closeTo;
@@ -48,6 +55,9 @@ class PortfolioControllerTest {
     private static final Instant AS_OF = Instant.parse("2026-09-19T08:05:00Z");
     private static final String NO_TRADES_MESSAGE = "No buy entered yet, so the buy date and holding period are unknown.";
     private static final String SOLD_TOO_MANY = "Sold 7 shares but bought 5 in this period: check its trades.";
+    private static final String NEGATIVE_CASH_MESSAGE = "The cash comes to -120.00 USD: a deposit may be missing.";
+    private static final long ACCOUNT_OWNER_ID = 1;
+    private static final long OTHER_INVESTOR_ID = 2;
 
     @Autowired
     private MockMvc mockMvc;
@@ -99,7 +109,45 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].trades[0].price").value(150.0))
                 .andExpect(jsonPath("$.holdings[0].trades[0].note").value("Initial position"))
                 .andExpect(jsonPath("$.holdings[0].trades[0].commission").value(5.0))
-                .andExpect(jsonPath("$.holdings[0].warnings").value(empty()));
+                .andExpect(jsonPath("$.holdings[0].trades[0].investorId").value(ACCOUNT_OWNER_ID))
+                .andExpect(jsonPath("$.holdings[0].warnings").value(empty()))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[0].investorId").value(ACCOUNT_OWNER_ID))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[0].quantity").value(4))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[1].investorId").value(OTHER_INVESTOR_ID))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[1].quantity").value(6));
+    }
+
+    @Test
+    void servesTheInvestorsWithTheFieldNamesTheUiExpects() throws Exception {
+        PortfolioResponse withInvestors = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 40_000.0, List.of(),
+                List.of(), List.of(accountOwner(), otherInvestor()));
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withInvestors));
+
+        mockMvc.perform(get("/api/portfolio"))
+                .andExpect(jsonPath("$.investors[0].id").value(ACCOUNT_OWNER_ID))
+                .andExpect(jsonPath("$.investors[0].name").value("Me"))
+                .andExpect(jsonPath("$.investors[0].accountOwner").value(true))
+                .andExpect(jsonPath("$.investors[0].depositsMinusWithdrawals").value(nullValue()))
+                .andExpect(jsonPath("$.investors[0].realizedPnlByCurrency.USD").value(500))
+                .andExpect(jsonPath("$.investors[0].realizedPnlByCurrency.HKD").value(950))
+                .andExpect(jsonPath("$.investors[0].cashMovements").value(empty()))
+                .andExpect(jsonPath("$.investors[1].accountOwner").value(false))
+                .andExpect(jsonPath("$.investors[1].depositsMinusWithdrawals").value(30000))
+                .andExpect(jsonPath("$.investors[1].cash").value(27120))
+                .andExpect(jsonPath("$.investors[1].sharesValue").value(4320))
+                .andExpect(jsonPath("$.investors[1].totalValue").value(31440))
+                .andExpect(jsonPath("$.investors[1].sharesCost").value(2880))
+                .andExpect(jsonPath("$.investors[1].unrealizedPnl").value(1440))
+                .andExpect(jsonPath("$.investors[1].unrealizedPnlPercent").value(50))
+                .andExpect(jsonPath("$.investors[1].realizedPnlByCurrency").isEmpty())
+                .andExpect(jsonPath("$.investors[1].totalPnl").value(1440))
+                .andExpect(jsonPath("$.investors[1].cashMovements[0].id").value(1))
+                .andExpect(jsonPath("$.investors[1].cashMovements[0].movementDate").value("2026-01-10"))
+                .andExpect(jsonPath("$.investors[1].cashMovements[0].type").value("DEPOSIT"))
+                .andExpect(jsonPath("$.investors[1].cashMovements[0].amount").value(30000))
+                .andExpect(jsonPath("$.investors[1].cashMovements[0].note").value(nullValue()))
+                .andExpect(jsonPath("$.investors[1].warnings[0].type").value("NEGATIVE_CASH"))
+                .andExpect(jsonPath("$.investors[1].warnings[0].message").value(NEGATIVE_CASH_MESSAGE));
     }
 
     @Test
@@ -122,7 +170,7 @@ class PortfolioControllerTest {
     @Test
     void keepsFiguresIbDidNotReportInTheJsonAsNull() throws Exception {
         PortfolioResponse withoutFigures =
-                new PortfolioResponse(ACCOUNT, AS_OF, null, null, List.of(withoutCostData()), List.of());
+                new PortfolioResponse(ACCOUNT, AS_OF, null, null, List.of(withoutCostData()), List.of(), List.of());
         given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withoutFigures));
 
         mockMvc.perform(get("/api/portfolio"))
@@ -141,7 +189,7 @@ class PortfolioControllerTest {
     @Test
     void servesClosedPositionsWithTheFieldNamesTheUiExpects() throws Exception {
         PortfolioResponse withClosedPositions = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(),
-                List.of(appleBoughtAndSold(), microsoftSoldWithNoPricesEntered(), teslaEnteredByHand()));
+                List.of(appleBoughtAndSold(), microsoftSoldWithNoPricesEntered(), teslaEnteredByHand()), List.of());
         given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withClosedPositions));
 
         mockMvc.perform(get("/api/portfolio"))
@@ -166,6 +214,7 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.closedPositions[0].warning").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[0].commissions").value(10.0))
                 .andExpect(jsonPath("$.closedPositions[0].note").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[0].investorId").value(ACCOUNT_OWNER_ID))
                 .andExpect(jsonPath("$.closedPositions[1].warning").value(SOLD_TOO_MANY))
                 .andExpect(jsonPath("$.closedPositions[1].sector").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[1].averageBuyPrice").value(nullValue()))
@@ -186,26 +235,26 @@ class PortfolioControllerTest {
     }
 
     private PortfolioResponse portfolioWith(HoldingResponse... holdings) {
-        return new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(holdings), List.of());
+        return new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(holdings), List.of(), List.of());
     }
 
     /** 10 bought at 150 and sold at 180, $5 commission on each: +290, or +19.33%. */
     private ClosedPositionResponse appleBoughtAndSold() {
         TradeResponse buy = new TradeResponse(1, LocalDate.of(2024, 3, 1), TradeSide.BUY, new BigDecimal("10"),
-                new BigDecimal("150.00"), null, new BigDecimal("5"));
+                new BigDecimal("150.00"), null, new BigDecimal("5"), ACCOUNT_OWNER_ID);
         TradeResponse sell = new TradeResponse(2, LocalDate.of(2025, 6, 1), TradeSide.SELL, new BigDecimal("10"),
-                new BigDecimal("180.00"), null, new BigDecimal("5"));
+                new BigDecimal("180.00"), null, new BigDecimal("5"), ACCOUNT_OWNER_ID);
         return new ClosedPositionResponse(7L, "AAPL", "USD", "Technology", LocalDate.of(2024, 3, 1),
                 LocalDate.of(2025, 6, 1), 457, new BigDecimal("10"), new BigDecimal("150.00"), new BigDecimal("180.00"),
                 new BigDecimal("290.00"), new BigDecimal("19.33333333333333"), null, new BigDecimal("10"),
-                ClosedPositionSource.TRADES, null, null, BigDecimal.ZERO, List.of(buy, sell));
+                ClosedPositionSource.TRADES, null, null, BigDecimal.ZERO, List.of(buy, sell), ACCOUNT_OWNER_ID);
     }
 
     /** Bought and sold with no price entered for either, no sector, and more sold than bought. */
     private ClosedPositionResponse microsoftSoldWithNoPricesEntered() {
         return new ClosedPositionResponse(8L, "MSFT", "USD", null, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 2, 1),
                 31, new BigDecimal("7"), null, null, null, null, SOLD_TOO_MANY, new BigDecimal("10"),
-                ClosedPositionSource.TRADES, null, null, BigDecimal.ZERO, List.of());
+                ClosedPositionSource.TRADES, null, null, BigDecimal.ZERO, List.of(), ACCOUNT_OWNER_ID);
     }
 
     /** A manual position sold in part: no holding, an id of its own, a note, and 2 shares still held. */
@@ -213,22 +262,49 @@ class PortfolioControllerTest {
         return new ClosedPositionResponse(null, "TSLA", "USD", null, LocalDate.of(2022, 1, 10),
                 LocalDate.of(2023, 5, 1), 476, new BigDecimal("5"), new BigDecimal("300"), new BigDecimal("310"),
                 new BigDecimal("40"), new BigDecimal("2.666666666666667"), null, new BigDecimal("10"),
-                ClosedPositionSource.MANUAL, 3L, "Sold before PortfolioBoss", new BigDecimal("2"), List.of());
+                ClosedPositionSource.MANUAL, 3L, "Sold before PortfolioBoss", new BigDecimal("2"), List.of(),
+                OTHER_INVESTOR_ID);
     }
 
-    /** Bought once, never sold — still OPEN, so holdingDays counts to a made-up snapshot date. */
+    /**
+     * Bought once, never sold — still OPEN, so holdingDays counts to a made-up snapshot date. 4 of the 10 are the
+     * account owner's, 6 the other investor's.
+     */
     private HoldingResponse apple() {
         TradeResponse buy = new TradeResponse(1, LocalDate.of(2024, 3, 14), TradeSide.BUY,
-                new BigDecimal("10"), new BigDecimal("150.00"), "Initial position", new BigDecimal("5"));
+                new BigDecimal("10"), new BigDecimal("150.00"), "Initial position", new BigDecimal("5"),
+                ACCOUNT_OWNER_ID);
+        List<InvestorQuantityResponse> investorQuantities = List.of(
+                new InvestorQuantityResponse(ACCOUNT_OWNER_ID, new BigDecimal("4")),
+                new InvestorQuantityResponse(OTHER_INVESTOR_ID, new BigDecimal("6")));
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
-                LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of());
+                LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities);
     }
 
     /** IB sent a position but no cost or price figures for it, no sector and no trades entered. */
     private HoldingResponse withoutCostData() {
         HoldingWarning noTrades = new HoldingWarning(HoldingWarningType.NO_TRADES_LOGGED, NO_TRADES_MESSAGE);
         return new HoldingResponse("MSFT", "STK", "USD", 5.0, null, null, null, null, 0.0, ACCOUNT,
-                null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of(), List.of(noTrades));
+                null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of(), List.of(noTrades),
+                List.of());
+    }
+
+    /** The account owner of INVESTORS_TODO.md's example, with a realized P&amp;L in two currencies. */
+    private InvestorResponse accountOwner() {
+        return new InvestorResponse(ACCOUNT_OWNER_ID, "Me", true, null, new BigDecimal("12880"),
+                new BigDecimal("55680"), new BigDecimal("68560"), new BigDecimal("47120"), new BigDecimal("8560"),
+                new BigDecimal("18.16638370118846"), Map.of("USD", new BigDecimal("500"), "HKD", new BigDecimal("950")),
+                new BigDecimal("9060"), List.of(), List.of());
+    }
+
+    /** The other investor of the example — with a made-up warning, to pin its shape. */
+    private InvestorResponse otherInvestor() {
+        CashMovementResponse deposit = new CashMovementResponse(1, LocalDate.of(2026, 1, 10),
+                CashMovementType.DEPOSIT, new BigDecimal("30000"), null);
+        InvestorWarning negativeCash = new InvestorWarning(InvestorWarningType.NEGATIVE_CASH, NEGATIVE_CASH_MESSAGE);
+        return new InvestorResponse(OTHER_INVESTOR_ID, "Avi", false, new BigDecimal("30000"), new BigDecimal("27120"),
+                new BigDecimal("4320"), new BigDecimal("31440"), new BigDecimal("2880"), new BigDecimal("1440"),
+                new BigDecimal("50"), Map.of(), new BigDecimal("1440"), List.of(deposit), List.of(negativeCash));
     }
 }

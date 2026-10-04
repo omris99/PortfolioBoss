@@ -30,6 +30,14 @@ public final class Utils {
     }
 
     /**
+     * An IB figure as an exact decimal, so it can be added to the amounts entered by hand ({@code BigDecimal}):
+     * {@code null} when IB did not report it, whether it comes as {@code null} (a stored column) or {@code NaN}.
+     */
+    public static BigDecimal decimalOrNull(Double value) {
+        return value == null || !Double.isFinite(value) ? null : BigDecimal.valueOf(value);
+    }
+
+    /**
      * The commission a buy or sell of {@code quantity} shares is charged when none was entered: 1 cent a share, with
      * a $5 minimum — 100 shares cost $5, 600 shares $6. Rounded to the cent. The same rule as IBBot's
      * {@code Utils.calculateOrderCommission}; {@code V2__closed_positions.sql} applied it to the trades entered before.

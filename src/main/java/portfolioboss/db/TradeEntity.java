@@ -40,6 +40,12 @@ public class TradeEntity {
     @JoinColumn(name = "manual_position_id")
     private ManualPositionEntity manualPosition;
 
+    /**
+     * Whose trade it is. A plain id rather than a link to {@link InvestorEntity}: nothing reads the investor through the
+     * trade (the UI gets their names from the list of investors), and a link would cost a query to load it.
+     */
+    private Long investorId;
+
     private LocalDate tradeDate;
 
     @Enumerated(EnumType.STRING)
@@ -58,17 +64,27 @@ public class TradeEntity {
     }
 
     /** A trade the user entered for {@code holding}. {@code price} and {@code note} may be {@code null}. */
-    public TradeEntity(HoldingEntity holding, LocalDate tradeDate, TradeSide side, BigDecimal quantity,
-                       BigDecimal price, String note, BigDecimal commission) {
+    public TradeEntity(HoldingEntity holding, InvestorEntity investor, LocalDate tradeDate, TradeSide side,
+                       BigDecimal quantity, BigDecimal price, String note, BigDecimal commission) {
         this.holding = holding;
+        this.investorId = investor.id();
         changeDetails(tradeDate, side, quantity, price, note, commission);
     }
 
     /** A trade the user entered for {@code manualPosition}. {@code price} and {@code note} may be {@code null}. */
-    public TradeEntity(ManualPositionEntity manualPosition, LocalDate tradeDate, TradeSide side, BigDecimal quantity,
-                       BigDecimal price, String note, BigDecimal commission) {
+    public TradeEntity(ManualPositionEntity manualPosition, InvestorEntity investor, LocalDate tradeDate,
+                       TradeSide side, BigDecimal quantity, BigDecimal price, String note, BigDecimal commission) {
         this.manualPosition = manualPosition;
+        this.investorId = investor.id();
         changeDetails(tradeDate, side, quantity, price, note, commission);
+    }
+
+    /**
+     * Another investor's trade from now on. Apart from {@link #changeDetails}: a correction that names no investor keeps
+     * the one the trade has.
+     */
+    public void changeInvestor(InvestorEntity investor) {
+        this.investorId = investor.id();
     }
 
     /** A correction by the user: every field is replaced, and the trade stays on the same holding. */
@@ -110,13 +126,20 @@ public class TradeEntity {
         return commission;
     }
 
+    public long investorId() {
+        return investorId;
+    }
+
     /** {@code null} for a holding's trade. */
     public ManualPositionEntity manualPosition() {
         return manualPosition;
     }
 
-    /** Reduced to what {@link portfolioboss.domain.HoldingHistory} needs: the id, date, side, amounts and commission. */
+    /**
+     * Reduced to what {@link portfolioboss.domain.HoldingHistory} needs: the id, the investor, date, side, amounts and
+     * commission.
+     */
     public TradeFact toTradeFact() {
-        return new TradeFact(id, tradeDate, side, quantity, price, commission);
+        return new TradeFact(id, investorId, tradeDate, side, quantity, price, commission);
     }
 }

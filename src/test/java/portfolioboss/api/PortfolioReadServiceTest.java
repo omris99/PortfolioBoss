@@ -11,8 +11,11 @@ import org.springframework.test.context.ActiveProfiles;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
 import portfolioboss.api.response.HoldingResponse;
+import portfolioboss.api.response.InvestorQuantityResponse;
+import portfolioboss.api.response.InvestorResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.TradeResponse;
+import portfolioboss.db.CashMovementType;
 import portfolioboss.db.HoldingStatus;
 import portfolioboss.db.PortfolioSyncService;
 import portfolioboss.db.TradeSide;
@@ -47,6 +50,7 @@ class PortfolioReadServiceTest {
     private static final String ACCOUNT = "U1234567";
     private static final int APPLE_CON_ID = 265598;
     private static final int MICROSOFT_CON_ID = 272093;
+    private static final int NVIDIA_CON_ID = 4815747;
     private static final Instant FIRST_RUN = Instant.parse("2026-09-21T08:00:00Z");
     private static final Instant SECOND_RUN = Instant.parse("2026-09-22T08:00:00Z");
 
@@ -101,6 +105,93 @@ class PortfolioReadServiceTest {
         assertThat(holding.trades()).isEmpty();
         assertThat(holding.warnings()).extracting(HoldingWarning::type).containsExactly(HoldingWarningType.NO_TRADES_LOGGED);
         assertThat(portfolio.closedPositions()).isEmpty();
+        // the account owner alone: everything IB reports is theirs, even with no trade entered
+        assertThat(holding.investorQuantities()).singleElement().satisfies(investorQuantity -> {
+            assertThat(investorQuantity.investorId()).isEqualTo(accountOwnerId());
+            assertThat(investorQuantity.quantity()).isEqualByComparingTo("10");
+        });
+        assertThat(portfolio.investors()).singleElement().satisfies(accountOwner -> {
+            assertThat(accountOwner.id()).isEqualTo(accountOwnerId());
+            assertThat(accountOwner.name()).isEqualTo("Me");
+            assertThat(accountOwner.accountOwner()).isTrue();
+            assertThat(accountOwner.depositsMinusWithdrawals()).isNull();
+            assertThat(accountOwner.cash()).isEqualByComparingTo("25000");
+            assertThat(accountOwner.sharesValue()).isEqualByComparingTo("2000");
+            assertThat(accountOwner.totalValue()).isEqualByComparingTo("100000");
+            assertThat(accountOwner.sharesCost()).isEqualByComparingTo("1500");
+            assertThat(accountOwner.unrealizedPnl()).isEqualByComparingTo("500");
+            assertThat(accountOwner.realizedPnlByCurrency()).isEmpty();
+            assertThat(accountOwner.cashMovements()).isEmpty();
+            assertThat(accountOwner.warnings()).isEmpty();
+        });
+    }
+
+    /**
+     * The example of INVESTORS_TODO.md, from the database to the response. IB: NAV 100,000, cash 40,000, shares worth
+     * 60,000 that cost 50,000, NVDA at 180. Avi deposited 30,000 and bought 24 of the 39 NVDA at 120; the account owner
+     * bought and sold AAPL (+500 USD) and 9988.HK (+950 HKD) before PortfolioBoss — manual positions.
+     */
+    @Test
+    void splitsTheAccountBetweenTheAccountOwnerAndAnotherInvestor() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 40_000.0,
+                holdingAt("NVDA", NVIDIA_CON_ID, 39, 120.0, 180.0),       // worth 7,020, cost 4,680
+                holdingAt("MSFT", MICROSOFT_CON_ID, 20, 2266.0, 2649.0)));  // worth 52,980, cost 45,320
+        long nvidiaHoldingId = holdingIdOf(NVIDIA_CON_ID);
+        long accountOwnerId = accountOwnerId();
+        long aviId = insertInvestor("Avi");
+        insertDeposit(aviId, LocalDate.of(2026, 1, 10), "30000");
+        insertTrade(nvidiaHoldingId, accountOwnerId, LocalDate.of(2026, 2, 1), TradeSide.BUY, "15", "120");
+        insertTrade(nvidiaHoldingId, aviId, LocalDate.of(2026, 2, 1), TradeSide.BUY, "24", "120");
+        long appleId = insertManualPosition("AAPL", "USD");
+        insertManualTrade(appleId, LocalDate.of(2024, 1, 1), TradeSide.BUY, "10", "100");
+        insertManualTrade(appleId, LocalDate.of(2024, 6, 1), TradeSide.SELL, "10", "150");
+        long alibabaId = insertManualPosition("9988.HK", "HKD");
+        insertManualTrade(alibabaId, LocalDate.of(2021, 4, 21), TradeSide.BUY, "100", "100");
+        insertManualTrade(alibabaId, LocalDate.of(2025, 9, 30), TradeSide.SELL, "100", "109.5");
+
+        PortfolioResponse portfolio = readPortfolio().orElseThrow();
+
+        HoldingResponse nvidia = portfolio.holdings().get(0);
+        assertThat(nvidia.investorQuantities())
+                .extracting(InvestorQuantityResponse::investorId, investorQuantity -> investorQuantity.quantity().intValue())
+                .containsExactly(tuple(accountOwnerId, 15), tuple(aviId, 24));
+        assertThat(nvidia.trades()).extracting(TradeResponse::investorId).containsExactly(accountOwnerId, aviId);
+        assertThat(portfolio.closedPositions()).extracting(ClosedPositionResponse::investorId)
+                .containsOnly(accountOwnerId);
+        assertThat(portfolio.investors()).extracting(InvestorResponse::id).containsExactly(accountOwnerId, aviId);
+
+        InvestorResponse accountOwner = portfolio.investors().get(0);
+        assertThat(accountOwner.depositsMinusWithdrawals()).isNull();
+        assertThat(accountOwner.cash()).isEqualByComparingTo("12880");
+        assertThat(accountOwner.sharesValue()).isEqualByComparingTo("55680");
+        assertThat(accountOwner.totalValue()).isEqualByComparingTo("68560");
+        assertThat(accountOwner.sharesCost()).isEqualByComparingTo("47120");
+        assertThat(accountOwner.unrealizedPnl()).isEqualByComparingTo("8560");
+        assertThat(accountOwner.realizedPnlByCurrency()).containsOnlyKeys("HKD", "USD");
+        assertThat(accountOwner.realizedPnlByCurrency().get("USD")).isEqualByComparingTo("500");
+        assertThat(accountOwner.realizedPnlByCurrency().get("HKD")).isEqualByComparingTo("950");
+        assertThat(accountOwner.totalPnl()).isEqualByComparingTo("9060");     // the HKD is not added in
+        assertThat(accountOwner.warnings()).isEmpty();
+
+        InvestorResponse avi = portfolio.investors().get(1);
+        assertThat(avi.name()).isEqualTo("Avi");
+        assertThat(avi.accountOwner()).isFalse();
+        assertThat(avi.depositsMinusWithdrawals()).isEqualByComparingTo("30000");
+        assertThat(avi.cash()).isEqualByComparingTo("27120");
+        assertThat(avi.sharesValue()).isEqualByComparingTo("4320");
+        assertThat(avi.totalValue()).isEqualByComparingTo("31440");
+        assertThat(avi.sharesCost()).isEqualByComparingTo("2880");
+        assertThat(avi.unrealizedPnl()).isEqualByComparingTo("1440");
+        assertThat(avi.unrealizedPnlPercent()).isEqualByComparingTo("50");
+        assertThat(avi.realizedPnlByCurrency()).isEmpty();
+        assertThat(avi.totalPnl()).isEqualByComparingTo("1440");
+        assertThat(avi.cashMovements()).singleElement().satisfies(deposit -> {
+            assertThat(deposit.movementDate()).isEqualTo(LocalDate.of(2026, 1, 10));
+            assertThat(deposit.type()).isEqualTo(CashMovementType.DEPOSIT);
+            assertThat(deposit.amount()).isEqualByComparingTo("30000");
+            assertThat(deposit.note()).isNull();
+        });
+        assertThat(avi.warnings()).isEmpty();
     }
 
     @Test
@@ -288,15 +379,55 @@ class PortfolioReadServiceTest {
         insertTrade(holdingId, tradeDate, side, quantity, price, note, "0");
     }
 
+    /** The account owner's trade. */
     private void insertTrade(long holdingId, LocalDate tradeDate, TradeSide side, String quantity, String price,
                              String note, String commission) {
+        insertTrade(holdingId, accountOwnerId(), tradeDate, side, quantity, price, note, commission);
+    }
+
+    /** No note and no commission. */
+    private void insertTrade(long holdingId, long investorId, LocalDate tradeDate, TradeSide side, String quantity,
+                             String price) {
+        insertTrade(holdingId, investorId, tradeDate, side, quantity, price, null, "0");
+    }
+
+    private void insertTrade(long holdingId, long investorId, LocalDate tradeDate, TradeSide side, String quantity,
+                             String price, String note, String commission) {
         // Bound as BigDecimal, not String: the driver would otherwise send them as varchar, and
         // Postgres refuses to insert a varchar into a numeric column without an explicit cast.
-        jdbc.update("insert into trade (holding_id, trade_date, side, quantity, price, note, commission) "
-                        + "values (?, ?, ?, ?, ?, ?, ?)",
-                holdingId, tradeDate, side.name(), new BigDecimal(quantity), price == null ? null : new BigDecimal(price),
-                note, new BigDecimal(commission));
+        jdbc.update("insert into trade (holding_id, investor_id, trade_date, side, quantity, price, note, commission) "
+                        + "values (?, ?, ?, ?, ?, ?, ?, ?)",
+                holdingId, investorId, tradeDate, side.name(), new BigDecimal(quantity),
+                price == null ? null : new BigDecimal(price), note, new BigDecimal(commission));
         forgetWhatHibernateLoaded();   // the sync's session must not overwrite what was just inserted with SQL
+    }
+
+    /** The investor V4__investors.sql created. */
+    private long accountOwnerId() {
+        return jdbc.queryForObject("select id from investor where is_account_owner", Long.class);
+    }
+
+    private long insertInvestor(String name) {
+        return jdbc.queryForObject("insert into investor (name) values (?) returning id", Long.class, name);
+    }
+
+    private void insertDeposit(long investorId, LocalDate movementDate, String amount) {
+        jdbc.update("insert into investor_cash_movement (investor_id, movement_date, type, amount) values (?, ?, ?, ?)",
+                investorId, movementDate, "DEPOSIT", new BigDecimal(amount));
+    }
+
+    private long insertManualPosition(String symbol, String currency) {
+        return jdbc.queryForObject("insert into manual_position (symbol, currency) values (?, ?) returning id",
+                Long.class, symbol, currency);
+    }
+
+    /** The account owner's, with no commission. */
+    private void insertManualTrade(long manualPositionId, LocalDate tradeDate, TradeSide side, String quantity,
+                                   String price) {
+        jdbc.update("insert into trade (manual_position_id, investor_id, trade_date, side, quantity, price, commission) "
+                        + "values (?, ?, ?, ?, ?, ?, 0)",
+                manualPositionId, accountOwnerId(), tradeDate, side.name(), new BigDecimal(quantity),
+                new BigDecimal(price));
     }
 
     private Holding apple(double position, double averageCost) {
@@ -308,7 +439,10 @@ class PortfolioReadServiceTest {
     }
 
     private Holding holding(String symbol, int conId, double position, double averageCost) {
-        double marketPrice = 200.0;
+        return holdingAt(symbol, conId, position, averageCost, 200.0);
+    }
+
+    private Holding holdingAt(String symbol, int conId, double position, double averageCost, double marketPrice) {
         return new Holding(symbol, conId, "STK", "USD", position, averageCost, marketPrice,
                 position * marketPrice, position * (marketPrice - averageCost), 0.0, ACCOUNT);
     }

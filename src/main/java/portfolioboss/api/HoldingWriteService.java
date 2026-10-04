@@ -9,6 +9,7 @@ import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.TradeResponse;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
+import portfolioboss.db.InvestorEntity;
 import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.TradeEntity;
 import portfolioboss.db.TradeRepository;
@@ -29,10 +30,13 @@ public class HoldingWriteService {
 
     private final HoldingRepository holdingRepository;
     private final TradeRepository tradeRepository;
+    private final InvestorWriteService investorWriteService;
 
-    public HoldingWriteService(HoldingRepository holdingRepository, TradeRepository tradeRepository) {
+    public HoldingWriteService(HoldingRepository holdingRepository, TradeRepository tradeRepository,
+                               InvestorWriteService investorWriteService) {
         this.holdingRepository = holdingRepository;
         this.tradeRepository = tradeRepository;
+        this.investorWriteService = investorWriteService;
     }
 
     @Transactional
@@ -41,10 +45,12 @@ public class HoldingWriteService {
         holding.changeSector(Utils.trimmedOrNull(sectorRequest.sector()));   // Hibernate writes the change at commit
     }
 
+    /** The investor the request names, or the account owner when it names none. */
     @Transactional
     public TradeResponse addTrade(long holdingId, TradeRequest tradeRequest) {
         HoldingEntity holding = findHolding(holdingId);
-        TradeEntity newTrade = new TradeEntity(holding, tradeRequest.tradeDate(), tradeRequest.side(),
+        InvestorEntity investor = investorWriteService.investorOfTrade(tradeRequest.investorId());
+        TradeEntity newTrade = new TradeEntity(holding, investor, tradeRequest.tradeDate(), tradeRequest.side(),
                 tradeRequest.quantity(), tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()),
                 Utils.commissionOrDefault(tradeRequest.commission(), tradeRequest.quantity()));
         TradeEntity savedTrade = tradeRepository.save(newTrade);   // inserted right away, so it already has its id
@@ -53,7 +59,8 @@ public class HoldingWriteService {
 
     /**
      * Any trade, a holding's or a manual position's. Without a commission, the default is worked out again from the
-     * quantity now entered. The last sell of a manual position may be corrected, but not turned into a buy.
+     * quantity now entered; without an investor, the trade stays the one it had. The last sell of a manual position
+     * may be corrected, but not turned into a buy.
      */
     @Transactional
     public TradeResponse changeTrade(long tradeId, TradeRequest tradeRequest) {
@@ -64,6 +71,9 @@ public class HoldingWriteService {
         trade.changeDetails(tradeRequest.tradeDate(), tradeRequest.side(), tradeRequest.quantity(),
                 tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()),
                 Utils.commissionOrDefault(tradeRequest.commission(), tradeRequest.quantity()));
+        if (tradeRequest.investorId() != null) {
+            trade.changeInvestor(investorWriteService.investorOfTrade(tradeRequest.investorId()));
+        }
         return new TradeResponse(trade);
     }
 
