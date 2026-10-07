@@ -10,8 +10,8 @@ import java.util.TreeMap;
 
 /**
  * A holding or a manual position, with every trade entered for it — of every investor. What
- * {@link InvestorSummaryCalculator} works from, and where a holding's quantity is divided between the investors. Free of
- * JPA: built by
+ * {@link InvestorSummaryCalculator} works from, and where a holding — its quantity, value and cost — is divided between
+ * the investors. Free of JPA: built by
  * {@code HoldingEntity.toPositionTrades()} and {@code ManualPositionEntity.toPositionTrades()}.
  *
  * <p>Example: IB reports 39 NVDA, and the other investor's trades add up to 24. They hold 24, and the account owner the 15
@@ -71,6 +71,41 @@ public record PositionTrades(String symbol, String currency, Holding ibHolding, 
         return quantities;
     }
 
+    /**
+     * Every investor's part of the holding, by id — the same investors as {@link #quantitiesByInvestor}. Every other
+     * investor's shares are worth their quantity at IB's market price and cost what their own trades say; the account
+     * owner's are IB's value and cost less the others' (INVESTORS_TODO.md, decision 1), so the parts add up to IB's
+     * figures for the holding — and, over every holding, to the summary cards (decision 13).
+     */
+    public Map<Long, InvestorPart> partsByInvestor(long accountOwnerId) {
+        Map<Long, InvestorPart> parts = new TreeMap<>();
+        quantitiesByInvestor(accountOwnerId).forEach((investorId, quantity) -> {
+            InvestorPart part = investorId == accountOwnerId
+                    ? accountOwnerPart(accountOwnerId, quantity)
+                    : new InvestorPart(quantity, sharesValueOf(investorId), sharesCostOf(investorId));
+            parts.put(investorId, part);
+        });
+        return parts;
+    }
+
+    /**
+     * What the investor's shares are worth at IB's market price: 0 when they hold none; otherwise {@code null} for a
+     * manual position, which IB doesn't hold, or if IB reported no price.
+     */
+    public BigDecimal sharesValueOf(long investorId) {
+        BigDecimal quantity = quantityOf(investorId);
+        if (quantity.signum() == 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal marketPrice = ibMarketPrice();
+        return marketPrice == null ? null : quantity.multiply(marketPrice);
+    }
+
+    /** What the shares the investor still holds cost them, at average cost — {@link HoldingHistory#heldCost}. */
+    public BigDecimal sharesCostOf(long investorId) {
+        return historyOf(investorId).heldCost();
+    }
+
     /** What IB reports: 0 for a manual position, which IB doesn't hold; {@code null} if IB reported no number. */
     public BigDecimal ibQuantity() {
         return isHolding() ? Utils.decimalOrNull(ibHolding.position()) : BigDecimal.ZERO;
@@ -100,7 +135,22 @@ public record PositionTrades(String symbol, String currency, Holding ibHolding, 
         return Utils.decimalOrNull(ibHolding.costBasis());
     }
 
+    /** IB's value and cost of the holding, less every other investor's part of them. */
+    private InvestorPart accountOwnerPart(long accountOwnerId, BigDecimal quantity) {
+        BigDecimal sharesValue = ibMarketValue();
+        BigDecimal sharesCost = ibCostBasis();
+        for (long investorId : otherInvestorIds(accountOwnerId)) {
+            sharesValue = subtractOrNull(sharesValue, sharesValueOf(investorId));
+            sharesCost = subtractOrNull(sharesCost, sharesCostOf(investorId));
+        }
+        return new InvestorPart(quantity, sharesValue, sharesCost);
+    }
+
     private List<Long> otherInvestorIds(long accountOwnerId) {
         return investorIds().stream().filter(investorId -> investorId != accountOwnerId).toList();
+    }
+
+    private BigDecimal subtractOrNull(BigDecimal from, BigDecimal amount) {
+        return from == null || amount == null ? null : from.subtract(amount);
     }
 }

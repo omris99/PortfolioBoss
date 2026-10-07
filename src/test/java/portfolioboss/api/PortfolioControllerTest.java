@@ -113,8 +113,18 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].warnings").value(empty()))
                 .andExpect(jsonPath("$.holdings[0].investorQuantities[0].investorId").value(ACCOUNT_OWNER_ID))
                 .andExpect(jsonPath("$.holdings[0].investorQuantities[0].quantity").value(4))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[0].sharesValue").value(800))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[0].sharesCost").value(600))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[0].unrealizedPnl").value(200))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[0].unrealizedPnlPercent")
+                        .value(closeTo(33.333, 0.001)))
                 .andExpect(jsonPath("$.holdings[0].investorQuantities[1].investorId").value(OTHER_INVESTOR_ID))
-                .andExpect(jsonPath("$.holdings[0].investorQuantities[1].quantity").value(6));
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[1].quantity").value(6))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[1].sharesValue").value(1200))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[1].sharesCost").value(900))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[1].unrealizedPnl").value(300))
+                .andExpect(jsonPath("$.holdings[0].investorQuantities[1].unrealizedPnlPercent")
+                        .value(closeTo(33.333, 0.001)));
     }
 
     @Test
@@ -268,15 +278,17 @@ class PortfolioControllerTest {
 
     /**
      * Bought once, never sold — still OPEN, so holdingDays counts to a made-up snapshot date. 4 of the 10 are the
-     * account owner's, 6 the other investor's.
+     * account owner's, 6 the other investor's — bought at 150, now worth 200 each.
      */
     private HoldingResponse apple() {
         TradeResponse buy = new TradeResponse(1, LocalDate.of(2024, 3, 14), TradeSide.BUY,
                 new BigDecimal("10"), new BigDecimal("150.00"), "Initial position", new BigDecimal("5"),
                 ACCOUNT_OWNER_ID);
         List<InvestorQuantityResponse> investorQuantities = List.of(
-                new InvestorQuantityResponse(ACCOUNT_OWNER_ID, new BigDecimal("4")),
-                new InvestorQuantityResponse(OTHER_INVESTOR_ID, new BigDecimal("6")));
+                new InvestorQuantityResponse(ACCOUNT_OWNER_ID, new BigDecimal("4"), new BigDecimal("800"),
+                        new BigDecimal("600"), new BigDecimal("200"), new BigDecimal("33.33333333333333")),
+                new InvestorQuantityResponse(OTHER_INVESTOR_ID, new BigDecimal("6"), new BigDecimal("1200"),
+                        new BigDecimal("900"), new BigDecimal("300"), new BigDecimal("33.33333333333333")));
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
                 LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities);

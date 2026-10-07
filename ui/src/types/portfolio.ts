@@ -82,10 +82,20 @@ export interface NewManualPositionRequest extends ManualPositionRequest {
   investorId: number | null;
 }
 
-/** An investor's part of a holding's quantity: the other investors' trades, and the account owner the rest. */
+/**
+ * An investor's part of a holding: the other investors' trades, and the account owner the rest of IB's figures — so the
+ * parts always add up to the holding. In the holding's currency; a figure that needs a price nobody entered is `null`.
+ */
 export interface InvestorQuantity {
   investorId: number;
   quantity: number;
+  /** At IB's last price. */
+  sharesValue: number | null;
+  /** At average cost, with the buy commissions; for the account owner IB's cost less the others'. */
+  sharesCost: number | null;
+  unrealizedPnl: number | null;
+  /** Of `sharesCost`. */
+  unrealizedPnlPercent: number | null;
 }
 
 export interface Holding {
@@ -119,7 +129,7 @@ export interface Holding {
   trades: Trade[];
   /** Empty when the trades entered match IB; otherwise the one gap to fix first. */
   warnings: HoldingWarning[];
-  /** How `position` divides between the investors, by investor id — only those holding some of it. */
+  /** How `position`, its value and its cost divide between the investors — only those holding some of it. */
   investorQuantities: InvestorQuantity[];
 }
 

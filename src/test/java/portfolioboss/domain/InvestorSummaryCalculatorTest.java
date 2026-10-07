@@ -74,6 +74,33 @@ class InvestorSummaryCalculatorTest {
         assertThat(avi.sharesCost().add(accountOwner.sharesCost())).isEqualByComparingTo("50000");
     }
 
+    /**
+     * INVESTORS_TODO.md, decision 13: an investor's part of every holding, added up, is their card — with a commission and
+     * a partial sell, so that the average cost is not a round number.
+     */
+    @Test
+    void eachInvestorsPartsOfEveryHoldingAddUpToTheirCard() {
+        List<PositionTrades> holdings = List.of(
+                nvidia(35, buy(ACCOUNT_OWNER_ID, "15", "100"), trade(AVI_ID, TradeSide.BUY, "24", "120", "5"),
+                        sell(AVI_ID, "4", "180")),
+                microsoft());
+        Map<Long, InvestorSummary> summaries = summariesOf(holdings, List.of(deposit(AVI_ID, "30000")));
+
+        for (long investorId : List.of(ACCOUNT_OWNER_ID, AVI_ID)) {
+            BigDecimal sharesValue = BigDecimal.ZERO;
+            BigDecimal sharesCost = BigDecimal.ZERO;
+            for (PositionTrades holding : holdings) {
+                InvestorPart part = holding.partsByInvestor(ACCOUNT_OWNER_ID).get(investorId);
+                if (part != null) {   // Avi holds no MSFT
+                    sharesValue = sharesValue.add(part.sharesValue());
+                    sharesCost = sharesCost.add(part.sharesCost());
+                }
+            }
+            assertThat(sharesValue).isEqualByComparingTo(summaries.get(investorId).sharesValue());
+            assertThat(sharesCost).isEqualByComparingTo(summaries.get(investorId).sharesCost());
+        }
+    }
+
     @Test
     void aWithdrawalTakesMoneyOutOfTheirCash() {
         Map<Long, InvestorSummary> summaries = summariesOf(

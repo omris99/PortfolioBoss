@@ -119,7 +119,13 @@ function PositionsContent({
   if (visibleHoldings.length === 0) {
     return <EmptyBox message="No open positions reported." />;
   }
-  return <PositionsTable holdings={visibleHoldings} onDataChanged={onDataChanged} />;
+  return (
+    <PositionsTable
+      holdings={visibleHoldings}
+      closedPositions={snapshot.closedPositions}
+      onDataChanged={onDataChanged}
+    />
+  );
 }
 
 function App() {

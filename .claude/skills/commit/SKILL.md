@@ -42,7 +42,7 @@ trades — and several investors sharing the account, with their deposits):*
 | `report` | the console snapshot report and its formatting |
 | `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
-| `domain` | `portfolioboss.domain` (`HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`, `PositionTrades`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `InvestorWarning`, `InvestorWarningType`) — pure computation over trades (derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit), no Spring |
+| `domain` | `portfolioboss.domain` (`HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `InvestorWarning`, `InvestorWarningType`) — pure computation over trades (derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit), no Spring |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 
@@ -52,6 +52,7 @@ Tests (`src/test/`) take the scope of the code they cover.
 
 | Scope | Arrives |
 |---|---|
+| `ai` | [AI_ANALYSIS_TODO.md](../../../AI_ANALYSIS_TODO.md) session 2 — `portfolioboss.ai` (Tavily search, Claude extraction) and the analysis endpoint; momentum takes `ib` / `db` / `domain` |
 | `thesis` | M1 — the written thesis per holding (the actual product) |
 | `analytics` | M3 — concentration, correlated clusters, TWR, SPY benchmark |
 | `averaging` | M3 — the averaging-down calculator and its verdict ladder |

@@ -13,6 +13,7 @@ import type { ClosedPosition } from '../types/portfolio';
 import { ExpandRowButton } from './ExpandRowButton';
 import { HoldingPeriod } from './HoldingPeriod';
 import { hasSeveralInvestors, investorNameOf, useInvestors } from './InvestorsContext';
+import { InvestorSplitTable } from './InvestorSplitTable';
 import { ManualPositionPanel } from './ManualPositionPanel';
 import { TradeList } from './TradesPanel';
 
@@ -269,13 +270,23 @@ function HoldingTradesOfStretch({ closedPosition }: { closedPosition: ClosedPosi
   );
 }
 
-/** What opens under a row: a manual position, to correct; a holding's trades, to read. */
+/** Every closed position of the same manual position, of every investor: what its "By investor" table splits. */
+function closedPositionsOfManualPosition(manualPositionId: number, closedPositions: ClosedPosition[]): ClosedPosition[] {
+  return closedPositions.filter((closedPosition) => closedPosition.manualPositionId === manualPositionId);
+}
+
+/**
+ * What opens under a row: a manual position, to correct, with its realized P&L split by investor when it is shared; a
+ * holding's trades, to read. `closedPositions` are all of the table's.
+ */
 function ClosedPositionDetailsRow({
   closedPosition,
+  closedPositions,
   columnCount,
   onDataChanged,
 }: {
   closedPosition: ClosedPosition;
+  closedPositions: ClosedPosition[];
   columnCount: number;
   onDataChanged: () => Promise<void>;
 }) {
@@ -286,11 +297,17 @@ function ClosedPositionDetailsRow({
         {manualPositionId === null ? (
           <HoldingTradesOfStretch closedPosition={closedPosition} />
         ) : (
-          <ManualPositionPanel
-            manualPositionId={manualPositionId}
-            closedPosition={closedPosition}
-            onDataChanged={onDataChanged}
-          />
+          <div className="flex flex-col gap-3">
+            <InvestorSplitTable
+              position={{ kind: 'manualPosition', currency: closedPosition.currency }}
+              closedPositions={closedPositionsOfManualPosition(manualPositionId, closedPositions)}
+            />
+            <ManualPositionPanel
+              manualPositionId={manualPositionId}
+              closedPosition={closedPosition}
+              onDataChanged={onDataChanged}
+            />
+          </div>
         )}
       </td>
     </tr>
@@ -350,6 +367,7 @@ export function ClosedPositionsTable({
                 {isExpanded && (
                   <ClosedPositionDetailsRow
                     closedPosition={closedPosition}
+                    closedPositions={closedPositions}
                     columnCount={columnCountWithChevron}
                     onDataChanged={onDataChanged}
                   />
@@ -377,8 +395,43 @@ function realizedPnlByCurrency(closedPositions: ClosedPosition[]): Map<string, n
 }
 
 /**
+ * "Me +18,000.00 USD +950.00 HKD · Avi +1,180.00 USD": the same totals, investor by investor — what their cards say —
+ * once there is more than one. An investor with no realized P&L yet is left out.
+ */
+function RealizedPnlByInvestor({ closedPositions }: { closedPositions: ClosedPosition[] }) {
+  const investors = useInvestors();
+  if (!hasSeveralInvestors(investors)) return null;
+
+  const investorTotals = investors
+    .map((investor) => ({
+      investor,
+      totalsByCurrency: [
+        ...realizedPnlByCurrency(closedPositions.filter((closedPosition) => closedPosition.investorId === investor.id)),
+      ],
+    }))
+    .filter(({ totalsByCurrency }) => totalsByCurrency.length > 0);
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+      {investorTotals.map(({ investor, totalsByCurrency }, index) => (
+        <span key={investor.id} className="inline-flex items-center gap-1.5">
+          {index > 0 && <span className="text-slate-600">·</span>}
+          <span className="text-slate-500">{investor.name}</span>
+          {totalsByCurrency.map(([currency, total]) => (
+            <span key={currency} className={`font-mono ${profitLossColorClass(total)}`}>
+              {formatSignedMoney(total)} {currency}
+            </span>
+          ))}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
  * "Realized P&L +1,234.00 USD (1 without prices) (1 to check)": the total of every closed position, per currency, and
- * how many it leaves out — for a missing price, or for a warning shown under the position's row.
+ * how many it leaves out — for a missing price, or for a warning shown under the position's row. With several
+ * investors, each one's total under it.
  */
 export function RealizedPnlTotals({ closedPositions }: { closedPositions: ClosedPosition[] }) {
   const totalsByCurrency = [...realizedPnlByCurrency(closedPositions)];
@@ -388,19 +441,22 @@ export function RealizedPnlTotals({ closedPositions }: { closedPositions: Closed
   ).length;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      <span className="text-slate-500">Realized P&amp;L</span>
-      {totalsByCurrency.map(([currency, total]) => (
-        <span key={currency} className={`font-mono font-semibold ${profitLossColorClass(total)}`}>
-          {formatSignedMoney(total)} {currency}
-        </span>
-      ))}
-      {withoutPricesCount > 0 && (
-        <span className="text-slate-500" title={MISSING_PRICE_HINT}>
-          ({withoutPricesCount} without prices)
-        </span>
-      )}
-      {withWarningCount > 0 && <span className="text-orange-500">({withWarningCount} to check)</span>}
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <span className="text-slate-500">Realized P&amp;L</span>
+        {totalsByCurrency.map(([currency, total]) => (
+          <span key={currency} className={`font-mono font-semibold ${profitLossColorClass(total)}`}>
+            {formatSignedMoney(total)} {currency}
+          </span>
+        ))}
+        {withoutPricesCount > 0 && (
+          <span className="text-slate-500" title={MISSING_PRICE_HINT}>
+            ({withoutPricesCount} without prices)
+          </span>
+        )}
+        {withWarningCount > 0 && <span className="text-orange-500">({withWarningCount} to check)</span>}
+      </div>
+      <RealizedPnlByInvestor closedPositions={closedPositions} />
     </div>
   );
 }

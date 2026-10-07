@@ -71,14 +71,14 @@ public record InvestorSummaryCalculator(long accountOwnerId, List<Long> investor
         return cash;
     }
 
-    /** Their shares in every holding in USD, at IB's market price. A manual position has none: IB never held it. */
+    /**
+     * Their shares in every holding in USD, at IB's market price — the same figure as their part of each holding
+     * ({@link PositionTrades#partsByInvestor}). A manual position has none: IB never held it.
+     */
     private BigDecimal sharesValueOf(long investorId) {
         BigDecimal sharesValue = BigDecimal.ZERO;
         for (PositionTrades holding : accountCurrencyHoldings()) {
-            BigDecimal quantity = holding.quantityOf(investorId);
-            if (quantity.signum() != 0) {
-                sharesValue = sumOrNull(sharesValue, multiplyOrNull(quantity, holding.ibMarketPrice()));
-            }
+            sharesValue = sumOrNull(sharesValue, holding.sharesValueOf(investorId));
         }
         return sharesValue;
     }
@@ -87,7 +87,7 @@ public record InvestorSummaryCalculator(long accountOwnerId, List<Long> investor
     private BigDecimal sharesCostOf(long investorId) {
         BigDecimal sharesCost = BigDecimal.ZERO;
         for (PositionTrades holding : accountCurrencyHoldings()) {
-            sharesCost = sumOrNull(sharesCost, holding.historyOf(investorId).heldCost());
+            sharesCost = sumOrNull(sharesCost, holding.sharesCostOf(investorId));
         }
         return sharesCost;
     }
@@ -265,9 +265,5 @@ public record InvestorSummaryCalculator(long accountOwnerId, List<Long> investor
 
     private BigDecimal subtractOrNull(BigDecimal from, BigDecimal amount) {
         return from == null || amount == null ? null : from.subtract(amount);
-    }
-
-    private BigDecimal multiplyOrNull(BigDecimal first, BigDecimal second) {
-        return first == null || second == null ? null : first.multiply(second);
     }
 }

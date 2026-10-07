@@ -19,7 +19,8 @@ import java.util.List;
  * `warnings` when the trades entered began to be checked against IB, and `investorQuantities` when the account
  * got several investors. Fields are only ever added, never renamed or removed.
  *
- * @param investorQuantities how {@code position} divides between the investors — only those holding some of it
+ * @param investorQuantities how {@code position} — and its value, cost and unrealized P&amp;L — divides between the
+ *                           investors; only those holding some of it
  */
 public record HoldingResponse(
         String symbol,
@@ -81,9 +82,8 @@ public record HoldingResponse(
     /** Static: it runs before the record exists, as an argument of the constructor. */
     private static List<InvestorQuantityResponse> investorQuantitiesOf(HoldingEntity holdingEntity,
                                                                        long accountOwnerId) {
-        return holdingEntity.toPositionTrades().quantitiesByInvestor(accountOwnerId).entrySet().stream()
-                .map(investorQuantity -> new InvestorQuantityResponse(investorQuantity.getKey(),
-                        investorQuantity.getValue()))
+        return holdingEntity.toPositionTrades().partsByInvestor(accountOwnerId).entrySet().stream()
+                .map(investorPart -> new InvestorQuantityResponse(investorPart.getKey(), investorPart.getValue()))
                 .toList();
     }
 }

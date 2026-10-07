@@ -26,8 +26,13 @@ ideas for later. [CLOSED_POSITIONS_TODO.md](CLOSED_POSITIONS_TODO.md) came next:
 P&L — sessions 1 (the list derived from the trades already entered), 2 (commission, manual closed positions) and 3
 (their UI), 4 (average cost, partial sells, manual positions with trades of their own) and 5 (its UI) are done.
 [INVESTORS_TODO.md](INVESTORS_TODO.md), several investors sharing one IB account (each one's cash and profit), followed:
-its sessions 1 (schema, computation, read API), 2 (write endpoints for investors, deposits and a trade's investor) and
-3 (UI) are done; its "out of scope" list holds the ideas for later.
+its sessions 1 (schema, computation, read API), 2 (write endpoints for investors, deposits and a trade's investor),
+3 (UI) and 4 (each investor's part of a shared position's profit) are done; its "out of scope" list holds the ideas for
+later. [AI_ANALYSIS_TODO.md](AI_ANALYSIS_TODO.md) is next: for each holding, momentum from IB's daily closes, and an
+analysis of analyst ratings and news — the server searches Tavily, Claude (Sonnet 5.5, no tools) only extracts JSON, and
+the code picks the consensus source and a colored signal — run only from a button. Its session 0 (the experiment that
+settled the model and the searches) is done; sessions 1 (momentum), 2 (the analysis backend) and 3 (UI) are not started.
+Its API keys go in the git-ignored `config/local.env`, which Claude never reads or prints.
 
 ## Hard invariant: read-only
 
@@ -247,7 +252,7 @@ Things that are easy to break:
   scratch copy too, pointed at with `SPRING_DATASOURCE_URL`: there is no way to delete an investor.
 
 `portfolioboss.domain` holds `HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`,
-and for the investors `PositionTrades`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`,
+and for the investors `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`,
 `InvestorWarning` and `InvestorWarningType` — pure computation, no Spring and no database, so it is unit tested
 directly. A holding's
 `firstBuyDate`, `lastSellDate`, `holdingDays` and closed positions are derived from its `trade` rows, never stored:
@@ -277,7 +282,11 @@ warnings in `HoldingResponse`. `toPositionTrades()`, on `HoldingEntity` and `Man
 `PositionTrades` (symbol, currency, the IB figures or `null` for a manual position, every trade) that splits them by
 investor: `historyOf(investorId)` runs `HoldingHistory.of` on one investor's trades only, so the **closed positions are
 per investor** (one investor can sell out of a holding the other still holds), and `quantitiesByInvestor` gives each
-other investor the sum of their trades and the account owner IB's position minus those.
+other investor the sum of their trades and the account owner IB's position minus those. `partsByInvestor` turns that
+into an `InvestorPart` per investor (`quantity`, `sharesValue`, `sharesCost`, derived `unrealizedPnl` and its percent),
+worked out the same way as the cards — another investor's value is their quantity × IB's market price and their cost
+`heldCost`, the owner's are IB's value and cost minus the others' — so the parts add up to IB's row for the holding and,
+over every holding, to each investor's card: `InvestorSummaryCalculator` sums the same `sharesValueOf` / `sharesCostOf`.
 
 The investors (INVESTORS_TODO.md): the **account owner is the residual** — the owner's cash, total value and shares cost
 are IB's minus the other investors', so the cards always add up to exactly what IB reports, missing trades or not.
@@ -324,12 +333,14 @@ dates, `holdingDays`, `quantity` — the shares **sold** —, the average prices
 `commissions`, `source` (`ClosedPositionSource`: `TRADES` for a holding, `MANUAL`), `manualPositionId`, `note` (the
 manual position's), `remainingQuantity`, `trades` — the period's own `TradeResponse`s, picked by `tradeIds` — and
 `investorId`) — from open holdings as well as closed ones, since a holding still open today may have been sold in full
-or in part before. The UI sums the realized P&L per currency. `PortfolioResponse.investors` (added last) is one
+or in part before. The UI sums the realized P&L per currency — in all, per investor, and per position for its "By
+investor" table (no endpoint does it). `PortfolioResponse.investors` (added last) is one
 `InvestorResponse` per investor, the account owner first: `id`, `name`, `accountOwner`, the `InvestorSummary` figures
 and its derived ones, `realizedPnlByCurrency` (a `{"HKD": 950, "USD": 500}` map), `cashMovements`
 (`CashMovementResponse`s) and `warnings` (`domain.InvestorWarning`, as it is). `HoldingResponse.investorQuantities`
-(`InvestorQuantityResponse(investorId, quantity)`, only investors holding some of it) and `TradeResponse.investorId`
-were appended for the split. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
+(`InvestorQuantityResponse(investorId, quantity, sharesValue, sharesCost, unrealizedPnl, unrealizedPnlPercent)` — one
+`InvestorPart` each, only investors holding some of it; the four figures were appended in INVESTORS_TODO.md session 4)
+and `TradeResponse.investorId` were appended for the split. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
 in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.

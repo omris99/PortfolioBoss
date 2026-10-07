@@ -155,6 +155,17 @@ class PortfolioReadServiceTest {
         assertThat(nvidia.investorQuantities())
                 .extracting(InvestorQuantityResponse::investorId, investorQuantity -> investorQuantity.quantity().intValue())
                 .containsExactly(tuple(accountOwnerId, 15), tuple(aviId, 24));
+        // the account owner's part is IB's 7,020 / 4,680 less Avi's 4,320 / 2,880
+        InvestorQuantityResponse accountOwnerPart = nvidia.investorQuantities().get(0);
+        assertThat(accountOwnerPart.sharesValue()).isEqualByComparingTo("2700");
+        assertThat(accountOwnerPart.sharesCost()).isEqualByComparingTo("1800");
+        assertThat(accountOwnerPart.unrealizedPnl()).isEqualByComparingTo("900");
+        assertThat(accountOwnerPart.unrealizedPnlPercent()).isEqualByComparingTo("50");
+        InvestorQuantityResponse aviPart = nvidia.investorQuantities().get(1);
+        assertThat(aviPart.sharesValue()).isEqualByComparingTo("4320");
+        assertThat(aviPart.sharesCost()).isEqualByComparingTo("2880");
+        assertThat(aviPart.unrealizedPnl()).isEqualByComparingTo("1440");
+        assertThat(aviPart.unrealizedPnlPercent()).isEqualByComparingTo("50");
         assertThat(nvidia.trades()).extracting(TradeResponse::investorId).containsExactly(accountOwnerId, aviId);
         assertThat(portfolio.closedPositions()).extracting(ClosedPositionResponse::investorId)
                 .containsOnly(accountOwnerId);

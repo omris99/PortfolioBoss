@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.13.0";
+    public static final String VERSION = "0.14.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,16 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.14.0: [Each investor's share of a shared position]
+ * InvestorPart added (domain): one investor's part of one holding — quantity, value at IB's price, cost at average cost — with its unrealized P&L and percent; null when a price is unknown.
+ * PositionTrades.partsByInvestor: the account owner's part is IB's value and cost minus the others', so the parts add up to IB's row for the holding and, over every holding, to each card.
+ * GET /api/portfolio: each entry of a holding's investorQuantities gains sharesValue, sharesCost, unrealizedPnl and unrealizedPnlPercent.
+ * InvestorSplitTable added (UI): "By investor" in a holding's expanded row — each investor's Qty, Cost, Value, unrealized and realized P&L, and a Total row with IB's own figures.
+ * A manual position's expanded row shows the same table with realized P&L only; both appear only once an investor other than the owner has something in the position.
+ * An investor whose closed position there has no realized P&L (a missing price, an over-sell) shows "—" in the table, never a partial sum.
+ * RealizedPnlTotals: with more than one investor, a line under the totals with each one's realized P&L per currency ("Me +18,000.00 USD +950.00 HKD · Avi +1,180.00 USD").
+ * Tests: PositionTradesTest (each investor's value, cost and profit; the owner as IB minus the others; a missing price), InvestorSummaryCalculatorTest (the parts over every holding = the card).
+ *
  * VERSION 0.13.0: [Several investors in one account]
  * V4 migration: investor (one account owner, "Me", created by the migration), investor_cash_movement for deposits and withdrawals, and trade.investor_id; every trade entered before is the owner's.
  * InvestorSummaryCalculator added (domain): each investor's cash, shares value, total value, cost and P&L; the owner gets IB's figures minus the others', so the cards always add up to IB.

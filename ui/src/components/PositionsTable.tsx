@@ -8,11 +8,12 @@ import {
   formatSignedPercent,
   profitLossColorClass,
 } from '../lib/format';
-import type { Holding } from '../types/portfolio';
+import type { ClosedPosition, Holding } from '../types/portfolio';
 import { ExpandRowButton } from './ExpandRowButton';
 import { HoldingPeriod } from './HoldingPeriod';
 import { HoldingWarningIcon } from './HoldingWarnings';
 import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
+import { InvestorSplitTable } from './InvestorSplitTable';
 import { SECTOR_OPTIONS_LIST_ID, SectorCell } from './SectorCell';
 import { TradesPanel } from './TradesPanel';
 
@@ -307,12 +308,22 @@ function distinctSectorsOf(holdings: Holding[]): string[] {
   return [...new Set(sectors)].sort(compareText);
 }
 
-/** `onDataChanged` reloads the portfolio; the sector cells and the trades panel call it after every save. */
+/** A holding's own closed positions, of every investor — what its "By investor" table splits. */
+function closedPositionsOf(holding: Holding, closedPositions: ClosedPosition[]): ClosedPosition[] {
+  return closedPositions.filter((closedPosition) => closedPosition.holdingId === holding.id);
+}
+
+/**
+ * `onDataChanged` reloads the portfolio; the sector cells and the trades panel call it after every save.
+ * `closedPositions` are every closed position of the portfolio: each holding's open row shows its own, split by investor.
+ */
 export function PositionsTable({
   holdings,
+  closedPositions,
   onDataChanged,
 }: {
   holdings: Holding[];
+  closedPositions: ClosedPosition[];
   onDataChanged: () => Promise<void>;
 }) {
   // Largest position first, like the console report.
@@ -368,7 +379,13 @@ export function PositionsTable({
                 {isExpanded && (
                   <tr className="border-b border-slate-800/60">
                     <td colSpan={COLUMNS.length + 1} className="px-3 pb-3">
-                      <TradesPanel owner={{ kind: 'holding', holding }} onDataChanged={onDataChanged} />
+                      <div className="flex flex-col gap-3">
+                        <InvestorSplitTable
+                          position={{ kind: 'holding', holding }}
+                          closedPositions={closedPositionsOf(holding, closedPositions)}
+                        />
+                        <TradesPanel owner={{ kind: 'holding', holding }} onDataChanged={onDataChanged} />
+                      </div>
                     </td>
                   </tr>
                 )}
