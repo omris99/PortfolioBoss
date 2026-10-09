@@ -1,7 +1,7 @@
 package portfolioboss.api.response;
 
-import portfolioboss.calculation.TradeSide;
 import portfolioboss.db.TradeEntity;
+import portfolioboss.model.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

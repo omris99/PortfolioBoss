@@ -5,6 +5,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import portfolioboss.ai.AnalystAction;
+import portfolioboss.ai.AnalystActionType;
+import portfolioboss.ai.AnalystRating;
+import portfolioboss.ai.AnalystTrend;
+import portfolioboss.ai.Headline;
+import portfolioboss.ai.RatingCounts;
+import portfolioboss.ai.Sentiment;
+import portfolioboss.ai.SourceConsensus;
 import portfolioboss.api.response.CashMovementResponse;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
@@ -13,15 +21,18 @@ import portfolioboss.api.response.InvestorQuantityResponse;
 import portfolioboss.api.response.InvestorResponse;
 import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PortfolioResponse;
+import portfolioboss.api.response.StockAnalysisResponse;
 import portfolioboss.api.response.TradeResponse;
-import portfolioboss.calculation.CashMovementType;
-import portfolioboss.calculation.HoldingStatus;
-import portfolioboss.calculation.HoldingWarning;
-import portfolioboss.calculation.HoldingWarningType;
-import portfolioboss.calculation.InvestorWarning;
-import portfolioboss.calculation.InvestorWarningType;
-import portfolioboss.calculation.MomentumLabel;
-import portfolioboss.calculation.TradeSide;
+import portfolioboss.model.AnalystConsensus;
+import portfolioboss.model.CashMovementType;
+import portfolioboss.model.HoldingSignal;
+import portfolioboss.model.HoldingStatus;
+import portfolioboss.model.HoldingWarning;
+import portfolioboss.model.HoldingWarningType;
+import portfolioboss.model.InvestorWarning;
+import portfolioboss.model.InvestorWarningType;
+import portfolioboss.model.MomentumLabel;
+import portfolioboss.model.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -60,6 +71,7 @@ class PortfolioControllerTest {
     private static final String NEGATIVE_CASH_MESSAGE = "The cash comes to -120.00 USD: a deposit may be missing.";
     private static final long ACCOUNT_OWNER_ID = 1;
     private static final long OTHER_INVESTOR_ID = 2;
+    private static final String FINANCHILL = "https://financhill.com/aapl";
 
     @Autowired
     private MockMvc mockMvc;
@@ -212,7 +224,58 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].firstBuyDate").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].holdingDays").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].trades").value(empty()))
-                .andExpect(jsonPath("$.holdings[0].momentum").value(nullValue()));
+                .andExpect(jsonPath("$.holdings[0].momentum").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].analysis").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].signal").value(nullValue()));
+    }
+
+    /**
+     * The analysis and the dot (AI_ANALYSIS_TODO.md, 2.4). The records of Claude's answer and the chosen consensus go
+     * into the JSON as they are.
+     */
+    @Test
+    void servesTheAnalysisWithTheFieldNamesTheUiExpects() throws Exception {
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(portfolioWith(apple())));
+
+        mockMvc.perform(get("/api/portfolio"))
+                .andExpect(jsonPath("$.holdings[0].signal").value("YELLOW"))
+                .andExpect(jsonPath("$.holdings[0].analysis.analyzedAt").value("2026-10-09T07:30:00Z"))
+                .andExpect(jsonPath("$.holdings[0].analysis.model").value("claude-sonnet-5-5"))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensus.rating").value("BUY"))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensus.analystCount").value(48))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensus.averageTarget").value(328.22))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensus.targetUpsidePercent").value(64.11))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensus.sourceUrl").value(FINANCHILL))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensus.targetLow").value(328.09))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensus.targetHigh").value(340.02))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensus.sourceCount").value(4))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].sourceUrl").value(FINANCHILL))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].publishedDate").value("2026-10-05"))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].analystCount").value(48))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].ratingCounts.strongBuy").value(0))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].ratingCounts.buy").value(30))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].ratingCounts.hold").value(16))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].ratingCounts.sell").value(2))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].ratingCounts.strongSell").value(0))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].averageTarget").value(328.22))
+                .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].ratingLabel").value("BUY"))
+                .andExpect(jsonPath("$.holdings[0].analysis.analystTrend").value("STABLE"))
+                .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].date").value("2026-10-02"))
+                .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].firm").value("Some Firm"))
+                .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].action").value("TARGET_LOWERED"))
+                .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].fromRating").value("Overweight"))
+                .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].toRating").value("Overweight"))
+                .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].previousPriceTarget").value(360.0))
+                .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].priceTarget").value(355.0))
+                .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].url")
+                        .value("https://example.com/action"))
+                .andExpect(jsonPath("$.holdings[0].analysis.headlines[0].date").value("2026-10-07"))
+                .andExpect(jsonPath("$.holdings[0].analysis.headlines[0].title").value("Apple unveils a new product"))
+                .andExpect(jsonPath("$.holdings[0].analysis.headlines[0].source").value("Reuters"))
+                .andExpect(jsonPath("$.holdings[0].analysis.headlines[0].url").value("https://example.com/news"))
+                .andExpect(jsonPath("$.holdings[0].analysis.sentiment").value("NEUTRAL"))
+                .andExpect(jsonPath("$.holdings[0].analysis.sentimentReason")
+                        .value("Product news without surprises."));
     }
 
     @Test
@@ -313,7 +376,23 @@ class PortfolioControllerTest {
                 4.2, 2.1, true, true, true, false, true, 12.5, 4, MomentumLabel.STRONG);
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
-                LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities, momentum);
+                LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities, momentum,
+                appleAnalysis(), HoldingSignal.YELLOW);
+    }
+
+    /** Made-up figures, one of each part, to pin the shape: one source, one analyst action, one headline. */
+    private StockAnalysisResponse appleAnalysis() {
+        SourceConsensus financhill = new SourceConsensus(FINANCHILL, LocalDate.of(2026, 10, 5), 48,
+                new RatingCounts(0, 30, 16, 2, 0), 328.22, AnalystRating.BUY);
+        AnalystAction targetLowered = new AnalystAction(LocalDate.of(2026, 10, 2), "Some Firm",
+                AnalystActionType.TARGET_LOWERED, "Overweight", "Overweight", 360.0, 355.0,
+                "https://example.com/action");
+        Headline headline = new Headline(LocalDate.of(2026, 10, 7), "Apple unveils a new product", "Reuters",
+                "https://example.com/news");
+        return new StockAnalysisResponse(Instant.parse("2026-10-09T07:30:00Z"), "claude-sonnet-5-5",
+                new AnalystConsensus(AnalystRating.BUY, 48, 328.22, 64.11, FINANCHILL, 328.09, 340.02, 4),
+                List.of(financhill), AnalystTrend.STABLE, List.of(targetLowered), List.of(headline), Sentiment.NEUTRAL,
+                "Product news without surprises.");
     }
 
     /** IB sent a position but no cost or price figures for it, no sector and no trades entered. */
@@ -321,7 +400,7 @@ class PortfolioControllerTest {
         HoldingWarning noTrades = new HoldingWarning(HoldingWarningType.NO_TRADES_LOGGED, NO_TRADES_MESSAGE);
         return new HoldingResponse("MSFT", "STK", "USD", 5.0, null, null, null, null, 0.0, ACCOUNT,
                 null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of(), List.of(noTrades),
-                List.of(), null);
+                List.of(), null, null, null);
     }
 
     /** The account owner of INVESTORS_TODO.md's example, with a realized P&amp;L in two currencies. */

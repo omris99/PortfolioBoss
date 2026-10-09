@@ -1,6 +1,10 @@
 package portfolioboss.calculation;
 
 import org.junit.jupiter.api.Test;
+import portfolioboss.model.HoldingStatus;
+import portfolioboss.model.HoldingWarning;
+import portfolioboss.model.HoldingWarningType;
+import portfolioboss.model.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

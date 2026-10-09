@@ -5,9 +5,6 @@ import com.ib.client.Contract;
 import com.ib.client.Decimal;
 import com.ib.client.DefaultEWrapper;
 import com.ib.client.EClientSocket;
-import portfolioboss.calculation.DailyClose;
-import portfolioboss.calculation.Holding;
-import portfolioboss.calculation.PortfolioSnapshot;
 
 import java.time.Instant;
 import java.time.LocalDate;

@@ -1,7 +1,7 @@
 package portfolioboss.api.response;
 
 import portfolioboss.calculation.Momentum;
-import portfolioboss.calculation.MomentumLabel;
+import portfolioboss.model.MomentumLabel;
 
 import java.time.LocalDate;
 

@@ -1,4 +1,4 @@
-package portfolioboss.calculation;
+package portfolioboss.model;
 
 /**
  * What a {@link HoldingWarning} is about. The names reach the JSON as they are ({@code ui/src/types/portfolio.ts}

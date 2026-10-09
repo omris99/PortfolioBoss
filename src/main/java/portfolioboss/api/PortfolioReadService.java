@@ -2,21 +2,22 @@ package portfolioboss.api;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
 import portfolioboss.api.response.InvestorResponse;
 import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PortfolioResponse;
+import portfolioboss.api.response.StockAnalysisResponse;
 import portfolioboss.api.response.TradeResponse;
-import portfolioboss.calculation.Benchmark;
-import portfolioboss.calculation.DailyClose;
-import portfolioboss.calculation.Holding;
+import portfolioboss.calculation.ConsensusCalculator;
 import portfolioboss.calculation.HoldingHistory;
 import portfolioboss.calculation.InvestorSummary;
 import portfolioboss.calculation.InvestorSummaryCalculator;
 import portfolioboss.calculation.Momentum;
 import portfolioboss.calculation.PositionTrades;
+import portfolioboss.calculation.SignalCalculator;
 import portfolioboss.db.AccountStateEntity;
 import portfolioboss.db.AccountStateRepository;
 import portfolioboss.db.DailyCloseEntity;
@@ -27,6 +28,14 @@ import portfolioboss.db.InvestorEntity;
 import portfolioboss.db.InvestorRepository;
 import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.ManualPositionRepository;
+import portfolioboss.db.StockAnalysisEntity;
+import portfolioboss.db.StockAnalysisRepository;
+import portfolioboss.ib.Benchmark;
+import portfolioboss.ib.DailyClose;
+import portfolioboss.ib.Holding;
+import portfolioboss.model.AnalystConsensus;
+import portfolioboss.model.HoldingSignal;
+import portfolioboss.model.MomentumLabel;
 import portfolioboss.utils.Utils;
 
 import java.time.LocalDate;
@@ -41,7 +50,7 @@ import java.util.stream.Stream;
 
 /**
  * Reads the portfolio the last sync stored and turns it into what the API serves: the holdings with what is derived
- * from their trades and closes, every investor's closed positions, and the investors' cards. The response records only
+ * from their trades, closes and latest analysis, every investor's closed positions, and the investors' cards. The response records only
  * hold the result — the shape of the JSON —; the work of putting it together is here. The API always reads from the
  * database, never from TWS: {@code PortfolioSyncService} is the only thing that writes to it.
  */
@@ -53,15 +62,18 @@ public class PortfolioReadService {
     private final ManualPositionRepository manualPositionRepository;
     private final InvestorRepository investorRepository;
     private final DailyCloseRepository dailyCloseRepository;
+    private final StockAnalysisRepository stockAnalysisRepository;
 
     public PortfolioReadService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository,
                                 ManualPositionRepository manualPositionRepository,
-                                InvestorRepository investorRepository, DailyCloseRepository dailyCloseRepository) {
+                                InvestorRepository investorRepository, DailyCloseRepository dailyCloseRepository,
+                                StockAnalysisRepository stockAnalysisRepository) {
         this.holdingRepository = holdingRepository;
         this.accountStateRepository = accountStateRepository;
         this.manualPositionRepository = manualPositionRepository;
         this.investorRepository = investorRepository;
         this.dailyCloseRepository = dailyCloseRepository;
+        this.stockAnalysisRepository = stockAnalysisRepository;
     }
 
     /**
@@ -79,6 +91,7 @@ public class PortfolioReadService {
         List<ManualPositionEntity> manualPositions = manualPositionRepository.findAllByOrderById();
         List<InvestorEntity> investors = investorRepository.findAllByOrderById();
         Map<Integer, List<DailyClose>> dailyClosesByConId = dailyClosesOf(storedHoldings);
+        Map<Long, StockAnalysisEntity> latestAnalysisByHoldingId = latestAnalysisByHoldingId();
         // How far an OPEN holding's day count runs (see HoldingHistory) — the last sync, in the local
         // calendar day, not the instant the API happens to be called.
         LocalDate snapshotDate = accountState.asOf().atZone(ZoneId.systemDefault()).toLocalDate();
@@ -90,7 +103,7 @@ public class PortfolioReadService {
                 accountState.totalCashValue(),
                 storedHoldings.stream()
                         .map(holding -> holdingResponseOf(holding, snapshotDate, accountOwnerId,
-                                momentumOf(holding, dailyClosesByConId)))
+                                momentumOf(holding, dailyClosesByConId), latestAnalysisByHoldingId.get(holding.id())))
                         .toList(),
                 closedPositionsOf(storedHoldings, manualPositions),
                 investorsOf(accountState, storedHoldings, manualPositions, investors, accountOwnerId));
@@ -106,6 +119,12 @@ public class PortfolioReadService {
                         Collectors.mapping(DailyCloseEntity::toDailyClose, Collectors.toList())));
     }
 
+    /** The latest analysis of every holding that has one, by holding id — one query for all of them. */
+    private Map<Long, StockAnalysisEntity> latestAnalysisByHoldingId() {
+        return stockAnalysisRepository.findLatestOfEveryHolding().stream()
+                .collect(Collectors.toMap(StockAnalysisEntity::holdingId, analysis -> analysis));
+    }
+
     private InvestorEntity accountOwnerOf(List<InvestorEntity> investors) {
         return investors.stream()
                 .filter(InvestorEntity::isAccountOwner)
@@ -117,10 +136,11 @@ public class PortfolioReadService {
 
     /**
      * {@code snapshotDate} is how far a still-{@code OPEN} holding's day count runs — see {@link HoldingHistory};
-     * {@code accountOwnerId} is who holds the shares the other investors' trades don't explain.
+     * {@code accountOwnerId} is who holds the shares the other investors' trades don't explain; {@code momentum} and
+     * {@code latestAnalysis} are {@code null} while there are no closes, or no analysis, for the holding.
      */
     private HoldingResponse holdingResponseOf(HoldingEntity holdingEntity, LocalDate snapshotDate, long accountOwnerId,
-                                              Momentum momentum) {
+                                              Momentum momentum, StockAnalysisEntity latestAnalysis) {
         Holding holding = holdingEntity.toIbHolding();
         HoldingHistory holdingHistory = holdingEntity.tradeHistory();
         MomentumResponse momentumResponse = momentum == null ? null : new MomentumResponse(momentum);
@@ -148,7 +168,33 @@ public class PortfolioReadService {
                 holdingEntity.trades().stream().map(TradeResponse::new).toList(),
                 holdingHistory.warnings(holdingEntity.status(), holding.position()),
                 investorQuantitiesOf(holdingEntity, accountOwnerId),
-                momentumResponse);
+                momentumResponse,
+                analysisResponseOf(latestAnalysis, holding),
+                signalOf(latestAnalysis, momentum));
+    }
+
+    /**
+     * The analysis as stored, with the consensus chosen from it on this read — the target measured against IB's latest
+     * price — so that a change of rule applies to old analyses too.
+     */
+    private StockAnalysisResponse analysisResponseOf(StockAnalysisEntity latestAnalysis, Holding holding) {
+        if (latestAnalysis == null) {
+            return null;
+        }
+        StockAnalysisResult result = latestAnalysis.result();
+        AnalystConsensus consensus =
+                new ConsensusCalculator(result.consensusBySource(), Utils.finiteOrNull(holding.marketPrice())).consensus();
+        return new StockAnalysisResponse(latestAnalysis, consensus);
+    }
+
+    /** The dot needs two of its three signs, so without an analysis — the momentum alone — there is none. */
+    private HoldingSignal signalOf(StockAnalysisEntity latestAnalysis, Momentum momentum) {
+        if (latestAnalysis == null) {
+            return null;
+        }
+        MomentumLabel momentumLabel = momentum == null ? null : momentum.label();
+        StockAnalysisResult result = latestAnalysis.result();
+        return new SignalCalculator(momentumLabel, result.analystTrend(), result.sentiment()).signal();
     }
 
     /** Derived on every read from the stored closes, never stored itself — like {@code firstBuyDate}. */

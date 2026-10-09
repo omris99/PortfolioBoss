@@ -6,7 +6,7 @@ import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
-import portfolioboss.calculation.TradeSide;
+import portfolioboss.model.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

@@ -1,5 +1,6 @@
 package portfolioboss.calculation;
 
+import portfolioboss.ib.Holding;
 import portfolioboss.utils.Utils;
 
 import java.math.BigDecimal;

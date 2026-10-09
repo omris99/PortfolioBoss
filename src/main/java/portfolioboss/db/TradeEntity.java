@@ -11,7 +11,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import portfolioboss.calculation.TradeFact;
-import portfolioboss.calculation.TradeSide;
+import portfolioboss.model.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

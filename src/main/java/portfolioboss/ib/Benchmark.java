@@ -1,4 +1,4 @@
-package portfolioboss.calculation;
+package portfolioboss.ib;
 
 /**
  * The market a holding's momentum is measured against: SPY, the S&amp;P 500 ETF. Its daily closes are requested on

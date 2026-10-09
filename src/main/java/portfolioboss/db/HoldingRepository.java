@@ -2,7 +2,7 @@ package portfolioboss.db;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-import portfolioboss.calculation.HoldingStatus;
+import portfolioboss.model.HoldingStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +18,9 @@ public interface HoldingRepository extends JpaRepository<HoldingEntity, Long> {
     Optional<HoldingEntity> findByAccountAndConId(String account, int conId);
 
     List<HoldingEntity> findByAccountAndStatus(String account, HoldingStatus status);
+
+    /** The holdings the analysis runs on when no ids are given: every open one, without their trades. */
+    List<HoldingEntity> findByStatusOrderById(HoldingStatus status);
 
     /**
      * Open and closed holdings alike, in the order they were first seen, with their trades loaded in the

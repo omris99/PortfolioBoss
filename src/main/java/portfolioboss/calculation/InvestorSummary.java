@@ -1,5 +1,7 @@
 package portfolioboss.calculation;
 
+import portfolioboss.model.InvestorWarning;
+
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.List;

@@ -4,8 +4,6 @@ import com.ib.client.Bar;
 import com.ib.client.Contract;
 import com.ib.client.Decimal;
 import org.junit.jupiter.api.Test;
-import portfolioboss.calculation.DailyClose;
-import portfolioboss.calculation.Holding;
 
 import java.time.LocalDate;
 import java.util.List;

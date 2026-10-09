@@ -1,4 +1,4 @@
-package portfolioboss.calculation;
+package portfolioboss.ib;
 
 /**
  * A single portfolio holding as reported by Interactive Brokers.

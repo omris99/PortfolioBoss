@@ -2,10 +2,10 @@ package portfolioboss.db;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import portfolioboss.calculation.DailyClose;
-import portfolioboss.calculation.Holding;
-import portfolioboss.calculation.HoldingStatus;
-import portfolioboss.calculation.PortfolioSnapshot;
+import portfolioboss.ib.DailyClose;
+import portfolioboss.ib.Holding;
+import portfolioboss.ib.PortfolioSnapshot;
+import portfolioboss.model.HoldingStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;

@@ -8,6 +8,12 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import portfolioboss.ai.AnalystRating;
+import portfolioboss.ai.AnalystTrend;
+import portfolioboss.ai.RatingCounts;
+import portfolioboss.ai.Sentiment;
+import portfolioboss.ai.SourceConsensus;
+import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
 import portfolioboss.api.response.HoldingResponse;
@@ -15,18 +21,22 @@ import portfolioboss.api.response.InvestorQuantityResponse;
 import portfolioboss.api.response.InvestorResponse;
 import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PortfolioResponse;
+import portfolioboss.api.response.StockAnalysisResponse;
 import portfolioboss.api.response.TradeResponse;
-import portfolioboss.calculation.Benchmark;
-import portfolioboss.calculation.CashMovementType;
-import portfolioboss.calculation.DailyClose;
-import portfolioboss.calculation.Holding;
-import portfolioboss.calculation.HoldingStatus;
-import portfolioboss.calculation.HoldingWarning;
-import portfolioboss.calculation.HoldingWarningType;
-import portfolioboss.calculation.MomentumLabel;
-import portfolioboss.calculation.PortfolioSnapshot;
-import portfolioboss.calculation.TradeSide;
 import portfolioboss.db.PortfolioSyncService;
+import portfolioboss.db.StockAnalysisEntity;
+import portfolioboss.db.StockAnalysisRepository;
+import portfolioboss.ib.Benchmark;
+import portfolioboss.ib.DailyClose;
+import portfolioboss.ib.Holding;
+import portfolioboss.ib.PortfolioSnapshot;
+import portfolioboss.model.CashMovementType;
+import portfolioboss.model.HoldingSignal;
+import portfolioboss.model.HoldingStatus;
+import portfolioboss.model.HoldingWarning;
+import portfolioboss.model.HoldingWarningType;
+import portfolioboss.model.MomentumLabel;
+import portfolioboss.model.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -72,6 +82,9 @@ class PortfolioReadServiceTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private StockAnalysisRepository stockAnalysisRepository;
 
     @Test
     void hasNothingToServeBeforeTheFirstSync() {
@@ -370,6 +383,39 @@ class PortfolioReadServiceTest {
         assertThat(portfolio.holdings().get(1).momentum()).isNull();
     }
 
+    /**
+     * Apple's newer analysis is served, with the consensus chosen from it and its target against IB's price of 200.
+     * Analysts deteriorating and negative news are two warning signs, so the dot is red despite the strong momentum.
+     * Microsoft was never analyzed: no analysis and no dot.
+     */
+    @Test
+    void servesTheLatestAnalysisWithItsConsensusAndItsDot() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0), microsoft(5, 300.0)), Map.of(
+                APPLE_CON_ID, risingCloses(0.003),
+                Benchmark.SPY_CON_ID, risingCloses(0.001)));
+        long appleHoldingId = holdingIdOf(APPLE_CON_ID);
+        stockAnalysisRepository.save(appleAnalysis(appleHoldingId, FIRST_RUN, AnalystTrend.IMPROVING,
+                Sentiment.POSITIVE));
+        stockAnalysisRepository.save(appleAnalysis(appleHoldingId, SECOND_RUN, AnalystTrend.DETERIORATING,
+                Sentiment.NEGATIVE));
+
+        PortfolioResponse portfolio = readPortfolio().orElseThrow();
+
+        HoldingResponse apple = portfolio.holdings().get(0);
+        StockAnalysisResponse appleAnalysis = apple.analysis();
+        assertThat(appleAnalysis.analyzedAt()).isEqualTo(SECOND_RUN);
+        assertThat(appleAnalysis.analystTrend()).isEqualTo(AnalystTrend.DETERIORATING);
+        assertThat(appleAnalysis.consensus().rating()).isEqualTo(AnalystRating.BUY);
+        assertThat(appleAnalysis.consensus().averageTarget()).isEqualTo(250.0);
+        assertThat(appleAnalysis.consensus().targetUpsidePercent()).isCloseTo(25.0, within(1e-9));
+        assertThat(appleAnalysis.consensusBySource()).hasSize(1);
+        assertThat(apple.momentum().label()).isEqualTo(MomentumLabel.STRONG);
+        assertThat(apple.signal()).isEqualTo(HoldingSignal.RED);
+        HoldingResponse microsoft = portfolio.holdings().get(1);
+        assertThat(microsoft.analysis()).isNull();
+        assertThat(microsoft.signal()).isNull();
+    }
+
     @Test
     void servesTheLatestSyncOnly() {
         syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0)));
@@ -465,6 +511,17 @@ class PortfolioReadServiceTest {
                         + "values (?, ?, ?, ?, ?, ?, 0)",
                 manualPositionId, accountOwnerId(), tradeDate, side.name(), new BigDecimal(quantity),
                 new BigDecimal(price));
+    }
+
+    /** One source with a breakdown (30 Buy, 16 Hold, 2 Sell: {@code BUY}) and a $250 target. */
+    private StockAnalysisEntity appleAnalysis(long holdingId, Instant analyzedAt, AnalystTrend analystTrend,
+                                              Sentiment sentiment) {
+        SourceConsensus source = new SourceConsensus("https://financhill.com/aapl", LocalDate.of(2026, 9, 20), 48,
+                new RatingCounts(0, 30, 16, 2, 0), 250.0, null);
+        StockAnalysisResult result = new StockAnalysisResult(List.of(source), analystTrend, List.of(), List.of(),
+                sentiment, null);
+        return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, 10_500, 900, 3,
+                new BigDecimal("0.030000"));
     }
 
     /** 250 daily closes from {@link #FIRST_CLOSE_DATE}, growing by {@code dailyGrowth} a day. */

@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.15.0";
+    public static final String VERSION = "0.16.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,23 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.16.0: [Analyst ratings and news analysis]
+ * POST /api/analysis added: for each open holding, or the ids given, two Tavily searches and one call to Claude, every stock at once; it runs only when asked, never on a schedule.
+ * TavilyClient: the analysts' forecast pages of the last month and the week's news; only the symbol goes to Tavily, and only results that name it go on to Claude.
+ * StockAnalyzer: Claude Sonnet 5.5 at low effort, no tools, through Anthropic's Java SDK (anthropic-java); it hears only the symbol, currency, IB price, today's date and the results.
+ * StockAnalysisResult: each source's consensus (analysts, rating breakdown, average target), the analysts' trend, recent actions, headlines and the news sentiment — null where the results say nothing.
+ * Claude answers in a JSON schema derived from StockAnalysisResult, so the same record is the schema, the stored answer and the JSON; a refusal or a cut-off answer fails the stock.
+ * V6 migration: stock_analysis keeps every run per holding — Claude's answer as JSONB, the model, tokens, Tavily credits and the cost in dollars; a failed stock stores nothing and keeps its last analysis.
+ * ConsensusCalculator added: the code, not Claude, picks the consensus — MarketBeat first, then a source with a breakdown and a target and the most analysts — with the spread of every source's target.
+ * The consensus rating comes from the breakdown on one scale (Strong Buy 1 … Strong Sell 5), so every source is rated the same way; without a breakdown it is the source's own label.
+ * SignalCalculator added: a colored dot from weak momentum, deteriorating analysts and negative news — red for two or more, green for none, yellow for one, none while fewer than two are known.
+ * GET /api/portfolio: each holding gains analysis (the latest, with the consensus against IB's price) and signal, worked out on every read so a change of rule applies to old analyses too.
+ * AiKeys: the Tavily and Anthropic keys come from the git-ignored config/local.env or the environment; a missing one turns only the analysis off, with "[ai] analysis off: …" and a 503.
+ * Console: "[ai] analysis ready" at startup, "[ai] analyzed N of M stocks: credits, tokens, $cost" per run, and "[ai error] SYMBOL: reason" for a stock that failed.
+ * POST /api/analysis takes a JSON body even to analyze everything ({}), so a page on another site can't start a paid run; an unknown id is 404, a closed holding 400.
+ * JsonColumnMapper: the JSONB column is written with the API's Jackson, so a date is stored as "2026-10-05" rather than [2026, 10, 5].
+ * Tests: ConsensusCalculatorTest, SignalCalculatorTest, SearchResultsTest, TavilyClientTest (a fake Tavily), StockAnalyzerTest, StockAnalysisRepositoryTest, AnalysisServiceTest, AnalysisControllerTest — none calls Tavily or Claude.
+ *
  * VERSION 0.15.0: [Momentum score from IB's daily closes]
  * V5 migration: daily_close, a year of daily closing prices per contract (every holding, and SPY as the benchmark), keyed by IB's contract id since SPY is read whether or not it is held.
  * IbGateway / PortfolioWrapper: after the portfolio and still connected, one historical-data request per holding plus SPY (a year of daily bars), waiting up to 20s; reads only, never an order.

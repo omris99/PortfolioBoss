@@ -8,13 +8,13 @@ import portfolioboss.api.request.SectorRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.TradeResponse;
 import portfolioboss.calculation.OrderCommission;
-import portfolioboss.calculation.TradeSide;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
 import portfolioboss.db.InvestorEntity;
 import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.TradeEntity;
 import portfolioboss.db.TradeRepository;
+import portfolioboss.model.TradeSide;
 import portfolioboss.utils.Utils;
 
 /**

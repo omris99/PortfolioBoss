@@ -1,6 +1,8 @@
 package portfolioboss.calculation;
 
 import org.junit.jupiter.api.Test;
+import portfolioboss.ib.DailyClose;
+import portfolioboss.model.MomentumLabel;
 
 import java.time.LocalDate;
 import java.util.ArrayList;

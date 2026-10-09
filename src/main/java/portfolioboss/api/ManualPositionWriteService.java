@@ -10,12 +10,12 @@ import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.ManualPositionResponse;
 import portfolioboss.api.response.TradeResponse;
 import portfolioboss.calculation.OrderCommission;
-import portfolioboss.calculation.TradeSide;
 import portfolioboss.db.InvestorEntity;
 import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.ManualPositionRepository;
 import portfolioboss.db.TradeEntity;
 import portfolioboss.db.TradeRepository;
+import portfolioboss.model.TradeSide;
 import portfolioboss.utils.Utils;
 
 import java.util.Locale;

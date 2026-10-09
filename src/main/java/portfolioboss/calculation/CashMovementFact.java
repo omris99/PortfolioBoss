@@ -1,5 +1,7 @@
 package portfolioboss.calculation;
 
+import portfolioboss.model.CashMovementType;
+
 import java.math.BigDecimal;
 
 /**

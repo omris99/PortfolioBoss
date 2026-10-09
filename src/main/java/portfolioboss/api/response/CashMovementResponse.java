@@ -1,7 +1,7 @@
 package portfolioboss.api.response;
 
-import portfolioboss.calculation.CashMovementType;
 import portfolioboss.db.InvestorCashMovementEntity;
+import portfolioboss.model.CashMovementType;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

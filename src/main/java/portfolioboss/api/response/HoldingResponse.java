@@ -1,7 +1,8 @@
 package portfolioboss.api.response;
 
-import portfolioboss.calculation.HoldingStatus;
-import portfolioboss.calculation.HoldingWarning;
+import portfolioboss.model.HoldingSignal;
+import portfolioboss.model.HoldingStatus;
+import portfolioboss.model.HoldingWarning;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -13,11 +14,15 @@ import java.util.List;
  * `conId`, `sector` and `status` were added when the API began reading from the database, `firstBuyDate`,
  * `lastSellDate`, `holdingDays` and `trades` when those were derived from the `trade` table,
  * `warnings` when the trades entered began to be checked against IB, `investorQuantities` when the account
- * got several investors, and `momentum` with the daily closes. Fields are only ever added, never renamed or removed.
+ * got several investors, `momentum` with the daily closes, and `analysis` and `signal` with the stock analysis. Fields
+ * are only ever added, never renamed or removed.
  *
  * @param investorQuantities how {@code position} — and its value, cost and unrealized P&amp;L — divides between the
  *                           investors; only those holding some of it
  * @param momentum           from the stored daily closes; {@code null} while there are none for this holding
+ * @param analysis           the latest stock analysis; {@code null} while the holding has never been analyzed
+ * @param signal             the colored dot (AI_ANALYSIS_TODO.md, decision 6); {@code null} without an analysis, or
+ *                           while fewer than two of its three signs are known
  */
 public record HoldingResponse(
         String symbol,
@@ -42,5 +47,7 @@ public record HoldingResponse(
         List<TradeResponse> trades,
         List<HoldingWarning> warnings,
         List<InvestorQuantityResponse> investorQuantities,
-        MomentumResponse momentum) {
+        MomentumResponse momentum,
+        StockAnalysisResponse analysis,
+        HoldingSignal signal) {
 }

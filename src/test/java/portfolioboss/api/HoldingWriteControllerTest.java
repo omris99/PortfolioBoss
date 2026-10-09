@@ -12,7 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.api.request.SectorRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.TradeResponse;
-import portfolioboss.calculation.TradeSide;
+import portfolioboss.model.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

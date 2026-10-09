@@ -1,4 +1,4 @@
-package portfolioboss.calculation;
+package portfolioboss.ib;
 
 import java.time.Instant;
 import java.util.List;

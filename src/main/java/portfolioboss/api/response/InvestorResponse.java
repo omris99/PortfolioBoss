@@ -1,8 +1,8 @@
 package portfolioboss.api.response;
 
 import portfolioboss.calculation.InvestorSummary;
-import portfolioboss.calculation.InvestorWarning;
 import portfolioboss.db.InvestorEntity;
+import portfolioboss.model.InvestorWarning;
 
 import java.math.BigDecimal;
 import java.util.List;

@@ -8,10 +8,10 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import portfolioboss.calculation.Benchmark;
-import portfolioboss.calculation.DailyClose;
-import portfolioboss.calculation.Holding;
-import portfolioboss.calculation.PortfolioSnapshot;
+import portfolioboss.ib.Benchmark;
+import portfolioboss.ib.DailyClose;
+import portfolioboss.ib.Holding;
+import portfolioboss.ib.PortfolioSnapshot;
 
 import java.sql.Timestamp;
 import java.time.Instant;

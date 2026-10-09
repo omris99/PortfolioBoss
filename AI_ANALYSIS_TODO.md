@@ -85,6 +85,10 @@
     - **המודל** מחלץ את הקונצנזוס **מכל מקור בנפרד** (`consensusBySource`) — בלי למזג ובלי לבחור.
     - **הקוד** בוחר (`ConsensusSelector`): מקור עם ספירה לפי דירוג וגם יעד ממוצע ← מביניהם הכי הרבה אנליסטים ← שוויון: תאריך
       הפרסום המאוחר, ואז הכתובת. בלי ספירה באף מקור ← המקור עם הכי הרבה אנליסטים שיש לו יעד ממוצע.
+    - **MarketBeat קודם** (09.10.2026, אחרי הבדיקה החיה — עומרי: "הוא הכי אמין"): כשלאחד מדפי MarketBeat יש יעד ממוצע, הבחירה
+      נעשית רק בין דפי MarketBeat (באותם כללים); אחרת — בין כל המקורות, כמו למעלה. נולד מכך שבלי ההעדפה TTWO קיבלה פוסט
+      בבלוג (tikr.com, 29 אנליסטים) ו-AAPL את Financhill (48) במקום MarketBeat (21 ו-42). "MarketBeat" = האתר בכתובת
+      (`marketbeat.com`, עם `www.` או בלי), לא המילה בה. הפיזור עדיין על כל המקורות. עדיין רק מה ש-Tavily מחזיר (החלטה 7).
     - **הקונצנזוס מחושב מהספירה** (ממוצע דירוגים: Strong Buy = 1 … Strong Sell = 5; עד 1.5 `STRONG_BUY`, עד 2.5 `BUY`, עד 3.5
       `HOLD`, עד 4.5 `SELL`, מעל — `STRONG_SELL`), כך שאותו סולם לכל מקור. בלי ספירה ← התווית של המקור עצמו (`ratingLabel`,
       ש"Moderate Buy" שלו = `BUY`), ובלי תווית ← `null`.
@@ -233,10 +237,35 @@ CREATE TABLE daily_close (
 
 ---
 
-## סשן 2 — backend: הניתוח
+## ✅ סשן 2 — backend: הניתוח
 
 > **המטרה:** `POST /api/analysis` מנתח מניות (Tavily ← Claude) ושומר, ו-`GET /api/portfolio` מחזיר לכל החזקה את הניתוח האחרון
 > ואת הנקודה.
+>
+> **סטטוס (09.10.2026): ✅ בוצע** על `ai-agent-implementation`, עדיין לא committed. `mvn -q clean test` ירוק — 269 בדיקות (53
+> חדשות). `anthropic-java` 2.70.0 הורד מ-Maven Central בלבד, עם `--strict-checksums`.
+> ✅ **בדיקה חיה:** גיבוי `portfolioboss-2026-10-09.sql.gz` (אותו מספר שורות כמו ה-DB בכל 8 הטבלאות), ואז `./run.sh` (TWS סגור —
+> הסנכרון של 08.10): V6 רצה על `portfolioboss`, `[ai] analysis ready`. AAPL לבד — 16 שניות, 3 קרדיטים, $0.0296; כל 7 המניות פעמיים —
+> $0.2056 ו-$0.2060, 21 קרדיטים כל אחת, אף כישלון, ו**שתי ההרצות זהות** (מקור, דירוג, יעד ונקודה — החלטה 16). סה"כ $0.44 ו-47
+> קרדיטים (כולל חיפוש אימות אחד). המספרים של AAPL נבדקו מול הטקסט של המקורות ב-Tavily — תואמים; היעד $328.09 של דף 247wallst
+> אחד לא הופיע בקטעים של חיפוש האימות (Tavily לא מחזיר תמיד אותם קטעים). ל-AAPL ול-SNDK לא חזרו פעולות אנליסטים: בקטעים של השבוע
+> אין אף פעולה, ו-Claude לא ניחש — להחליט אחרי שרואים ב-UI.
+> שינויים מהתוכנית:
+> - **שמות ומבנה:** `ConsensusCalculator(sources, marketPrice).consensus()` ו-`SignalCalculator(momentumLabel, trend, sentiment)
+>   .signal()` — records עם מתודות רגילות, כמו `InvestorSummaryCalculator` (עומרי: "עדיפות לפונקציות לא סטטיות") — במקום
+>   `ConsensusSelector` / `SignalCalculator.of`. `AnalystConsensus(rating, analystCount, averageTarget, targetUpsidePercent,
+>   sourceUrl, targetLow, targetHigh, sourceCount)` נכנס ל-JSON כמו שהוא, כאובייקט `analysis.consensus`, במקום שדות שטוחים.
+>   `ClaudeReply` (התשובה + הטוקנים + הדולרים), `StockToAnalyze(symbol, currency, marketPrice)` — כל מה ש-Claude שומע על החזקה
+>   (החלטה 8), ו-`AiKeys` (המפתחות, וההדפסה בעלייה).
+> - **ה-schema:** נגזר מה-record `StockAnalysisResult` ע"י ה-SDK — הגדרה אחת ל-schema, לתשובה, לעמודה ול-JSON. `@Nullable` (של
+>   `jakarta.annotation`) מסמן את מה שמותר להיות `null`; Claude מקבל עד 16 שדות כאלה, ולכן חמש הספירות הן אובייקט אחד
+>   `ratingCounts` (או `null` כולו) — 13 בסך הכול. נוסף `publishedDate` לכל מקור (לשוויון של החלטה 16); לכותרת — `title`.
+> - **החבילות** (בקשת עומרי, "רוב הקבצים ב-calculation אינם חישובים"): `calculation` — רק מה שמחשב; מה ש-IB מדווח
+>   (`Holding`, `PortfolioSnapshot`, `DailyClose`, `Benchmark`) — ב-`ib`; התשובה של Claude — ב-`ai`; ה-enums, האזהרות, התוויות
+>   ו-`AnalystConsensus` — בחבילה חדשה `model`.
+> - **`db.JsonColumnMapper`:** Hibernate בחר את ה-Jackson הישן שה-SDK הביא ושמר תאריך כ-`[2026, 10, 5]`; עכשיו `"2026-10-05"`.
+> - **MarketBeat קודם** (החלטה 16, אחרי הבדיקה החיה).
+> - חיפוש לפי סימבול — בלי הבדל בין אותיות גדולות לקטנות ("Aeva Technologies" נחשב AEVA).
 
 ### 2.1 🟢 תלויות והגדרות
 

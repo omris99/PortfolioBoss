@@ -1,5 +1,10 @@
 package portfolioboss.calculation;
 
+import portfolioboss.model.HoldingStatus;
+import portfolioboss.model.HoldingWarning;
+import portfolioboss.model.HoldingWarningType;
+import portfolioboss.model.TradeSide;
+
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.LocalDate;

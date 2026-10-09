@@ -1,5 +1,8 @@
 package portfolioboss.calculation;
 
+import portfolioboss.ib.DailyClose;
+import portfolioboss.model.MomentumLabel;
+
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Comparator;

@@ -1,4 +1,4 @@
-package portfolioboss.calculation;
+package portfolioboss.model;
 
 /**
  * Something to check in what was entered for an investor, shown on their card — never a reason to reject an entry. An

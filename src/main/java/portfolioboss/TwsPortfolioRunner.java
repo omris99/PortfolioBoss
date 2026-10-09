@@ -8,11 +8,11 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.TransactionException;
-import portfolioboss.calculation.Benchmark;
-import portfolioboss.calculation.DailyClose;
-import portfolioboss.calculation.PortfolioSnapshot;
 import portfolioboss.db.PortfolioSyncService;
+import portfolioboss.ib.Benchmark;
+import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.IbGateway;
+import portfolioboss.ib.PortfolioSnapshot;
 import portfolioboss.ui.UiLauncher;
 
 import java.nio.file.Path;

@@ -1,4 +1,4 @@
-package portfolioboss.calculation;
+package portfolioboss.model;
 
 /**
  * What an {@link InvestorWarning} is about. The names reach the JSON as they are, so they must stay stable — like

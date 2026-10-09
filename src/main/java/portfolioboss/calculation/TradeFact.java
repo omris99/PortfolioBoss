@@ -1,5 +1,7 @@
 package portfolioboss.calculation;
 
+import portfolioboss.model.TradeSide;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 

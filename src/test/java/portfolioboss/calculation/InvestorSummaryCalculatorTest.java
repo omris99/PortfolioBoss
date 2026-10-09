@@ -1,6 +1,11 @@
 package portfolioboss.calculation;
 
 import org.junit.jupiter.api.Test;
+import portfolioboss.ib.Holding;
+import portfolioboss.model.CashMovementType;
+import portfolioboss.model.InvestorWarning;
+import portfolioboss.model.InvestorWarningType;
+import portfolioboss.model.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

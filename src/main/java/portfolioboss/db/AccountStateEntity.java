@@ -3,7 +3,7 @@ package portfolioboss.db;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import portfolioboss.calculation.PortfolioSnapshot;
+import portfolioboss.ib.PortfolioSnapshot;
 import portfolioboss.utils.Utils;
 
 import java.time.Instant;

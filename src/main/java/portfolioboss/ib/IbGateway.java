@@ -4,8 +4,6 @@ import com.ib.client.Contract;
 import com.ib.client.EClientSocket;
 import com.ib.client.EJavaSignal;
 import com.ib.client.EReader;
-import portfolioboss.calculation.DailyClose;
-import portfolioboss.calculation.PortfolioSnapshot;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;

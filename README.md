@@ -157,28 +157,36 @@ src/main/java/portfolioboss/
 │   ├── HoldingWriteController.java, HoldingWriteService.java    # the sector and trades (JSON only)
 │   ├── ManualPositionWriteController.java, …WriteService.java   # positions sold before the first sync
 │   ├── InvestorWriteController.java, InvestorWriteService.java  # investors and their deposits
+│   ├── AnalysisController.java, AnalysisService.java  # POST /api/analysis: Tavily + Claude per stock, then stored
 │   ├── ApiErrorHandler.java         # errors as JSON, with the reason spelled out
 │   ├── request/                     # what the UI sends (with their validation rules)
 │   └── response/                    # what the UI receives: the shape of the JSON only
-├── calculation/           # pure Java, no Spring, no database — every other package uses it; it uses only utils
-│   ├── Holding.java, PortfolioSnapshot.java, DailyClose.java, Benchmark.java  # what IB reports
-│   ├── TradeSide.java, HoldingStatus.java, CashMovementType.java             # enums, stored by name
+├── ai/                    # the stock analysis: only the symbol goes to Tavily; symbol, price and results to Claude
+│   ├── AiKeys.java        # the two API keys from config/local.env (git-ignored); one missing turns the analysis off
+│   ├── TavilyClient.java, SearchResult.java, SearchResults.java  # the two searches, filtered by symbol
+│   ├── StockAnalyzer.java, StockToAnalyze.java, ClaudeReply.java # one call to Claude: JSON only, no tools
+│   └── StockAnalysisResult.java, SourceConsensus.java, …  # Claude's answer — also the JSON schema it must follow
+├── calculation/           # only what computes — pure Java, no Spring, no database
 │   ├── HoldingHistory.java, ClosedPosition.java, …  # buy/sell dates, holding period, realized P&L at average cost
 │   ├── PositionTrades.java, InvestorSummaryCalculator.java, …  # each investor's part, cash and profit
 │   ├── Momentum.java      # the 0–5 momentum score from a year of daily closes
+│   ├── ConsensusCalculator.java, SignalCalculator.java  # the analysts' consensus (MarketBeat first) and the dot
 │   └── OrderCommission.java  # the default commission: 1 cent a share, $5 minimum
+├── model/                 # values the whole app shares: enums stored by name, warnings, labels
 ├── db/
 │   ├── *Entity.java, *Repository.java  # JPA mappings of the tables and their queries
+│   ├── JsonColumnMapper.java  # how the JSONB column is written and read
 │   └── PortfolioSyncService.java, SyncResult.java  # the sync at connection: create, refresh or close holdings
 ├── ib/
 │   ├── IbGateway.java     # IB socket connection + reader loop (read-only)
-│   └── PortfolioWrapper.java  # EWrapper callbacks: reads holdings and daily closes, prints, unsubscribes
+│   ├── PortfolioWrapper.java  # EWrapper callbacks: reads holdings and daily closes, prints, unsubscribes
+│   └── Holding.java, PortfolioSnapshot.java, DailyClose.java, Benchmark.java  # what IB reports
 ├── ui/
 │   └── UiLauncher.java    # starts the UI dev server and opens it in the browser
 └── utils/
     └── Utils.java         # IB's NaN / infinity ↔ null, trimming typed text
-src/main/resources/application.properties  # loopback address, port 8080, database connection
-src/main/resources/db/migration/           # Flyway migrations (V1 … V5)
+src/main/resources/application.properties  # loopback address, port 8080, database connection, config/local.env
+src/main/resources/db/migration/           # Flyway migrations (V1 … V6)
 src/test/java/portfolioboss/               # JUnit 5; the database tests use portfolioboss_test
 scripts/backup-db.sh                       # dumps the database to ~/PortfolioBossBackups
 

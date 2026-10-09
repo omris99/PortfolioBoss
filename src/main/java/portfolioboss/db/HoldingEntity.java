@@ -9,11 +9,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
-import portfolioboss.calculation.Holding;
 import portfolioboss.calculation.HoldingHistory;
-import portfolioboss.calculation.HoldingStatus;
 import portfolioboss.calculation.PositionTrades;
 import portfolioboss.calculation.TradeFact;
+import portfolioboss.ib.Holding;
+import portfolioboss.model.HoldingStatus;
 import portfolioboss.utils.Utils;
 
 import java.time.Instant;
