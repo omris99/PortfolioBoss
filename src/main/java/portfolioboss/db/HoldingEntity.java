@@ -9,10 +9,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
-import portfolioboss.domain.HoldingHistory;
-import portfolioboss.domain.PositionTrades;
-import portfolioboss.domain.TradeFact;
-import portfolioboss.model.Holding;
+import portfolioboss.calculation.Holding;
+import portfolioboss.calculation.HoldingHistory;
+import portfolioboss.calculation.HoldingStatus;
+import portfolioboss.calculation.PositionTrades;
+import portfolioboss.calculation.TradeFact;
 import portfolioboss.utils.Utils;
 
 import java.time.Instant;
@@ -26,7 +27,7 @@ import java.util.List;
  * by the user and never overwritten by the sync. A holding that disappears from TWS is marked
  * {@code CLOSED}, never deleted, so those manual entries survive.
  *
- * <p>Not to be confused with {@code model.Holding} (one IB reading) or {@code HoldingResponse} (what the
+ * <p>Not to be confused with {@code calculation.Holding} (one IB reading) or {@code HoldingResponse} (what the
  * UI receives). The column names are these field names in snake_case ({@code conId} is {@code con_id}).
  */
 @Entity
@@ -166,7 +167,7 @@ public class HoldingEntity {
                 Utils.nanIfNull(unrealizedPnl), Utils.nanIfNull(realizedPnl), account);
     }
 
-    /** Its trades reduced to what the computation in {@code domain} needs ({@link TradeEntity#toTradeFact()}). */
+    /** Its trades reduced to what the computation in {@code calculation} needs ({@link TradeEntity#toTradeFact()}). */
     private List<TradeFact> getTradeFacts() {
         return trades.stream().map(TradeEntity::toTradeFact).toList();
     }

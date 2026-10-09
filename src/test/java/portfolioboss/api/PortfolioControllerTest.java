@@ -11,15 +11,17 @@ import portfolioboss.api.response.ClosedPositionSource;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
 import portfolioboss.api.response.InvestorResponse;
+import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.TradeResponse;
-import portfolioboss.db.CashMovementType;
-import portfolioboss.db.HoldingStatus;
-import portfolioboss.db.TradeSide;
-import portfolioboss.domain.HoldingWarning;
-import portfolioboss.domain.HoldingWarningType;
-import portfolioboss.domain.InvestorWarning;
-import portfolioboss.domain.InvestorWarningType;
+import portfolioboss.calculation.CashMovementType;
+import portfolioboss.calculation.HoldingStatus;
+import portfolioboss.calculation.HoldingWarning;
+import portfolioboss.calculation.HoldingWarningType;
+import portfolioboss.calculation.InvestorWarning;
+import portfolioboss.calculation.InvestorWarningType;
+import portfolioboss.calculation.MomentumLabel;
+import portfolioboss.calculation.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -124,7 +126,23 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].investorQuantities[1].sharesCost").value(900))
                 .andExpect(jsonPath("$.holdings[0].investorQuantities[1].unrealizedPnl").value(300))
                 .andExpect(jsonPath("$.holdings[0].investorQuantities[1].unrealizedPnlPercent")
-                        .value(closeTo(33.333, 0.001)));
+                        .value(closeTo(33.333, 0.001)))
+                .andExpect(jsonPath("$.holdings[0].momentum.asOf").value("2026-10-06"))
+                .andExpect(jsonPath("$.holdings[0].momentum.lastClose").value(175.0))
+                .andExpect(jsonPath("$.holdings[0].momentum.sma20").value(170.0))
+                .andExpect(jsonPath("$.holdings[0].momentum.sma50").value(160.0))
+                .andExpect(jsonPath("$.holdings[0].momentum.sma200").value(150.0))
+                .andExpect(jsonPath("$.holdings[0].momentum.high20").value(200.0))
+                .andExpect(jsonPath("$.holdings[0].momentum.oneMonthReturnPercent").value(4.2))
+                .andExpect(jsonPath("$.holdings[0].momentum.spyOneMonthReturnPercent").value(2.1))
+                .andExpect(jsonPath("$.holdings[0].momentum.aboveSma20").value(true))
+                .andExpect(jsonPath("$.holdings[0].momentum.aboveSma50").value(true))
+                .andExpect(jsonPath("$.holdings[0].momentum.sma50AboveSma200").value(true))
+                .andExpect(jsonPath("$.holdings[0].momentum.nearHigh").value(false))
+                .andExpect(jsonPath("$.holdings[0].momentum.beatsSpy").value(true))
+                .andExpect(jsonPath("$.holdings[0].momentum.percentBelowHigh").value(12.5))
+                .andExpect(jsonPath("$.holdings[0].momentum.score").value(4))
+                .andExpect(jsonPath("$.holdings[0].momentum.label").value("STRONG"));
     }
 
     @Test
@@ -193,7 +211,8 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].sector").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].firstBuyDate").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].holdingDays").value(nullValue()))
-                .andExpect(jsonPath("$.holdings[0].trades").value(empty()));
+                .andExpect(jsonPath("$.holdings[0].trades").value(empty()))
+                .andExpect(jsonPath("$.holdings[0].momentum").value(nullValue()));
     }
 
     @Test
@@ -289,9 +308,12 @@ class PortfolioControllerTest {
                         new BigDecimal("600"), new BigDecimal("200"), new BigDecimal("33.33333333333333")),
                 new InvestorQuantityResponse(OTHER_INVESTOR_ID, new BigDecimal("6"), new BigDecimal("1200"),
                         new BigDecimal("900"), new BigDecimal("300"), new BigDecimal("33.33333333333333")));
+        // four of the five checks hold: 12.5% below the 20-day high
+        MomentumResponse momentum = new MomentumResponse(LocalDate.of(2026, 10, 6), 175.0, 170.0, 160.0, 150.0, 200.0,
+                4.2, 2.1, true, true, true, false, true, 12.5, 4, MomentumLabel.STRONG);
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
-                LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities);
+                LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities, momentum);
     }
 
     /** IB sent a position but no cost or price figures for it, no sector and no trades entered. */
@@ -299,7 +321,7 @@ class PortfolioControllerTest {
         HoldingWarning noTrades = new HoldingWarning(HoldingWarningType.NO_TRADES_LOGGED, NO_TRADES_MESSAGE);
         return new HoldingResponse("MSFT", "STK", "USD", 5.0, null, null, null, null, 0.0, ACCOUNT,
                 null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of(), List.of(noTrades),
-                List.of());
+                List.of(), null);
     }
 
     /** The account owner of INVESTORS_TODO.md's example, with a realized P&amp;L in two currencies. */

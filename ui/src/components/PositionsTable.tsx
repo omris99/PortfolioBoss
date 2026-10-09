@@ -14,84 +14,59 @@ import { HoldingPeriod } from './HoldingPeriod';
 import { HoldingWarningIcon } from './HoldingWarnings';
 import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
 import { InvestorSplitTable } from './InvestorSplitTable';
+import { MomentumDetails, MomentumScore } from './Momentum';
 import { SECTOR_OPTIONS_LIST_ID, SectorCell } from './SectorCell';
 import { TradesPanel } from './TradesPanel';
 
 // ── sorting ─────────────────────────────────────────────────────────────────────────────────────
 
-/** Columns compared as text. The dates are 'yyyy-MM-dd', which sorts correctly as text. */
-type TextField = 'symbol' | 'sector' | 'firstBuyDate' | 'lastSellDate';
-
-type NumberField =
-  | 'position'
-  | 'averageCost'
-  | 'marketPrice'
-  | 'marketValue'
-  | 'unrealizedPnl'
-  | 'unrealizedPnlPercent'
-  | 'holdingDays';
-
-type SortableField = TextField | NumberField;
-
-const TEXT_FIELDS: ReadonlySet<SortableField> = new Set<TextField>(['symbol', 'sector', 'firstBuyDate', 'lastSellDate']);
-
-function isTextField(field: SortableField): field is TextField {
-  return TEXT_FIELDS.has(field);
-}
-
 /** Uses the same words as the `aria-sort` attribute, so it can be passed straight to it. */
 type SortDirection = 'ascending' | 'descending';
 
+/** What a column sorts by: text (dates are 'yyyy-MM-dd', which sorts correctly as text) or a number. */
+type SortValue = string | number;
+
 interface SortState {
-  field: SortableField;
+  columnKey: string;
   direction: SortDirection;
 }
 
-function compareText(firstText: string, secondText: string): number {
-  return firstText.localeCompare(secondText);
-}
-
-function compareNumbers(firstNumber: number, secondNumber: number): number {
-  return firstNumber - secondNumber;
+function compareSortValues(firstValue: SortValue, secondValue: SortValue): number {
+  if (typeof firstValue === 'number' && typeof secondValue === 'number') {
+    return firstValue - secondValue;
+  }
+  return String(firstValue).localeCompare(String(secondValue));
 }
 
 /**
  * Empty values always sink to the bottom, whichever way the column is sorted: the direction is applied
  * only to the values that exist. Flipping it afterwards would put every "—" at the top.
  */
-function compareWithEmptyLast<Value>(
-  firstValue: Value | null,
-  secondValue: Value | null,
-  compareValues: (first: Value, second: Value) => number,
+function compareWithEmptyLast(
+  firstValue: SortValue | null,
+  secondValue: SortValue | null,
   direction: SortDirection,
 ): number {
   if (firstValue === null && secondValue === null) return 0;
   if (firstValue === null) return 1;
   if (secondValue === null) return -1;
   const directionMultiplier = direction === 'ascending' ? 1 : -1;
-  return directionMultiplier * compareValues(firstValue, secondValue);
-}
-
-function compareHoldings(first: Holding, second: Holding, sortState: SortState): number {
-  const { field, direction } = sortState;
-  if (isTextField(field)) {
-    return compareWithEmptyLast(first[field], second[field], compareText, direction);
-  }
-  return compareWithEmptyLast(first[field], second[field], compareNumbers, direction);
+  return directionMultiplier * compareSortValues(firstValue, secondValue);
 }
 
 function sortHoldings(holdings: Holding[], sortState: SortState): Holding[] {
-  return [...holdings].sort((first, second) => compareHoldings(first, second, sortState));
+  const sortColumn = columnWithKey(sortState.columnKey);
+  return [...holdings].sort((first, second) =>
+    compareWithEmptyLast(sortColumn.sortValue(first), sortColumn.sortValue(second), sortState.direction),
+  );
 }
 
-function sortStateAfterClicking(currentSort: SortState, clickedField: SortableField): SortState {
-  if (currentSort.field === clickedField) {
+function sortStateAfterClicking(currentSort: SortState, clickedColumn: ColumnDefinition): SortState {
+  if (currentSort.columnKey === clickedColumn.key) {
     const flippedDirection = currentSort.direction === 'ascending' ? 'descending' : 'ascending';
-    return { field: clickedField, direction: flippedDirection };
+    return { columnKey: clickedColumn.key, direction: flippedDirection };
   }
-  // A newly chosen column starts in its natural order: A→Z for text, oldest first for dates,
-  // largest first for numbers.
-  return { field: clickedField, direction: isTextField(clickedField) ? 'ascending' : 'descending' };
+  return { columnKey: clickedColumn.key, direction: clickedColumn.firstSortDirection };
 }
 
 // ── columns ─────────────────────────────────────────────────────────────────────────────────────
@@ -101,10 +76,15 @@ interface TableActions {
   onDataChanged: () => Promise<void>;
 }
 
+/** Everything about one column lives here: adding a column means adding one entry to {@link COLUMNS}. */
 interface ColumnDefinition {
-  field: SortableField;
+  key: string;
   title: string;
   alignment: 'left' | 'right';
+  /** What the column sorts by; an empty value (`null`) always sorts last. */
+  sortValue: (holding: Holding) => SortValue | null;
+  /** The order on the first click: A→Z for text, oldest first for dates, largest first for numbers. */
+  firstSortDirection: SortDirection;
   renderValue: (holding: Holding, tableActions: TableActions) => ReactNode;
   /** Text colour classes for the cell; a neutral grey when omitted. */
   valueColorClass?: (holding: Holding) => string;
@@ -149,81 +129,116 @@ function QuantityWithSplit({ holding }: { holding: Holding }) {
   );
 }
 
-// The console report's columns in its order, with the sector after the symbol and the dates and
+// The console report's columns in its order, with the signal and the sector after the symbol and the dates and
 // holding period, which are derived from the trades entered by hand, at the end.
 const COLUMNS: ColumnDefinition[] = [
   {
-    field: 'symbol',
+    key: 'symbol',
     title: 'Symbol',
     alignment: 'left',
+    sortValue: (holding) => holding.symbol,
+    firstSortDirection: 'ascending',
     renderValue: (holding) => <SymbolWithStatus holding={holding} />,
     valueColorClass: () => 'font-semibold text-slate-100',
   },
   {
-    field: 'sector',
+    // The momentum score for now; the analysts and the news join it in AI_ANALYSIS_TODO.md's session 3.
+    key: 'signal',
+    title: 'Signal',
+    alignment: 'left',
+    sortValue: (holding) => holding.momentum?.score ?? null,
+    firstSortDirection: 'descending',
+    renderValue: (holding) => <MomentumScore momentum={holding.momentum} />,
+  },
+  {
+    key: 'sector',
     title: 'Sector',
     alignment: 'left',
+    sortValue: (holding) => holding.sector,
+    firstSortDirection: 'ascending',
     renderValue: (holding, tableActions) => (
       <SectorCell holding={holding} onDataChanged={tableActions.onDataChanged} />
     ),
   },
   {
-    field: 'position',
+    key: 'position',
     title: 'Qty',
     alignment: 'right',
+    sortValue: (holding) => holding.position,
+    firstSortDirection: 'descending',
     renderValue: (holding) => <QuantityWithSplit holding={holding} />,
   },
   {
-    field: 'averageCost',
+    key: 'averageCost',
     title: 'Avg cost',
     alignment: 'right',
+    sortValue: (holding) => holding.averageCost,
+    firstSortDirection: 'descending',
     renderValue: (holding) => formatMoney(holding.averageCost),
   },
   {
-    field: 'marketPrice',
+    key: 'marketPrice',
     title: 'Last',
     alignment: 'right',
+    sortValue: (holding) => holding.marketPrice,
+    firstSortDirection: 'descending',
     renderValue: (holding) => formatMoney(holding.marketPrice),
   },
   {
-    field: 'marketValue',
+    key: 'marketValue',
     title: 'Market value',
     alignment: 'right',
+    sortValue: (holding) => holding.marketValue,
+    firstSortDirection: 'descending',
     renderValue: (holding) => formatMoney(holding.marketValue),
   },
   {
-    field: 'unrealizedPnl',
+    key: 'unrealizedPnl',
     title: 'Unrealized P&L',
     alignment: 'right',
+    sortValue: (holding) => holding.unrealizedPnl,
+    firstSortDirection: 'descending',
     renderValue: (holding) => formatSignedMoney(holding.unrealizedPnl),
     valueColorClass: (holding) => profitLossColorClass(holding.unrealizedPnl),
   },
   {
-    field: 'unrealizedPnlPercent',
+    key: 'unrealizedPnlPercent',
     title: '%',
     alignment: 'right',
+    sortValue: (holding) => holding.unrealizedPnlPercent,
+    firstSortDirection: 'descending',
     renderValue: (holding) => formatSignedPercent(holding.unrealizedPnlPercent),
     valueColorClass: (holding) => profitLossColorClass(holding.unrealizedPnlPercent),
   },
   {
-    field: 'firstBuyDate',
+    key: 'firstBuyDate',
     title: 'Bought',
     alignment: 'right',
+    sortValue: (holding) => holding.firstBuyDate,
+    firstSortDirection: 'ascending',
     renderValue: (holding) => formatDate(holding.firstBuyDate),
   },
   {
-    field: 'lastSellDate',
+    key: 'lastSellDate',
     title: 'Last sold',
     alignment: 'right',
+    sortValue: (holding) => holding.lastSellDate,
+    firstSortDirection: 'ascending',
     renderValue: (holding) => formatDate(holding.lastSellDate),
   },
   {
-    field: 'holdingDays',
+    key: 'holdingDays',
     title: 'Held',
     alignment: 'right',
+    sortValue: (holding) => holding.holdingDays,
+    firstSortDirection: 'descending',
     renderValue: (holding) => <HoldingPeriod days={holding.holdingDays} />,
   },
 ];
+
+function columnWithKey(columnKey: string): ColumnDefinition {
+  return COLUMNS.find((column) => column.key === columnKey) ?? COLUMNS[0];
+}
 
 function alignmentClass(column: ColumnDefinition): string {
   return column.alignment === 'right' ? 'text-right' : 'text-left';
@@ -238,9 +253,9 @@ function SortableHeaderCell({
 }: {
   column: ColumnDefinition;
   sortState: SortState;
-  onSort: (field: SortableField) => void;
+  onSort: (column: ColumnDefinition) => void;
 }) {
-  const isSortedByThisColumn = sortState.field === column.field;
+  const isSortedByThisColumn = sortState.columnKey === column.key;
 
   return (
     <th
@@ -249,7 +264,7 @@ function SortableHeaderCell({
     >
       <button
         type="button"
-        onClick={() => onSort(column.field)}
+        onClick={() => onSort(column)}
         className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-slate-300 ${
           isSortedByThisColumn ? 'text-slate-200' : ''
         }`}
@@ -283,15 +298,15 @@ function HoldingRow({
         <ExpandRowButton
           isExpanded={isExpanded}
           onToggle={onToggleExpanded}
-          subject={`the trades of ${holding.symbol}`}
-          expandHint="Show and enter trades"
+          subject={`the momentum and trades of ${holding.symbol}`}
+          expandHint="Show the momentum, and show and enter trades"
         />
       </td>
       {COLUMNS.map((column) => {
         const colorClass = column.valueColorClass?.(holding) ?? 'text-slate-300';
         return (
           <td
-            key={column.field}
+            key={column.key}
             className={`whitespace-nowrap px-3 py-2 font-mono text-xs ${alignmentClass(column)} ${colorClass}`}
           >
             {column.renderValue(holding, tableActions)}
@@ -305,7 +320,7 @@ function HoldingRow({
 /** Each sector once, A→Z: offered while typing a sector, so the same one isn't spelled two ways. */
 function distinctSectorsOf(holdings: Holding[]): string[] {
   const sectors = holdings.map((holding) => holding.sector).filter((sector) => sector !== null);
-  return [...new Set(sectors)].sort(compareText);
+  return [...new Set(sectors)].sort((firstSector, secondSector) => firstSector.localeCompare(secondSector));
 }
 
 /** A holding's own closed positions, of every investor — what its "By investor" table splits. */
@@ -327,7 +342,7 @@ export function PositionsTable({
   onDataChanged: () => Promise<void>;
 }) {
   // Largest position first, like the console report.
-  const [sortState, setSortState] = useState<SortState>({ field: 'marketValue', direction: 'descending' });
+  const [sortState, setSortState] = useState<SortState>({ columnKey: 'marketValue', direction: 'descending' });
   // One trades panel open at a time.
   const [expandedHoldingId, setExpandedHoldingId] = useState<number | null>(null);
 
@@ -335,8 +350,8 @@ export function PositionsTable({
   const sectorOptions = useMemo(() => distinctSectorsOf(holdings), [holdings]);
   const tableActions: TableActions = { onDataChanged };
 
-  const handleSort = (clickedField: SortableField) =>
-    setSortState((currentSort) => sortStateAfterClicking(currentSort, clickedField));
+  const handleSort = (clickedColumn: ColumnDefinition) =>
+    setSortState((currentSort) => sortStateAfterClicking(currentSort, clickedColumn));
 
   const toggleExpanded = (holdingId: number) =>
     setExpandedHoldingId((currentlyExpandedId) => (currentlyExpandedId === holdingId ? null : holdingId));
@@ -356,7 +371,7 @@ export function PositionsTable({
             </th>
             {COLUMNS.map((column) => (
               <SortableHeaderCell
-                key={column.field}
+                key={column.key}
                 column={column}
                 sortState={sortState}
                 onSort={handleSort}
@@ -380,6 +395,7 @@ export function PositionsTable({
                   <tr className="border-b border-slate-800/60">
                     <td colSpan={COLUMNS.length + 1} className="px-3 pb-3">
                       <div className="flex flex-col gap-3">
+                        <MomentumDetails momentum={holding.momentum} />
                         <InvestorSplitTable
                           position={{ kind: 'holding', holding }}
                           closedPositions={closedPositionsOf(holding, closedPositions)}

@@ -52,7 +52,9 @@ IBBot, not here.
 
 **Explicitly out of scope (for now):** price forecasts, heavy technical indicators, anything that
 tries to *time the market* — those are short-term tools and already live in IBBot. Tax optimization
-is a nice-to-have for later.
+is a nice-to-have for later. A simple momentum score from daily closes (20/50/200-day averages, distance
+from the 20-day high, a month against SPY — [AI_ANALYSIS_TODO.md](AI_ANALYSIS_TODO.md)) is in: it flags a
+broken trend in a long-term holding, it doesn't time trades.
 
 ---
 

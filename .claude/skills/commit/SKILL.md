@@ -33,16 +33,15 @@ fits, leave it out.
 *In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection, derived buy/sell dates,
 write endpoints for the sector and trades, the UI that shows the positions and enters the sector and trades, the
 reconciliation warnings, the closed positions — commissions, average cost, and manual positions with their own
-trades — and several investors sharing the account, with their deposits):*
+trades — several investors sharing the account, with their deposits, and the momentum score from IB's daily closes):*
 
 | Scope | Covers |
 |---|---|
-| `ib` | `IbGateway`, `PortfolioWrapper`, `TwsPortfolioRunner` — socket, reader loop, EWrapper callbacks, and the startup read from TWS |
-| `model` | `Holding`, `PortfolioSnapshot` and the derived portfolio math |
+| `ib` | `IbGateway`, `PortfolioWrapper`, `TwsPortfolioRunner` — socket, reader loop, EWrapper callbacks (the portfolio's and the daily closes'), and the startup read from TWS |
 | `report` | the console snapshot report and its formatting |
-| `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
+| `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`, which the service puts together), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
-| `domain` | `portfolioboss.domain` (`HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `InvestorWarning`, `InvestorWarningType`) — pure computation over trades (derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit), no Spring |
+| `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`) — what IB reports (`Holding`, `PortfolioSnapshot`, `DailyClose`, `Benchmark`), the shared enums (`TradeSide`, `HoldingStatus`, `CashMovementType`) and the pure computation over trades and prices (`HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `InvestorWarning`, `InvestorWarningType`, `Momentum`, `MomentumLabel`, `OrderCommission`): derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score, the default commission — no Spring, no database |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 
@@ -52,7 +51,7 @@ Tests (`src/test/`) take the scope of the code they cover.
 
 | Scope | Arrives |
 |---|---|
-| `ai` | [AI_ANALYSIS_TODO.md](../../../AI_ANALYSIS_TODO.md) session 2 — `portfolioboss.ai` (Tavily search, Claude extraction) and the analysis endpoint; momentum takes `ib` / `db` / `domain` |
+| `ai` | [AI_ANALYSIS_TODO.md](../../../AI_ANALYSIS_TODO.md) session 2 — `portfolioboss.ai` (Tavily search, Claude extraction) and the analysis endpoint; the momentum (already in) took `ib` / `db` / `calculation` / `ui` |
 | `thesis` | M1 — the written thesis per holding (the actual product) |
 | `analytics` | M3 — concentration, correlated clusters, TWR, SPY benchmark |
 | `averaging` | M3 — the averaging-down calculator and its verdict ladder |

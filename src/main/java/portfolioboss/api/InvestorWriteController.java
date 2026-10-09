@@ -26,38 +26,38 @@ class InvestorWriteController {
 
     private final InvestorWriteService investorWriteService;
 
-    protected InvestorWriteController(InvestorWriteService investorWriteService) {
+    private InvestorWriteController(InvestorWriteService investorWriteService) {
         this.investorWriteService = investorWriteService;
     }
 
     @PostMapping(path = "/api/investors", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<AddedInvestorResponse> addInvestor(@Valid @RequestBody InvestorRequest request) {
+    private ResponseEntity<AddedInvestorResponse> addInvestor(@Valid @RequestBody InvestorRequest request) {
         AddedInvestorResponse addedInvestor = investorWriteService.addInvestor(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(addedInvestor);
     }
 
     @PutMapping(path = "/api/investors/{investorId}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<Void> renameInvestor(@PathVariable long investorId,
-                                                  @Valid @RequestBody InvestorRequest request) {
+    private ResponseEntity<Void> renameInvestor(@PathVariable long investorId,
+                                                @Valid @RequestBody InvestorRequest request) {
         investorWriteService.renameInvestor(investorId, request);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping(path = "/api/investors/{investorId}/cash-movements", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<CashMovementResponse> addCashMovement(@PathVariable long investorId,
-                                                                   @Valid @RequestBody CashMovementRequest request) {
+    private ResponseEntity<CashMovementResponse> addCashMovement(@PathVariable long investorId,
+                                                                 @Valid @RequestBody CashMovementRequest request) {
         CashMovementResponse addedMovement = investorWriteService.addCashMovement(investorId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(addedMovement);
     }
 
     @PutMapping(path = "/api/cash-movements/{movementId}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<CashMovementResponse> changeCashMovement(@PathVariable long movementId,
-                                                                      @Valid @RequestBody CashMovementRequest request) {
+    private ResponseEntity<CashMovementResponse> changeCashMovement(@PathVariable long movementId,
+                                                                    @Valid @RequestBody CashMovementRequest request) {
         return ResponseEntity.ok(investorWriteService.changeCashMovement(movementId, request));
     }
 
     @DeleteMapping("/api/cash-movements/{movementId}")
-    protected ResponseEntity<Void> deleteCashMovement(@PathVariable long movementId) {
+    private ResponseEntity<Void> deleteCashMovement(@PathVariable long movementId) {
         investorWriteService.deleteCashMovement(movementId);
         return ResponseEntity.noContent().build();
     }

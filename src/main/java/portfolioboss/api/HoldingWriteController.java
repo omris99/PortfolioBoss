@@ -32,33 +32,33 @@ class HoldingWriteController {
 
     private final HoldingWriteService holdingWriteService;
 
-    protected HoldingWriteController(HoldingWriteService holdingWriteService) {
+    private HoldingWriteController(HoldingWriteService holdingWriteService) {
         this.holdingWriteService = holdingWriteService;
     }
 
     @PutMapping(path = "/api/holdings/{holdingId}/sector", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<Void> changeSector(@PathVariable long holdingId,
-                                                @Valid @RequestBody SectorRequest sectorRequest) {
+    private ResponseEntity<Void> changeSector(@PathVariable long holdingId,
+                                              @Valid @RequestBody SectorRequest sectorRequest) {
         holdingWriteService.changeSector(holdingId, sectorRequest);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping(path = "/api/holdings/{holdingId}/trades", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<TradeResponse> addTrade(@PathVariable long holdingId,
-                                                     @Valid @RequestBody TradeRequest tradeRequest) {
+    private ResponseEntity<TradeResponse> addTrade(@PathVariable long holdingId,
+                                                   @Valid @RequestBody TradeRequest tradeRequest) {
         TradeResponse addedTrade = holdingWriteService.addTrade(holdingId, tradeRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(addedTrade);
     }
 
     @PutMapping(path = "/api/trades/{tradeId}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<TradeResponse> changeTrade(@PathVariable long tradeId,
-                                                        @Valid @RequestBody TradeRequest tradeRequest) {
+    private ResponseEntity<TradeResponse> changeTrade(@PathVariable long tradeId,
+                                                      @Valid @RequestBody TradeRequest tradeRequest) {
         TradeResponse changedTrade = holdingWriteService.changeTrade(tradeId, tradeRequest);
         return ResponseEntity.ok(changedTrade);
     }
 
     @DeleteMapping("/api/trades/{tradeId}")
-    protected ResponseEntity<Void> deleteTrade(@PathVariable long tradeId) {
+    private ResponseEntity<Void> deleteTrade(@PathVariable long tradeId) {
         holdingWriteService.deleteTrade(tradeId);
         return ResponseEntity.noContent().build();
     }

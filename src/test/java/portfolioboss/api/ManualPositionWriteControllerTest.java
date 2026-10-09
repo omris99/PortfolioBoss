@@ -14,7 +14,7 @@ import portfolioboss.api.request.NewManualPositionRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.ManualPositionResponse;
 import portfolioboss.api.response.TradeResponse;
-import portfolioboss.db.TradeSide;
+import portfolioboss.calculation.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

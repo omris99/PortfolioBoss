@@ -7,13 +7,14 @@ import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.api.request.SectorRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.TradeResponse;
+import portfolioboss.calculation.OrderCommission;
+import portfolioboss.calculation.TradeSide;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
 import portfolioboss.db.InvestorEntity;
 import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.TradeEntity;
 import portfolioboss.db.TradeRepository;
-import portfolioboss.db.TradeSide;
 import portfolioboss.utils.Utils;
 
 /**
@@ -52,7 +53,7 @@ public class HoldingWriteService {
         InvestorEntity investor = investorWriteService.investorOfTrade(tradeRequest.investorId());
         TradeEntity newTrade = new TradeEntity(holding, investor, tradeRequest.tradeDate(), tradeRequest.side(),
                 tradeRequest.quantity(), tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()),
-                Utils.commissionOrDefault(tradeRequest.commission(), tradeRequest.quantity()));
+                OrderCommission.orDefault(tradeRequest.commission(), tradeRequest.quantity()));
         TradeEntity savedTrade = tradeRepository.save(newTrade);   // inserted right away, so it already has its id
         return new TradeResponse(savedTrade);
     }
@@ -70,7 +71,7 @@ public class HoldingWriteService {
         }
         trade.changeDetails(tradeRequest.tradeDate(), tradeRequest.side(), tradeRequest.quantity(),
                 tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()),
-                Utils.commissionOrDefault(tradeRequest.commission(), tradeRequest.quantity()));
+                OrderCommission.orDefault(tradeRequest.commission(), tradeRequest.quantity()));
         if (tradeRequest.investorId() != null) {
             trade.changeInvestor(investorWriteService.investorOfTrade(tradeRequest.investorId()));
         }

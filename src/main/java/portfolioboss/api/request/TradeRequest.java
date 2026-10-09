@@ -6,7 +6,7 @@ import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
-import portfolioboss.db.TradeSide;
+import portfolioboss.calculation.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -17,7 +17,7 @@ import java.time.LocalDate;
  * match the {@code trade} table: {@code NUMERIC(20,6)} holds 14 digits before the decimal point and 6 after it,
  * {@code note} is {@code VARCHAR(500)}. The quantity is a whole number of shares, so it has no decimal places at all.
  * {@code price}, {@code note} and {@code commission} are optional; without a commission the default for one order is
- * stored ({@code Utils.calculateOrderCommission}), and 0 is a commission too. {@code investorId}, added later, is
+ * stored ({@code OrderCommission.defaultFor}), and 0 is a commission too. {@code investorId}, added later, is
  * optional too: a new trade without one is the account owner's, and a correction without one keeps the trade's
  * investor.
  */

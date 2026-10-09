@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.14.0";
+    public static final String VERSION = "0.15.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,18 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.15.0: [Momentum score from IB's daily closes]
+ * V5 migration: daily_close, a year of daily closing prices per contract (every holding, and SPY as the benchmark), keyed by IB's contract id since SPY is read whether or not it is held.
+ * IbGateway / PortfolioWrapper: after the portfolio and still connected, one historical-data request per holding plus SPY (a year of daily bars), waiting up to 20s; reads only, never an order.
+ * A contract whose closes fail (error 162) or come late is left out and keeps its stored ones, never holding up the sync: "[ib] daily closes received for N of M contracts".
+ * PortfolioSyncService.sync(snapshot, dailyCloses): in the same transaction, each contract that sent closes gets its year replaced in full (IB adjusts past prices for splits); a date sent twice is stored once.
+ * Momentum added: a 0–5 score, a point each for a close above SMA 20, above SMA 50, SMA 50 above SMA 200, at most 10% below the 20-day high, and beating SPY over the month; STRONG 4–5, NEUTRAL 2–3, WEAK 0–1.
+ * A figure without enough closes (under 200 for SMA 200, no SPY) is null, and so are the checks that need it; the score and label exist only when all five checks do — never a guess.
+ * GET /api/portfolio: each holding gains momentum (the figures, the five checks, percentBelowHigh, score and label), derived on every read from the stored closes; null while none are stored.
+ * PositionsTable (UI): a Signal column with the score ("M 4/5", emerald STRONG / amber NEUTRAL / rose WEAK), sorted strongest first, and a momentum box at the top of a holding's expanded row.
+ * MomentumDetails: the five checks with ✓/✗ and their figures ("11.7% below 127.39", "+4.30% vs SPY +1.20%"), the date of the closes, and a legend of what each label suggests.
+ * Tests: MomentumTest (with decision 5's two-day-drop example), daily closes in PortfolioWrapperTest and PortfolioSyncServiceTest, momentum in the JSON in PortfolioReadServiceTest and PortfolioControllerTest.
+ *
  * VERSION 0.14.0: [Each investor's share of a shared position]
  * InvestorPart added (domain): one investor's part of one holding — quantity, value at IB's price, cost at average cost — with its unrealized P&L and percent; null when a price is unknown.
  * PositionTrades.partsByInvestor: the account owner's part is IB's value and cost minus the others', so the parts add up to IB's row for the holding and, over every holding, to each card.

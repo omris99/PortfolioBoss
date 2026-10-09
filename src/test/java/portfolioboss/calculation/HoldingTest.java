@@ -1,4 +1,4 @@
-package portfolioboss.model;
+package portfolioboss.calculation;
 
 import org.junit.jupiter.api.Test;
 

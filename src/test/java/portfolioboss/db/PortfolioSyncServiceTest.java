@@ -8,11 +8,14 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import portfolioboss.model.Holding;
-import portfolioboss.model.PortfolioSnapshot;
+import portfolioboss.calculation.Benchmark;
+import portfolioboss.calculation.DailyClose;
+import portfolioboss.calculation.Holding;
+import portfolioboss.calculation.PortfolioSnapshot;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -155,6 +158,44 @@ class PortfolioSyncServiceTest {
         assertThat(instantOf(state, "as_of")).isEqualTo(SECOND_RUN);
     }
 
+    /**
+     * IB sends a contract's whole year again on every connection (a split rewrites its past prices), so it replaces
+     * what was stored; a contract it sent nothing for this time — here SPY — keeps its closes.
+     */
+    @Test
+    void storesTheDailyClosesAndReplacesAContractsOnTheNextSync() {
+        syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)), Map.of(
+                APPLE_CON_ID, List.of(close(2026, 9, 18, 150.0), close(2026, 9, 21, 152.0)),
+                Benchmark.SPY_CON_ID, List.of(close(2026, 9, 21, 600.0))));
+        startNextRun();
+
+        syncService.sync(snapshotOf(SECOND_RUN, apple(10, 150.0)), Map.of(
+                APPLE_CON_ID, List.of(close(2026, 9, 21, 76.0), close(2026, 9, 22, 77.0))));   // after a 2-for-1 split
+
+        assertThat(storedClosesOf(APPLE_CON_ID)).containsExactly(close(2026, 9, 21, 76.0), close(2026, 9, 22, 77.0));
+        assertThat(storedClosesOf(Benchmark.SPY_CON_ID)).containsExactly(close(2026, 9, 21, 600.0));
+    }
+
+    /** A duplicate would break the table's UNIQUE constraint, and with it the whole sync. */
+    @Test
+    void storesADateIbSentTwiceOnceWithTheLaterValue() {
+        syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)), Map.of(
+                APPLE_CON_ID, List.of(close(2026, 9, 21, 150.0), close(2026, 9, 21, 151.0))));
+
+        assertThat(storedClosesOf(APPLE_CON_ID)).containsExactly(close(2026, 9, 21, 151.0));
+    }
+
+    @Test
+    void aSyncWithoutDailyClosesKeepsTheStoredOnes() {
+        syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)), Map.of(
+                APPLE_CON_ID, List.of(close(2026, 9, 21, 150.0))));
+        startNextRun();
+
+        syncService.sync(snapshotOf(SECOND_RUN, apple(10, 150.0)));
+
+        assertThat(storedClosesOf(APPLE_CON_ID)).containsExactly(close(2026, 9, 21, 150.0));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
     /**
@@ -194,6 +235,18 @@ class PortfolioSyncServiceTest {
 
     private Instant instantOf(Map<String, Object> row, String column) {
         return ((Timestamp) row.get(column)).toInstant();
+    }
+
+    private List<DailyClose> storedClosesOf(int conId) {
+        entityManager.flush();
+        return jdbc.query("select bar_date, close_price from daily_close where con_id = ? order by bar_date",
+                (row, rowNumber) -> new DailyClose(row.getObject("bar_date", LocalDate.class),
+                        row.getDouble("close_price")),
+                conId);
+    }
+
+    private DailyClose close(int year, int month, int day, double price) {
+        return new DailyClose(LocalDate.of(year, month, day), price);
     }
 
     private PortfolioSnapshot snapshotOf(Instant asOf, Holding... holdings) {

@@ -8,7 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
-import portfolioboss.domain.CashMovementFact;
+import portfolioboss.calculation.CashMovementFact;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,7 +72,7 @@ public class InvestorEntity {
     }
 
     /**
-     * Reduced to what {@link portfolioboss.domain.InvestorSummaryCalculator} needs, like {@code TradeEntity.toTradeFact()}.
+     * Reduced to what {@link portfolioboss.calculation.InvestorSummaryCalculator} needs, like {@code TradeEntity.toTradeFact()}.
      */
     public List<CashMovementFact> cashMovementFacts() {
         return cashMovements.stream()

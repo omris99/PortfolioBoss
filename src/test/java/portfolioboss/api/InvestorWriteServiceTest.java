@@ -16,10 +16,10 @@ import portfolioboss.api.request.InvestorRequest;
 import portfolioboss.api.response.AddedInvestorResponse;
 import portfolioboss.api.response.CashMovementResponse;
 import portfolioboss.api.response.InvestorResponse;
-import portfolioboss.db.CashMovementType;
+import portfolioboss.calculation.CashMovementType;
+import portfolioboss.calculation.Holding;
+import portfolioboss.calculation.PortfolioSnapshot;
 import portfolioboss.db.PortfolioSyncService;
-import portfolioboss.model.Holding;
-import portfolioboss.model.PortfolioSnapshot;
 
 import java.math.BigDecimal;
 import java.time.Instant;

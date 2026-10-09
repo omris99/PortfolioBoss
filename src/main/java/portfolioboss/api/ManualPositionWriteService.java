@@ -9,12 +9,13 @@ import portfolioboss.api.request.NewManualPositionRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.ManualPositionResponse;
 import portfolioboss.api.response.TradeResponse;
+import portfolioboss.calculation.OrderCommission;
+import portfolioboss.calculation.TradeSide;
 import portfolioboss.db.InvestorEntity;
 import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.ManualPositionRepository;
 import portfolioboss.db.TradeEntity;
 import portfolioboss.db.TradeRepository;
-import portfolioboss.db.TradeSide;
 import portfolioboss.utils.Utils;
 
 import java.util.Locale;
@@ -52,10 +53,10 @@ public class ManualPositionWriteService {
                 Utils.trimmedOrNull(request.sector()), Utils.trimmedOrNull(request.note())));
         tradeRepository.save(new TradeEntity(newPosition, investor, request.buyDate(), TradeSide.BUY,
                 request.quantity(), request.buyPrice(), null,
-                Utils.commissionOrDefault(request.buyCommission(), request.quantity())));
+                OrderCommission.orDefault(request.buyCommission(), request.quantity())));
         tradeRepository.save(new TradeEntity(newPosition, investor, request.sellDate(), TradeSide.SELL,
                 request.quantity(), request.sellPrice(), null,
-                Utils.commissionOrDefault(request.sellCommission(), request.quantity())));
+                OrderCommission.orDefault(request.sellCommission(), request.quantity())));
         return new ManualPositionResponse(newPosition);
     }
 
@@ -82,7 +83,7 @@ public class ManualPositionWriteService {
         InvestorEntity investor = investorWriteService.investorOfTrade(tradeRequest.investorId());
         TradeEntity newTrade = new TradeEntity(manualPosition, investor, tradeRequest.tradeDate(), tradeRequest.side(),
                 tradeRequest.quantity(), tradeRequest.price(), Utils.trimmedOrNull(tradeRequest.note()),
-                Utils.commissionOrDefault(tradeRequest.commission(), tradeRequest.quantity()));
+                OrderCommission.orDefault(tradeRequest.commission(), tradeRequest.quantity()));
         return new TradeResponse(tradeRepository.save(newTrade));
     }
 

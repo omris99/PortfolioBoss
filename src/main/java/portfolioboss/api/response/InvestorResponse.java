@@ -1,8 +1,8 @@
 package portfolioboss.api.response;
 
+import portfolioboss.calculation.InvestorSummary;
+import portfolioboss.calculation.InvestorWarning;
 import portfolioboss.db.InvestorEntity;
-import portfolioboss.domain.InvestorSummary;
-import portfolioboss.domain.InvestorWarning;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -32,7 +32,7 @@ public record InvestorResponse(
         List<CashMovementResponse> cashMovements,
         List<InvestorWarning> warnings) {
 
-    protected InvestorResponse(InvestorEntity investor, InvestorSummary summary) {
+    public InvestorResponse(InvestorEntity investor, InvestorSummary summary) {
         this(investor.id(),
                 investor.name(),
                 investor.isAccountOwner(),

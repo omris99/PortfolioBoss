@@ -131,6 +131,43 @@ export interface Holding {
   warnings: HoldingWarning[];
   /** How `position`, its value and its cost divide between the investors — only those holding some of it. */
   investorQuantities: InvestorQuantity[];
+  /** From the daily closes the last `run.sh` read from IB; `null` while none are stored for this holding. */
+  momentum: Momentum | null;
+}
+
+/** What a momentum score means: `STRONG` 4–5, `NEUTRAL` 2–3, `WEAK` 0–1 (AI_ANALYSIS_TODO.md, decision 5). */
+export type MomentumLabel = 'STRONG' | 'NEUTRAL' | 'WEAK';
+
+/**
+ * A holding's momentum on its last daily close: five checks, a point for each one that holds. Averages are simple ones
+ * of closes. A figure there are not enough closes for is `null`, and so is every check that needs it; the score and the
+ * label exist only when all five checks do.
+ */
+export interface Momentum {
+  /** 'yyyy-MM-dd': the date of the last close. */
+  asOf: string;
+  lastClose: number;
+  sma20: number | null;
+  sma50: number | null;
+  sma200: number | null;
+  /** The highest of the last 20 closes. */
+  high20: number | null;
+  /** The last close against the last one on or before the same day a month earlier. */
+  oneMonthReturnPercent: number | null;
+  /** SPY over the same month. */
+  spyOneMonthReturnPercent: number | null;
+  aboveSma20: boolean | null;
+  aboveSma50: boolean | null;
+  sma50AboveSma200: boolean | null;
+  /** At most 10% below `high20`. */
+  nearHigh: boolean | null;
+  /** This month's return is higher than SPY's. */
+  beatsSpy: boolean | null;
+  /** How far below `high20` the last close is, in percent; 0 at the high. */
+  percentBelowHigh: number | null;
+  /** 0–5. */
+  score: number | null;
+  label: MomentumLabel | null;
 }
 
 /**

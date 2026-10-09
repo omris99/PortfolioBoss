@@ -1,4 +1,4 @@
-package portfolioboss.domain;
+package portfolioboss.calculation;
 
 import java.math.BigDecimal;
 import java.math.MathContext;

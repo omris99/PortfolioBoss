@@ -10,7 +10,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import portfolioboss.domain.TradeFact;
+import portfolioboss.calculation.TradeFact;
+import portfolioboss.calculation.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -136,7 +137,7 @@ public class TradeEntity {
     }
 
     /**
-     * Reduced to what {@link portfolioboss.domain.HoldingHistory} needs: the id, the investor, date, side, amounts and
+     * Reduced to what {@link portfolioboss.calculation.HoldingHistory} needs: the id, the investor, date, side, amounts and
      * commission.
      */
     public TradeFact toTradeFact() {

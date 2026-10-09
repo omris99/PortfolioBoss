@@ -149,35 +149,36 @@ An invalid request answers 400 with the reason (`"quantity: must be greater than
 pom.xml                    # Maven build: Java 21, Spring Boot 4.1.1 (MVC, validation, JPA, Flyway), PostgreSQL driver, JUnit 5
 src/main/java/portfolioboss/
 ├── Main.java              # Spring Boot entry point
-├── TwsPortfolioRunner.java  # startup flow: read the portfolio from TWS, sync it into the database, open the UI
+├── TwsPortfolioRunner.java  # startup flow: read the portfolio and daily closes from TWS, sync them, open the UI
 ├── AppMetadata.java       # version, startup signature, and the changelog (newest entry first)
 ├── api/
 │   ├── PortfolioController.java     # GET /api/portfolio on localhost (Spring MVC)
-│   ├── PortfolioReadService.java    # builds that response from the database
-│   ├── HoldingWriteController.java  # PUT / POST / DELETE for the sector and trades (JSON only)
-│   ├── HoldingWriteService.java     # stores them in the database
+│   ├── PortfolioReadService.java    # puts that response together from the database
+│   ├── HoldingWriteController.java, HoldingWriteService.java    # the sector and trades (JSON only)
+│   ├── ManualPositionWriteController.java, …WriteService.java   # positions sold before the first sync
+│   ├── InvestorWriteController.java, InvestorWriteService.java  # investors and their deposits
 │   ├── ApiErrorHandler.java         # errors as JSON, with the reason spelled out
-│   ├── request/                     # what the UI sends: SectorRequest, TradeRequest (with their validation rules)
-│   └── response/                    # what the UI receives: PortfolioResponse, HoldingResponse, TradeResponse
+│   ├── request/                     # what the UI sends (with their validation rules)
+│   └── response/                    # what the UI receives: the shape of the JSON only
+├── calculation/           # pure Java, no Spring, no database — every other package uses it; it uses only utils
+│   ├── Holding.java, PortfolioSnapshot.java, DailyClose.java, Benchmark.java  # what IB reports
+│   ├── TradeSide.java, HoldingStatus.java, CashMovementType.java             # enums, stored by name
+│   ├── HoldingHistory.java, ClosedPosition.java, …  # buy/sell dates, holding period, realized P&L at average cost
+│   ├── PositionTrades.java, InvestorSummaryCalculator.java, …  # each investor's part, cash and profit
+│   ├── Momentum.java      # the 0–5 momentum score from a year of daily closes
+│   └── OrderCommission.java  # the default commission: 1 cent a share, $5 minimum
 ├── db/
-│   ├── HoldingEntity.java, TradeEntity.java, AccountStateEntity.java  # JPA mappings of the tables
-│   ├── HoldingStatus.java, TradeSide.java  # enums, stored by name
-│   ├── HoldingRepository.java, TradeRepository.java, AccountStateRepository.java
+│   ├── *Entity.java, *Repository.java  # JPA mappings of the tables and their queries
 │   └── PortfolioSyncService.java, SyncResult.java  # the sync at connection: create, refresh or close holdings
-├── domain/
-│   └── HoldingHistory.java, TradeFact.java  # buy/sell dates and holding period from the trades (pure, no Spring)
 ├── ib/
 │   ├── IbGateway.java     # IB socket connection + reader loop (read-only)
-│   └── PortfolioWrapper.java  # EWrapper callbacks: reads holdings, prints, unsubscribes
-├── model/
-│   ├── Holding.java       # one holding (symbol, contract id, qty, avg cost, market value, P&L)
-│   └── PortfolioSnapshot.java  # account, timestamp, net liquidation, cash, holdings
+│   └── PortfolioWrapper.java  # EWrapper callbacks: reads holdings and daily closes, prints, unsubscribes
 ├── ui/
 │   └── UiLauncher.java    # starts the UI dev server and opens it in the browser
 └── utils/
-    └── Utils.java         # IB's NaN / infinity ↔ null, for the JSON and the database
+    └── Utils.java         # IB's NaN / infinity ↔ null, trimming typed text
 src/main/resources/application.properties  # loopback address, port 8080, database connection
-src/main/resources/db/migration/           # Flyway migrations (V1__portfolio_schema.sql)
+src/main/resources/db/migration/           # Flyway migrations (V1 … V5)
 src/test/java/portfolioboss/               # JUnit 5; the database tests use portfolioboss_test
 scripts/backup-db.sh                       # dumps the database to ~/PortfolioBossBackups
 

@@ -1,9 +1,9 @@
 package portfolioboss.api.response;
 
+import portfolioboss.calculation.ClosedPosition;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.TradeEntity;
-import portfolioboss.domain.ClosedPosition;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -54,14 +54,14 @@ public record ClosedPositionResponse(
         List<TradeResponse> trades,
         long investorId) {
 
-    protected ClosedPositionResponse(HoldingEntity holdingEntity, ClosedPosition closedPosition, long investorId) {
+    public ClosedPositionResponse(HoldingEntity holdingEntity, ClosedPosition closedPosition, long investorId) {
         this(holdingEntity.id(), holdingEntity.symbol(), holdingEntity.currency(), holdingEntity.sector(),
                 closedPosition, ClosedPositionSource.TRADES, null, null,
                 tradesOfPeriod(holdingEntity.trades(), closedPosition), investorId);
     }
 
-    protected ClosedPositionResponse(ManualPositionEntity manualPosition, ClosedPosition closedPosition,
-                                     long investorId) {
+    public ClosedPositionResponse(ManualPositionEntity manualPosition, ClosedPosition closedPosition,
+                                  long investorId) {
         this(null, manualPosition.symbol(), manualPosition.currency(), manualPosition.sector(), closedPosition,
                 ClosedPositionSource.MANUAL, manualPosition.id(), manualPosition.note(),
                 tradesOfPeriod(manualPosition.trades(), closedPosition), investorId);

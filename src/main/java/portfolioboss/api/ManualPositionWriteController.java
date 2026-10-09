@@ -28,33 +28,33 @@ class ManualPositionWriteController {
 
     private final ManualPositionWriteService manualPositionWriteService;
 
-    protected ManualPositionWriteController(ManualPositionWriteService manualPositionWriteService) {
+    private ManualPositionWriteController(ManualPositionWriteService manualPositionWriteService) {
         this.manualPositionWriteService = manualPositionWriteService;
     }
 
     @PostMapping(path = "/api/manual-positions", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<ManualPositionResponse> addManualPosition(
+    private ResponseEntity<ManualPositionResponse> addManualPosition(
             @Valid @RequestBody NewManualPositionRequest request) {
         ManualPositionResponse addedPosition = manualPositionWriteService.addManualPosition(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(addedPosition);
     }
 
     @PutMapping(path = "/api/manual-positions/{manualPositionId}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<Void> changeManualPosition(@PathVariable long manualPositionId,
-                                                        @Valid @RequestBody ManualPositionRequest request) {
+    private ResponseEntity<Void> changeManualPosition(@PathVariable long manualPositionId,
+                                                      @Valid @RequestBody ManualPositionRequest request) {
         manualPositionWriteService.changeManualPosition(manualPositionId, request);
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/api/manual-positions/{manualPositionId}")
-    protected ResponseEntity<Void> deleteManualPosition(@PathVariable long manualPositionId) {
+    private ResponseEntity<Void> deleteManualPosition(@PathVariable long manualPositionId) {
         manualPositionWriteService.deleteManualPosition(manualPositionId);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping(path = "/api/manual-positions/{manualPositionId}/trades", consumes = MediaType.APPLICATION_JSON_VALUE)
-    protected ResponseEntity<TradeResponse> addTrade(@PathVariable long manualPositionId,
-                                                     @Valid @RequestBody TradeRequest tradeRequest) {
+    private ResponseEntity<TradeResponse> addTrade(@PathVariable long manualPositionId,
+                                                   @Valid @RequestBody TradeRequest tradeRequest) {
         TradeResponse addedTrade = manualPositionWriteService.addTrade(manualPositionId, tradeRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(addedTrade);
     }

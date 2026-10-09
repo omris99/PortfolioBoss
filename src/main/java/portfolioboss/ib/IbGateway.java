@@ -1,10 +1,16 @@
 package portfolioboss.ib;
 
+import com.ib.client.Contract;
 import com.ib.client.EClientSocket;
 import com.ib.client.EJavaSignal;
 import com.ib.client.EReader;
-import portfolioboss.model.PortfolioSnapshot;
+import portfolioboss.calculation.DailyClose;
+import portfolioboss.calculation.PortfolioSnapshot;
 
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -16,6 +22,9 @@ import java.util.concurrent.TimeUnit;
  * exposes no order-placement method.
  */
 public class IbGateway {
+
+    /** The daily-close requests are numbered from here; nothing else in PortfolioBoss uses request ids. */
+    private static final int FIRST_DAILY_CLOSE_REQUEST_ID = 1000;
 
     private final EJavaSignal signal = new EJavaSignal();
     private final PortfolioWrapper wrapper = new PortfolioWrapper();
@@ -71,6 +80,44 @@ public class IbGateway {
     /** The downloaded portfolio, or {@code null} if {@link #awaitPortfolio} did not succeed. */
     public PortfolioSnapshot snapshot() {
         return wrapper.snapshot();
+    }
+
+    /**
+     * Asks IB for a year of daily closing prices of each contract, by contract id — a read, like the portfolio. One
+     * request per contract; the bars arrive on the reader thread, and {@link #awaitDailyCloses} waits for them.
+     */
+    public void requestDailyCloses(Collection<Integer> conIds) {
+        Map<Integer, Integer> conIdByRequestId = new LinkedHashMap<>();
+        int requestId = FIRST_DAILY_CLOSE_REQUEST_ID;
+        for (int conId : conIds) {
+            conIdByRequestId.put(requestId++, conId);
+        }
+        wrapper.expectDailyCloses(conIdByRequestId);
+        System.out.printf("[ib] requesting a year of daily closes for %d contracts%n", conIds.size());
+        conIdByRequestId.forEach((dailyCloseRequestId, conId) -> client.reqHistoricalData(
+                dailyCloseRequestId, contractOf(conId), "", "1 Y", "1 day", "TRADES",
+                1,       // regular trading hours only
+                1,       // dates as yyyyMMdd
+                false,   // one answer, not a live subscription
+                null));
+    }
+
+    /** Blocks until every daily-close request has ended, or the timeout elapses. */
+    public boolean awaitDailyCloses(long timeout, TimeUnit unit) throws InterruptedException {
+        return wrapper.awaitDailyCloses(timeout, unit);
+    }
+
+    /** By contract id, the closes of the requests that have ended with at least one. */
+    public Map<Integer, List<DailyClose>> dailyCloses() {
+        return wrapper.dailyCloses();
+    }
+
+    /** A contract id and an exchange are all IB needs to know which contract is meant. */
+    private Contract contractOf(int conId) {
+        Contract contract = new Contract();
+        contract.conid(conId);
+        contract.exchange("SMART");
+        return contract;
     }
 
     public void disconnect() {

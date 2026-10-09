@@ -1,6 +1,6 @@
 package portfolioboss.api.response;
 
-import portfolioboss.db.CashMovementType;
+import portfolioboss.calculation.CashMovementType;
 import portfolioboss.db.InvestorCashMovementEntity;
 
 import java.math.BigDecimal;

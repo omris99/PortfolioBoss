@@ -1,7 +1,4 @@
-package portfolioboss.domain;
-
-import portfolioboss.db.HoldingStatus;
-import portfolioboss.db.TradeSide;
+package portfolioboss.calculation;
 
 import java.math.BigDecimal;
 import java.math.MathContext;

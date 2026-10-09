@@ -1,6 +1,4 @@
-package portfolioboss.domain;
-
-import portfolioboss.db.TradeSide;
+package portfolioboss.calculation;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -13,7 +11,7 @@ import java.time.LocalDate;
  * @param investorId whose trade it is: their shares, their cash ({@link InvestorSummaryCalculator})
  * @param price      the price per share, or {@code null} if none was entered
  * @param commission what the broker charged for it — never {@code null}: a trade entered without one is stored with
- *                   the default ({@code Utils.calculateOrderCommission})
+ *                   the default ({@code OrderCommission.defaultFor})
  */
 public record TradeFact(Long id, long investorId, LocalDate date, TradeSide side, BigDecimal quantity,
                         BigDecimal price, BigDecimal commission) {

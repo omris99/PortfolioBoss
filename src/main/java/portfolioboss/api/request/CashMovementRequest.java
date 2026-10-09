@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-import portfolioboss.db.CashMovementType;
+import portfolioboss.calculation.CashMovementType;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

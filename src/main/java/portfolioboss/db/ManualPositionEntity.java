@@ -7,8 +7,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
-import portfolioboss.domain.PositionTrades;
-import portfolioboss.domain.TradeFact;
+import portfolioboss.calculation.PositionTrades;
+import portfolioboss.calculation.TradeFact;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -86,7 +86,7 @@ public class ManualPositionEntity {
         return new PositionTrades(symbol, currency, null, getTradeFacts());
     }
 
-    /** Its trades reduced to what the computation in {@code domain} needs ({@link TradeEntity#toTradeFact()}). */
+    /** Its trades reduced to what the computation in {@code calculation} needs ({@link TradeEntity#toTradeFact()}). */
     private List<TradeFact> getTradeFacts() {
         return trades.stream().map(TradeEntity::toTradeFact).toList();
     }

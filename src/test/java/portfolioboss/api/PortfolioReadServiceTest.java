@@ -13,23 +13,29 @@ import portfolioboss.api.response.ClosedPositionSource;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
 import portfolioboss.api.response.InvestorResponse;
+import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.TradeResponse;
-import portfolioboss.db.CashMovementType;
-import portfolioboss.db.HoldingStatus;
+import portfolioboss.calculation.Benchmark;
+import portfolioboss.calculation.CashMovementType;
+import portfolioboss.calculation.DailyClose;
+import portfolioboss.calculation.Holding;
+import portfolioboss.calculation.HoldingStatus;
+import portfolioboss.calculation.HoldingWarning;
+import portfolioboss.calculation.HoldingWarningType;
+import portfolioboss.calculation.MomentumLabel;
+import portfolioboss.calculation.PortfolioSnapshot;
+import portfolioboss.calculation.TradeSide;
 import portfolioboss.db.PortfolioSyncService;
-import portfolioboss.db.TradeSide;
-import portfolioboss.domain.HoldingWarning;
-import portfolioboss.domain.HoldingWarningType;
-import portfolioboss.model.Holding;
-import portfolioboss.model.PortfolioSnapshot;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,6 +59,7 @@ class PortfolioReadServiceTest {
     private static final int NVIDIA_CON_ID = 4815747;
     private static final Instant FIRST_RUN = Instant.parse("2026-09-21T08:00:00Z");
     private static final Instant SECOND_RUN = Instant.parse("2026-09-22T08:00:00Z");
+    private static final LocalDate FIRST_CLOSE_DATE = LocalDate.of(2026, 1, 1);
 
     @Autowired
     private PortfolioSyncService syncService;
@@ -344,6 +351,25 @@ class PortfolioReadServiceTest {
                 .containsExactly(tuple("AAPL", HoldingStatus.CLOSED, 0.0), tuple("MSFT", HoldingStatus.OPEN, 5.0));
     }
 
+    /** A year of closes rising faster than SPY's: every check holds. Microsoft has no closes stored: no momentum. */
+    @Test
+    void servesTheMomentumFromTheStoredDailyCloses() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0), microsoft(5, 300.0)), Map.of(
+                APPLE_CON_ID, risingCloses(0.003),
+                Benchmark.SPY_CON_ID, risingCloses(0.001)));
+
+        PortfolioResponse portfolio = readPortfolio().orElseThrow();
+
+        MomentumResponse appleMomentum = portfolio.holdings().get(0).momentum();
+        assertThat(appleMomentum.asOf()).isEqualTo(FIRST_CLOSE_DATE.plusDays(249));
+        assertThat(appleMomentum.sma200()).isNotNull();
+        assertThat(appleMomentum.beatsSpy()).isTrue();
+        assertThat(appleMomentum.score()).isEqualTo(5);
+        assertThat(appleMomentum.label()).isEqualTo(MomentumLabel.STRONG);
+        assertThat(portfolio.holdings().get(1).symbol()).isEqualTo("MSFT");
+        assertThat(portfolio.holdings().get(1).momentum()).isNull();
+    }
+
     @Test
     void servesTheLatestSyncOnly() {
         syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0)));
@@ -439,6 +465,15 @@ class PortfolioReadServiceTest {
                         + "values (?, ?, ?, ?, ?, ?, 0)",
                 manualPositionId, accountOwnerId(), tradeDate, side.name(), new BigDecimal(quantity),
                 new BigDecimal(price));
+    }
+
+    /** 250 daily closes from {@link #FIRST_CLOSE_DATE}, growing by {@code dailyGrowth} a day. */
+    private List<DailyClose> risingCloses(double dailyGrowth) {
+        List<DailyClose> closes = new ArrayList<>();
+        for (int day = 0; day < 250; day++) {
+            closes.add(new DailyClose(FIRST_CLOSE_DATE.plusDays(day), 100 * Math.pow(1 + dailyGrowth, day)));
+        }
+        return closes;
     }
 
     private Holding apple(double position, double averageCost) {

@@ -18,10 +18,10 @@ import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
 import portfolioboss.api.response.TradeResponse;
+import portfolioboss.calculation.Holding;
+import portfolioboss.calculation.PortfolioSnapshot;
+import portfolioboss.calculation.TradeSide;
 import portfolioboss.db.PortfolioSyncService;
-import portfolioboss.db.TradeSide;
-import portfolioboss.model.Holding;
-import portfolioboss.model.PortfolioSnapshot;
 
 import java.math.BigDecimal;
 import java.time.Instant;

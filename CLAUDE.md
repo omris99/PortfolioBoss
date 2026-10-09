@@ -30,15 +30,17 @@ its sessions 1 (schema, computation, read API), 2 (write endpoints for investors
 3 (UI) and 4 (each investor's part of a shared position's profit) are done; its "out of scope" list holds the ideas for
 later. [AI_ANALYSIS_TODO.md](AI_ANALYSIS_TODO.md) is next: for each holding, momentum from IB's daily closes, and an
 analysis of analyst ratings and news — the server searches Tavily, Claude (Sonnet 5.5, no tools) only extracts JSON, and
-the code picks the consensus source and a colored signal — run only from a button. Its session 0 (the experiment that
-settled the model and the searches) is done; sessions 1 (momentum), 2 (the analysis backend) and 3 (UI) are not started.
-Its API keys go in the git-ignored `config/local.env`, which Claude never reads or prints.
+the code picks the consensus source and a colored signal — run only from a button. Its sessions 0 (the experiment that
+settled the model and the searches) and 1 (momentum: a 0–5 score from IB's daily closes, in `/api/portfolio`) are done,
+and so is the momentum part of session 3's UI, brought forward (the Signal column and the momentum box in a holding's
+expanded row); session 2 (the analysis backend) and the rest of session 3 are next. Its API keys go in the git-ignored
+`config/local.env`, which Claude never reads or prints.
 
 ## Hard invariant: read-only
 
 PortfolioBoss reads the account and **never places, modifies, or cancels an order**. `IbGateway`
 deliberately exposes no order-placement method, and `PortfolioWrapper` overrides only the
-account-reading callbacks. Do not add `placeOrder`, `cancelOrder`, or order-related `EWrapper`
+account-reading callbacks and, for the momentum, the daily-bar ones (`historicalData` / `historicalDataEnd` — reads too). Do not add `placeOrder`, `cancelOrder`, or order-related `EWrapper`
 callbacks — if a task seems to need them, it is the wrong project.
 
 The local API never touches the IB account either. It writes only to PortfolioBoss's own database — the
@@ -84,7 +86,9 @@ later step).
 Tests: `mvn -q test` (JUnit 5; no TWS, but the database tests need `portfolioboss_test` running — see
 above). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc` + `@MockitoBean` on `PortfolioReadService`)
 pins the JSON contract the UI depends on with made-up responses, no database needed; `HoldingTest` covers
-the derived math; `PortfolioWrapperTest` feeds `PortfolioWrapper` IB callbacks directly, no socket.
+the derived math; `PortfolioWrapperTest` feeds `PortfolioWrapper` IB callbacks directly, no socket — the portfolio's and
+the daily closes' (an error ending one request, a request still running at the timeout, an unreadable bar date);
+`MomentumTest` covers the momentum score on made-up series of closes (decision 5's two-day-drop example among them).
 `PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
 `ManualPositionWriteServiceTest` and `InvestorWriteServiceTest` are `@DataJpaTest`s against the real
 `portfolioboss_test` database (`src/test/resources/application-test.properties`, `@ActiveProfiles("test")`), each test
@@ -92,7 +96,8 @@ rolled back automatically. The write endpoints are tested in the same two halves
 `ManualPositionWriteControllerTest` and `InvestorWriteControllerTest` (`@WebMvcTest`, service mocked) for status
 codes, validation messages and the JSON-only rule, the `*WriteServiceTest`s for what is stored. `ClosedPositionTest`
 and `HoldingHistoryTest` cover the average-cost math, `InvestorSummaryCalculatorTest` (INVESTORS_TODO.md's worked
-example among them) and `PositionTradesTest` the split between investors, `UtilsTest` the default commission. After a
+example among them) and `PositionTradesTest` the split between investors, `OrderCommissionTest` the default commission,
+`UtilsTest` the trimming of typed text. After a
 change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
 would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
 `target/surefire-reports/` keeps the reports of tests that have since been deleted.
@@ -141,14 +146,14 @@ what delivers real quantity and **average cost** from the broker.
 
 ```
 Main (Spring Boot: brings the web server up, then Spring runs the runner)
-  └──> TwsPortfolioRunner ──> IbGateway ──owns──> PortfolioWrapper ──> Holding (+conId), PortfolioSnapshot
-        │                     (socket + reader loop)  (EWrapper callbacks)
-        ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state)
+  └──> TwsPortfolioRunner ──> IbGateway ──owns──> PortfolioWrapper ──> Holding (+conId), PortfolioSnapshot,
+        │                     (socket + reader loop)  (EWrapper callbacks)    DailyClose (a year per holding + SPY)
+        ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state · daily_close)
         └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser
 
 PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
-        │                     (api/response/*Response,                    driven by HTTP requests, not by TWS)
-        │                      +domain/HoldingHistory, InvestorSummaryCalculator)
+        │                     (builds api/response/*Response              driven by HTTP requests, not by TWS)
+        │                      with calculation/HoldingHistory, InvestorSummaryCalculator, Momentum)
         └──JSON──> ui/ (React; the dev server proxies /api to :8080)
 
 HoldingWriteController ──writes── HoldingWriteService ──writes── Postgres  (sector and trade rows only;
@@ -177,8 +182,13 @@ The sync-at-connection lifecycle, which is the part worth knowing:
 4. `accountDownloadEnd` stores a `PortfolioSnapshot` (exposed by `IbGateway.snapshot()`), prints the
    report, **unsubscribes** (`reqAccountUpdates(false, …)` — we want a snapshot, not the ~3-minute
    live updates), and counts down a `CountDownLatch`.
-5. `TwsPortfolioRunner` is blocked on that latch with a 15s timeout, then disconnects. With a snapshot
-   it hands it to `PortfolioSyncService.sync`, which upserts it into the database (see below). Either
+5. `TwsPortfolioRunner` is blocked on that latch with a 15s timeout. With a snapshot, **still connected**, it asks
+   for the daily closes (`readDailyCloses`): `IbGateway.requestDailyCloses` sends one `reqHistoricalData` per contract
+   — every holding plus SPY (`calculation.Benchmark.SPY_CON_ID` = 756733, IB's fixed id, requested whether or not SPY is
+   held), by conId + `SMART`, `"1 Y"` of `"1 day"` `TRADES` bars, regular hours, dates as `yyyyMMdd`, request ids from
+   1000 — and waits up to 20s (`awaitDailyCloses`); late or failed contracts are just left out (`[ib] daily closes
+   received for N of M contracts`). Then it disconnects and hands the snapshot and the closes to
+   `PortfolioSyncService.sync(snapshot, dailyCloses)`, which upserts them into the database (see below). Either
    way — synced or not — it then launches the UI and returns; Tomcat's non-daemon threads keep the
    JVM alive until Ctrl+C. If the sync itself throws (a database problem, not a TWS problem) it prints
    `[db error]` and calls `System.exit(SpringApplication.exit(applicationContext, () -> 1))`: the database
@@ -197,7 +207,11 @@ small wrapper on purpose.
 
 Error handling note: `INFO_CODES` in `PortfolioWrapper` filters IB's informational status codes
 (2104, 2106, …) to stdout; codes 502/504 mean connection failure and release the latch early so the
-program reports a clear message instead of waiting out the timeout.
+program reports a clear message instead of waiting out the timeout. An error carrying a daily-close request id (162, no
+market data permission) ends that one request without closes (`[ib error] daily closes of contract …`) — the contract
+keeps the closes of an earlier sync. The daily closes arrive on the reader thread while the startup thread waits, so
+they sit in concurrent collections; `dailyCloses()` serves only requests that have ended (a timeout leaves a half-received
+one out), and a bar whose date can't be read is skipped — an exception there would stop the reader loop's whole batch.
 
 `Holding` is a record mirroring `updatePortfolio` exactly — the broker is the source of truth, so no
 field is hand-entered — plus `conId`, IB's stable contract id, its second component. Derived math
@@ -217,8 +231,9 @@ The hand-entered side is written only by `api.HoldingWriteService`, `api.ManualP
 `api.InvestorWriteService` (below), through `HoldingEntity.changeSector`, the `TradeEntity` constructors,
 `changeDetails` and `changeInvestor`, `ManualPositionEntity`'s constructor and `changeDetails`, `InvestorEntity`'s
 constructor and `changeName`, and `InvestorCashMovementEntity`'s constructor and `changeDetails`. `V2__closed_positions.sql` added `trade.commission`
-(`NOT NULL`: a trade entered without one stores the default, `Utils.calculateOrderCommission` — 1 cent a share, at
-least $5 an order, IBBot's rule — worked out at write time). `V3__manual_positions.sql` added `manual_position`
+(`NOT NULL`: a trade entered without one stores the default, `calculation.OrderCommission.defaultFor` — 1 cent a share,
+at least $5 an order, IBBot's rule — worked out at write time; V2's own comment still calls it
+`Utils.calculateOrderCommission`, its name then, since a migration that has run is never edited). `V3__manual_positions.sql` added `manual_position`
 (`ManualPositionEntity`): a position PortfolioBoss never saw as a holding, sold before the first sync, kept apart from
 `holding` because only the sync creates holdings. Its buys and sells are ordinary `trade` rows — a trade belongs to a
 holding **or** a manual position (`holding_id` / `manual_position_id`, exactly one set, checked by the table) — so they
@@ -228,18 +243,27 @@ manual positions (same ids, one buy and one sell) and dropped it. `V4__investors
 `investor_cash_movement` (`InvestorCashMovementEntity`: date, `CashMovementType` `DEPOSIT` / `WITHDRAWAL`, amount, note
 — only for investors other than the owner), and made `trade.investor_id` `NOT NULL`, every trade entered before it
 the owner's. `TradeEntity.investorId()` is a plain id, not a link to the entity: the computation needs only the id,
-and the UI gets the names from `investors`. `HoldingRepository`, `TradeRepository`, `ManualPositionRepository`,
-`InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the default method
-`accountOwner()`), `InvestorCashMovementRepository` and `AccountStateRepository` are the repositories.
+and the UI gets the names from `investors`. `V5__daily_closes.sql` added `daily_close` (`DailyCloseEntity`: `con_id`,
+`bar_date`, `close_price` — an IB figure, so `DOUBLE PRECISION`; a generated `id` plus `UNIQUE (con_id, bar_date)`,
+since a two-column key needs a separate key class in JPA): a year of daily closes per contract, for the momentum, keyed by
+IB's contract id rather than by holding because SPY is read whether or not it is held. `sync(snapshot, dailyCloses)`
+replaces in full the rows of every contract IB sent closes for — IB adjusts past prices for splits, so nothing old is
+kept — and leaves the others alone; `sync(snapshot)` is the same with no closes. `HoldingRepository`, `TradeRepository`,
+`ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
+default method `accountOwner()`), `InvestorCashMovementRepository`, `AccountStateRepository` and `DailyCloseRepository`
+(`findByConIdInOrderByConIdAscBarDateAsc`, and `deleteForContracts` — a hand-written `@Modifying @Query` bulk `DELETE`,
+because a derived `deleteBy…` loads every row and deletes them one at a time) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V5__….sql`.
+  checksum): a schema change is a new `V6__….sql`.
+- A daily close IB sends twice for the same date is stored once (the later value): a duplicate would break
+  `daily_close`'s `UNIQUE` constraint and, with it, the whole sync — which exits the app.
 - `ddl-auto=validate` makes Hibernate check the entities against the tables at startup and change nothing;
   never set it to `update` or `create`.
 - Figures from IB are `DOUBLE PRECISION` columns under `Double` fields; amounts typed in by hand
   (`trade.quantity`, `price`, `commission`) are `NUMERIC` under `BigDecimal`. A `NUMERIC` column under a `Double` field
   fails validation at startup (tried).
-- `HoldingEntity` (a stored row), `model.Holding` (one IB reading) and `HoldingResponse` (what the UI gets)
+- `HoldingEntity` (a stored row), `calculation.Holding` (one IB reading) and `HoldingResponse` (what the UI gets)
   are three different things on purpose — `HoldingEntity.toIbHolding()` rebuilds a `Holding` from the stored
   row (`NULL` → `NaN`) so the derived math is never duplicated outside `Holding`.
 - `scripts/backup-db.sh` dumps the database to `~/PortfolioBossBackups`, outside the repo.
@@ -248,13 +272,18 @@ Things that are easy to break:
   `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
-  database and compared table by table first). A live check that writes test data (a made-up investor) runs against a
+  database and compared table by table first). One that only adds a table (V5) still gets the backup first, checked
+  for the same row counts as the database. A live check that writes test data (a made-up investor) runs against a
   scratch copy too, pointed at with `SPRING_DATASOURCE_URL`: there is no way to delete an investor.
 
-`portfolioboss.domain` holds `HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`,
-and for the investors `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`,
-`InvestorWarning` and `InvestorWarningType` — pure computation, no Spring and no database, so it is unit tested
-directly. A holding's
+`portfolioboss.calculation` (until 2026-10-08 two packages, `domain` and `model`, merged and renamed to say what it
+holds) holds what IB reports — `Holding`, `PortfolioSnapshot`, `DailyClose`, `Benchmark` —, the enums the entities and
+the JSON share with the computation — `TradeSide`, `HoldingStatus`, `CashMovementType` —, and the computation itself:
+`HoldingHistory`, `ClosedPosition`, `TradeFact`, `HoldingWarning`, `HoldingWarningType`, for the investors
+`PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `InvestorWarning` and
+`InvestorWarningType`, for the momentum `Momentum` and `MomentumLabel`, and `OrderCommission` (the default commission) —
+pure Java, no Spring and no database, so it is unit tested directly. Every other package uses it, and it uses none of
+them but `utils` (see Conventions). A holding's
 `firstBuyDate`, `lastSellDate`, `holdingDays` and closed positions are derived from its `trade` rows, never stored:
 `HoldingHistory.of(List<TradeFact>)` walks them in chronological order (a buy before a sell on the same date) tracking
 a running quantity, and splits them into **position periods** (the private record `PositionPeriod`): a buy while flat
@@ -314,16 +343,34 @@ Things that are easy to break:
 - A `NaN` IB position skips the quantity check: `BigDecimal.valueOf(NaN)` throws, which would be a 500.
 - Prices and average cost are never compared: IB's average cost includes commissions and would never match.
 
+The momentum (AI_ANALYSIS_TODO.md, decision 5) is derived on every read from the stored daily closes, never stored:
+`Momentum.of(closes, spyCloses)` (`null` without a single close) keeps the raw figures as record components — `asOf`,
+`lastClose`, `sma20` / `sma50` / `sma200` (simple averages of the last 20 / 50 / 200 closes), `high20` (the highest of
+the last 20), `oneMonthReturnPercent` and SPY's over the same calendar month (from the last close on or before the same
+day a month earlier, so a weekend takes the Friday) — and derives five checks, a point each: `aboveSma20`, `aboveSma50`,
+`sma50AboveSma200`, `nearHigh` (at most 10% below `high20`, inclusive) and `beatsSpy`; `score()` counts them and
+`label()` maps it (`MomentumLabel`: `STRONG` 4–5, `NEUTRAL` 2–3, `WEAK` 0–1). A figure there are not enough closes for
+is `null`, so is every check that needs it, and the score and label exist only when all five checks do — never a
+guess. The private record `DailyCloses` sorts one contract's closes once and computes the figures from them, so only
+`of` is static. Things that are easy to break:
+- `beatsSpy` is a strict "greater than", so SPY itself can never score more than 4/5.
+- The 20-day average and the one-month comparison react fast on purpose (an early warning after a drop): the label
+  changes far more often than a 200-day rule would.
+
 `PortfolioController` (Spring MVC) serves `GET /api/portfolio` through `PortfolioReadService`
 (`@Transactional(readOnly = true)`, since `open-in-view=false` means entities must be read inside the
 transaction): 503 until a sync has ever stored an `account_state` row, then 200 with `Cache-Control:
 no-store` and a `PortfolioResponse` built from the latest sync — including closed holdings, which the UI
-filters. The response records (`PortfolioResponse`, `HoldingResponse`) live in `api/response/`; Jackson
+filters. `PortfolioReadService` puts the whole response together: its private methods build each holding
+(`holdingResponseOf`), the closed positions and the investors' cards. The response records only hold the result — at
+most a constructor that copies fields from one entity or one computed object (`TradeResponse(TradeEntity)`,
+`MomentumResponse(Momentum)`, `InvestorResponse(InvestorEntity, InvestorSummary)`, …). They live in
+`api/response/`; Jackson
 turns them into JSON, so their component names **are** the JSON keys and must stay stable
 (`ui/src/types/portfolio.ts` mirrors them) — add fields, don't rename or remove. Beyond the original IB
 fields, `HoldingResponse` also carries `id`, `conId`, `sector`, `status`, and — derived via
-`domain.HoldingHistory`, see above — `firstBuyDate`, `lastSellDate`, `holdingDays` and `trades`
-(a `List<TradeResponse>`, one entry per `trade` row), and `warnings` (a `List<domain.HoldingWarning>`, see above);
+`calculation.HoldingHistory`, see above — `firstBuyDate`, `lastSellDate`, `holdingDays` and `trades`
+(a `List<TradeResponse>`, one entry per `trade` row), and `warnings` (a `List<calculation.HoldingWarning>`, see above);
 the UI reads all of them. `HoldingWarning` and its enum go into the JSON as they are, with no `*Response` copy — the
 same as `HoldingStatus` and `TradeSide` — so their names are JSON keys and values too.
 `PortfolioResponse.closedPositions` (at the top level) is every holding's and then every manual position's closed
@@ -337,10 +384,13 @@ or in part before. The UI sums the realized P&L per currency — in all, per inv
 investor" table (no endpoint does it). `PortfolioResponse.investors` (added last) is one
 `InvestorResponse` per investor, the account owner first: `id`, `name`, `accountOwner`, the `InvestorSummary` figures
 and its derived ones, `realizedPnlByCurrency` (a `{"HKD": 950, "USD": 500}` map), `cashMovements`
-(`CashMovementResponse`s) and `warnings` (`domain.InvestorWarning`, as it is). `HoldingResponse.investorQuantities`
+(`CashMovementResponse`s) and `warnings` (`calculation.InvestorWarning`, as it is). `HoldingResponse.investorQuantities`
 (`InvestorQuantityResponse(investorId, quantity, sharesValue, sharesCost, unrealizedPnl, unrealizedPnlPercent)` — one
 `InvestorPart` each, only investors holding some of it; the four figures were appended in INVESTORS_TODO.md session 4)
-and `TradeResponse.investorId` were appended for the split. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
+and `TradeResponse.investorId` were appended for the split. `HoldingResponse.momentum` (appended last) is a
+`MomentumResponse` — `Momentum`'s figures, its five checks, `percentBelowHigh`, `score` and `label` (`MomentumLabel` goes
+into the JSON as it is) — or `null` while no closes are stored for the holding: `PortfolioReadService` loads the closes of
+every holding and of SPY in one query, and hands each holding's, with SPY's, to `Momentum.of`. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
 in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.
@@ -372,7 +422,7 @@ limits that mirror the columns (`@Digits(integer = 14, fraction = 6)` for a pric
 with its own readable message; a quantity is a **whole number** of shares, `@Digits(integer = 14, fraction = 0)` —
 "must be a whole number (at most 14 digits)", which also rejects a raw `10.0` since it counts the decimals as
 written; `@Size` for the `VARCHAR`s, `@PastOrPresent` dates). A commission left empty stores the default
-(`Utils.commissionOrDefault`); 0 is a commission too. The sector and the note are trimmed, and blank becomes `null`.
+(`OrderCommission.orDefault`); 0 is a commission too. The sector and the note are trimmed, and blank becomes `null`.
 An unknown id is a `ResponseStatusException` with 404. `ApiErrorHandler` (`@RestControllerAdvice extends
 ResponseEntityExceptionHandler`) makes every error a `ProblemDetail` JSON body (`status`, `title`, `detail`)
 and overrides only the validation case, so that `detail` names the fields — `"quantity: must be greater than
@@ -403,11 +453,17 @@ Things that are easy to break:
 
 - Console output uses `[ib]` prefixes for connection lifecycle, `[ib error]` for real errors, `[api]`
   for the local API, `[ui]` / `[ui error]` for the UI launcher, and `[db]` / `[db error]` for the sync
-  (`[db] synced N holdings (N new, M updated, K closed)` on success; `[db] TWS unreachable; serving the
-  portfolio from the last sync, if any` when TWS could not be read; `[db error]` only when the sync
-  itself fails, which is also the only case that still exits the app).
+  (`[db] synced N holdings (N new, M updated, K closed)` on success, then `[db] stored N daily closes for M contracts`;
+  `[db] TWS unreachable; serving the portfolio from the last sync, if any` when TWS could not be read; `[db error]` only
+  when the sync itself fails, which is also the only case that still exits the app). The daily closes print
+  `[ib] requesting a year of daily closes for N contracts` and `[ib] daily closes received for N of M contracts`.
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
   `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`.
+- Package dependencies point one way, toward `calculation`: `ib`, `db` and `api` use it, and it uses nothing of the
+  app's but `utils` — no Spring, no database, no IB API. A type that both the computation and an entity or a request
+  need (an enum like `TradeSide`) goes in `calculation`, not in `db`; before 2026-10-08 three enums sat in `db` and
+  the two packages depended on each other. The records in `api.response` only hold the JSON's shape; putting them
+  together is `PortfolioReadService`'s job, as private methods, not static factories on the records.
 - Readability over brevity, in Java and TypeScript alike: descriptive names (`holding`,
   `sortState`, `response`), never one-letter variables (the conventional `e` in a `catch` is fine),
   and small functions/components with a single job instead of long inline expressions.
@@ -419,15 +475,21 @@ Things that are easy to break:
   `HoldingEntity.id()`/`sector()`/`trades()`/`toIbHolding()`/`changeSector()`, `TradeEntity`'s constructors and
   `changeDetails()`/`changeInvestor()`, `ManualPositionEntity`'s constructor and `changeDetails()`, `InvestorEntity`'s
   constructor and `changeName()`, `toPositionTrades()`, `TradeResponse(TradeEntity)` — built by the write services in
-  `api`, …) are
+  `api` —, the other response records' copy constructors, which `PortfolioReadService` calls, …) are
   `public`. Everything internal to a class's own package — `HoldingEntity`'s and `AccountStateEntity`'s
-  from-a-snapshot constructors, `refreshFromIb`, `markClosed`, `HoldingResponse.from`'s entity-to-response
-  conversion, `TwsPortfolioRunner`'s own constructor — is marked `protected` rather than
+  from-a-snapshot constructors, `refreshFromIb`, `markClosed`, the `PortfolioWrapper` methods `IbGateway` calls,
+  `HoldingHistory.QUANTITY_TOLERANCE` — is marked `protected` rather than
   left as the unmarked package-private default: an explicit keyword is easier to spot while reading than the
   *absence* of one. (On a `record`, always `final`, or on a package-private top-level class, `protected` is
   exactly as reachable as package-private in practice — nothing outside the package can subclass either — so
-  this is a readability choice, not a wider one.) A helper used by more than one layer —
-  `portfolioboss.utils.Utils`, shared by `api.response` and `db` — is the one exception to "narrow package,"
+  this is a readability choice, not a wider one.) What only Spring calls, by reflection, is `private`: the
+  controllers' constructors and endpoint methods, and `TwsPortfolioRunner`'s constructor. JPA entities' empty
+  constructors stay `protected`: Hibernate's lazy-loading stand-in subclass calls them (`private` broke tests). `static`
+  only with a real reason — `main`, helper classes with a private constructor (`Utils`, `AppMetadata`, `Benchmark`,
+  `OrderCommission`), a factory that has to compute before the record exists (`HoldingHistory.of`, `Momentum.of`) — and
+  constants stay `static final`; a helper that doesn't touch fields is still an instance method, and a factory that only
+  copies fields is a constructor. A helper used by more than one layer —
+  `portfolioboss.utils.Utils`, shared by `api`, `db` and `calculation` — is the one exception to "narrow package,"
   and lives in its own package rather than being duplicated per layer.
 - Changelog: a notable change bumps `AppMetadata.VERSION` and adds an entry at the top of the
   changelog comment below the class in `AppMetadata.java` (copied from IBBot). Format:
@@ -442,7 +504,8 @@ Things that are easy to break:
 - Milestone 1 direction: Maven, Spring Boot REST, the PostgreSQL schema and entities, the sync at connection,
   deriving buy/sell dates and holding period from `trade` rows, the write endpoints for the sector and trades,
   the UI to show and enter them, the reconciliation warnings, the closed positions (commissions, average cost,
-  manual positions) and the investors sharing the account are in; the API reads only from the database.
+  manual positions) and the investors sharing the account are in, and so is the momentum score of AI_ANALYSIS_TODO.md;
+  the API reads only from the database.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

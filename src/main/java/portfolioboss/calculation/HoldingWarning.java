@@ -1,4 +1,4 @@
-package portfolioboss.domain;
+package portfolioboss.calculation;
 
 /**
  * A gap between the trades entered by hand and what IB reports, shown next to the holding — never a reason to

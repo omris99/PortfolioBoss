@@ -1,6 +1,6 @@
 package portfolioboss.api.response;
 
-import portfolioboss.domain.InvestorPart;
+import portfolioboss.calculation.InvestorPart;
 
 import java.math.BigDecimal;
 
@@ -19,7 +19,7 @@ public record InvestorQuantityResponse(
         BigDecimal unrealizedPnl,
         BigDecimal unrealizedPnlPercent) {
 
-    protected InvestorQuantityResponse(long investorId, InvestorPart part) {
+    public InvestorQuantityResponse(long investorId, InvestorPart part) {
         this(investorId,
                 part.quantity(),
                 part.sharesValue(),

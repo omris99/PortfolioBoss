@@ -13,7 +13,7 @@ import portfolioboss.api.request.CashMovementRequest;
 import portfolioboss.api.request.InvestorRequest;
 import portfolioboss.api.response.AddedInvestorResponse;
 import portfolioboss.api.response.CashMovementResponse;
-import portfolioboss.db.CashMovementType;
+import portfolioboss.calculation.CashMovementType;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

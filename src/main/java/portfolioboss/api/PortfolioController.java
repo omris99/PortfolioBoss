@@ -20,12 +20,12 @@ class PortfolioController {
 
     private final PortfolioReadService portfolioReadService;
 
-    protected PortfolioController(PortfolioReadService portfolioReadService) {
+    private PortfolioController(PortfolioReadService portfolioReadService) {
         this.portfolioReadService = portfolioReadService;
     }
 
     @GetMapping("/api/portfolio")
-    protected ResponseEntity<PortfolioResponse> portfolio() {
+    private ResponseEntity<PortfolioResponse> portfolio() {
         Optional<PortfolioResponse> storedPortfolio = portfolioReadService.currentPortfolio();
         if (storedPortfolio.isEmpty()) {
             // Only on the very first run: the web server is already up while TwsPortfolioRunner is still
