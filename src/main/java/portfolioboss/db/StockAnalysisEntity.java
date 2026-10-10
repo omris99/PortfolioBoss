@@ -8,6 +8,7 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import portfolioboss.ai.StockAnalysisResult;
+import portfolioboss.ai.StockSearches;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -17,8 +18,8 @@ import java.time.Instant;
  * written only by {@code api.AnalysisService} and never changed afterwards. {@code holdingId} is a plain id, like
  * {@code TradeEntity.investorId}: nothing here needs the holding itself.
  *
- * <p>{@code @JdbcTypeCode(SqlTypes.JSON)} has Hibernate store {@code result} as JSON in the {@code JSONB} column and
- * read it back into the record.
+ * <p>{@code @JdbcTypeCode(SqlTypes.JSON)} has Hibernate store {@code result} and {@code searchResults} as JSON in their
+ * {@code JSONB} columns and read them back into the records.
  */
 @Entity
 @Table(name = "stock_analysis")
@@ -35,6 +36,13 @@ public class StockAnalysisEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     private StockAnalysisResult result;
 
+    /**
+     * The search results Claude read — only those that name the stock — so that a fact missing from {@code result} can
+     * be traced to the search or to Claude (AI_ANALYSIS_TODO.md, decision 22); {@code null} before 2026-10-10.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    private StockSearches searchResults;
+
     private int inputTokens;
     private int outputTokens;
     private int tavilyCredits;
@@ -49,11 +57,13 @@ public class StockAnalysisEntity {
      * @param costUsd what Claude's tokens cost; Tavily's credits are counted, not priced
      */
     public StockAnalysisEntity(long holdingId, Instant analyzedAt, String model, StockAnalysisResult result,
-                               int inputTokens, int outputTokens, int tavilyCredits, BigDecimal costUsd) {
+                               StockSearches searchResults, int inputTokens, int outputTokens, int tavilyCredits,
+                               BigDecimal costUsd) {
         this.holdingId = holdingId;
         this.analyzedAt = analyzedAt;
         this.model = model;
         this.result = result;
+        this.searchResults = searchResults;
         this.inputTokens = inputTokens;
         this.outputTokens = outputTokens;
         this.tavilyCredits = tavilyCredits;
@@ -78,5 +88,9 @@ public class StockAnalysisEntity {
 
     public StockAnalysisResult result() {
         return result;
+    }
+
+    public StockSearches searchResults() {
+        return searchResults;
     }
 }

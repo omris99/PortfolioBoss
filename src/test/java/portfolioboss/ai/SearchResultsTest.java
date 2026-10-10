@@ -40,6 +40,18 @@ class SearchResultsTest {
         assertThat(filtered.results()).isEqualTo(mentioningResults);
     }
 
+    /** Decision 22: the addresses of the results left out are kept, so "nothing found" and "all about others" differ. */
+    @Test
+    void theAddressesOfTheResultsLeftOutAreKept() {
+        SearchResult aboutAeva = result("Aeva (NYSE: AEVA) price target raised", "Analysts lifted their target.");
+        SearchResult aboutFedex = result("FedEx stock forecast", "FDX analysts expect growth.");
+
+        SearchResults filtered = new SearchResults(List.of(aboutAeva, aboutFedex), 1).mentioning("AEVA");
+
+        assertThat(filtered.droppedUrls()).containsExactly(aboutFedex.url());
+        assertThat(new SearchResults(List.of(aboutAeva), 1).droppedUrls()).isEmpty();
+    }
+
     @Test
     void theCreditsStayEvenWhenEveryResultFallsOut() {
         SearchResults filtered = new SearchResults(List.of(result("FedEx stock forecast", "FDX news.")), 2)

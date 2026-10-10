@@ -10,12 +10,14 @@ import org.springframework.test.context.ActiveProfiles;
 import portfolioboss.ai.AnalystAction;
 import portfolioboss.ai.AnalystActionType;
 import portfolioboss.ai.AnalystRating;
-import portfolioboss.ai.AnalystTrend;
 import portfolioboss.ai.Headline;
 import portfolioboss.ai.RatingCounts;
+import portfolioboss.ai.SearchResult;
+import portfolioboss.ai.SearchResults;
 import portfolioboss.ai.Sentiment;
 import portfolioboss.ai.SourceConsensus;
 import portfolioboss.ai.StockAnalysisResult;
+import portfolioboss.ai.StockSearches;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -57,6 +59,7 @@ class StockAnalysisRepositoryTest {
         StockAnalysisEntity readBack = stockAnalysisRepository.findLatestOfEveryHolding().getFirst();
 
         assertThat(readBack.result()).isEqualTo(storedResult);
+        assertThat(readBack.searchResults()).isEqualTo(appleSearches());
         assertThat(readBack.holdingId()).isEqualTo(appleHoldingId);
         assertThat(readBack.analyzedAt()).isEqualTo(MONDAY);
         assertThat(readBack.model()).isEqualTo("claude-sonnet-5-5");
@@ -80,11 +83,64 @@ class StockAnalysisRepositoryTest {
         String publishedDate = jdbc.queryForObject(
                 "select result -> 'consensusBySource' -> 0 ->> 'publishedDate' from stock_analysis", String.class);
 
-        assertThat(resultKeys).containsExactly("analystTrend", "consensusBySource", "headlines", "recentActions",
-                "sentiment", "sentimentReason");
+        assertThat(resultKeys).containsExactly("consensusBySource", "headlines", "recentActions", "sentiment",
+                "sentimentReason");
         assertThat(sourceKeys).containsExactly("analystCount", "averageTarget", "publishedDate", "ratingCounts",
                 "ratingLabel", "sourceUrl");
         assertThat(publishedDate).isEqualTo("2026-10-05");
+    }
+
+    /**
+     * An analysis stored on 2026-10-09 is shaped as the record was then: it holds Claude's own trend, which the code
+     * works out now (decision 18), its actions have no result date (decision 20), and no search results were kept with
+     * it (decision 22). The extra key is skipped and the missing ones read as {@code null} — Jackson's defaults — and
+     * the rest comes back.
+     */
+    @Test
+    void anAnalysisStoredInAnEarlierShapeStillReads() {
+        long appleHoldingId = insertHolding(265598, "AAPL");
+        jdbc.update("""
+                insert into stock_analysis (holding_id, analyzed_at, model, result, input_tokens, output_tokens,
+                                            tavily_credits, cost_usd)
+                values (?, ?, 'claude-sonnet-5-5', ?::jsonb, 10500, 900, 3, 0.03)
+                """, appleHoldingId, Timestamp.from(MONDAY), """
+                {"consensusBySource": [], "analystTrend": "IMPROVING",
+                 "recentActions": [{"date": "2026-09-03", "firm": "Mizuho Securities", "action": "TARGET_LOWERED",
+                                    "fromRating": "Hold", "toRating": "Hold", "previousPriceTarget": 109.0,
+                                    "priceTarget": 92.0, "url": "https://stockanalysis.com/stocks/intc/forecast"}],
+                 "headlines": [], "sentiment": "POSITIVE", "sentimentReason": "Strong quarter."}
+                """);
+
+        StockAnalysisEntity readBack = stockAnalysisRepository.findLatestOfEveryHolding().getFirst();
+
+        AnalystAction mizuho = new AnalystAction(LocalDate.of(2026, 9, 3), "Mizuho Securities",
+                AnalystActionType.TARGET_LOWERED, "Hold", "Hold", 109.0, 92.0,
+                "https://stockanalysis.com/stocks/intc/forecast", null);
+        assertThat(readBack.result()).isEqualTo(new StockAnalysisResult(List.of(), List.of(mizuho), List.of(),
+                Sentiment.POSITIVE, "Strong quarter."));
+        assertThat(readBack.searchResults()).isNull();
+    }
+
+    /** NVDA's analysis of 2026-10-10 11:14 kept its search results before the addresses left out were: none, then. */
+    @Test
+    void searchResultsStoredBeforeTheAddressesLeftOutWereKeptReadWithNone() {
+        long nvidiaHoldingId = insertHolding(4815747, "NVDA");
+        jdbc.update("""
+                insert into stock_analysis (holding_id, analyzed_at, model, result, search_results, input_tokens,
+                                            output_tokens, tavily_credits, cost_usd)
+                values (?, ?, 'claude-sonnet-5-5', ?::jsonb, ?::jsonb, 10500, 900, 5, 0.04)
+                """, nvidiaHoldingId, Timestamp.from(MONDAY), """
+                {"consensusBySource": [], "recentActions": [], "headlines": [], "sentiment": null,
+                 "sentimentReason": null}
+                """, """
+                {"analystForecasts": {"results": [], "credits": 2}, "marketBeatActions": {"results": [], "credits": 1},
+                 "latestActions": {"results": [], "credits": 1}, "news": {"results": [], "credits": 1}}
+                """);
+
+        StockSearches readBack = stockAnalysisRepository.findLatestOfEveryHolding().getFirst().searchResults();
+
+        assertThat(readBack.marketBeatActions().droppedUrls()).isEmpty();
+        assertThat(readBack.credits()).isEqualTo(5);
     }
 
     @Test
@@ -110,17 +166,30 @@ class StockAnalysisRepositoryTest {
                 List.of(new SourceConsensus("https://financhill.com/aapl", LocalDate.of(2026, 10, 5), 48,
                                 new RatingCounts(0, 30, 16, 2, 0), 328.22, AnalystRating.BUY),
                         new SourceConsensus("https://stockanalysis.com/aapl", null, 44, null, 328.09, null)),
-                AnalystTrend.STABLE,
                 List.of(new AnalystAction(LocalDate.of(2026, 10, 2), "Some Firm", AnalystActionType.TARGET_LOWERED,
-                        "Overweight", "Overweight", 360.0, 355.0, "https://example.com/action")),
+                        "Overweight", "Overweight", 360.0, 355.0, "https://example.com/action",
+                        LocalDate.of(2026, 10, 4))),
                 List.of(new Headline(null, "Apple unveils a new product", "Reuters", "https://example.com/news")),
                 Sentiment.NEUTRAL,
                 null);
     }
 
+    /** One result in each of the four searches, Tavily's date written its own way, and one with no date at all. */
+    private StockSearches appleSearches() {
+        return new StockSearches(
+                new SearchResults(List.of(new SearchResult("Apple (AAPL) Stock Forecast", "https://financhill.com/aapl",
+                        "2026-10-05", "48 analysts: 30 Buy, 16 Hold, 2 Sell.")), 2),
+                new SearchResults(List.of(new SearchResult("Apple Inc. $AAPL Shares Sold by Some Fund",
+                        "https://www.marketbeat.com/instant-alerts/aapl", "Fri, 09 Oct 2026 07:28:41 GMT",
+                        "Morgan Stanley lowered their price target on Apple from $360.00 to $355.00.")), 1),
+                new SearchResults(List.of(), 1),
+                new SearchResults(List.of(new SearchResult("AAPL shares rise", "https://example.com/news", null,
+                        "Shares of Apple rose 2%.")), 1));
+    }
+
     private StockAnalysisEntity analysisOf(long holdingId, Instant analyzedAt, StockAnalysisResult result) {
-        return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, 10500, 900, 3,
-                new BigDecimal("0.030000"));
+        return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, appleSearches(), 10500, 900,
+                5, new BigDecimal("0.030000"));
     }
 
     private long insertHolding(int conId, String symbol) {

@@ -5,8 +5,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.ai.AiKeys;
 import portfolioboss.ai.ClaudeReply;
-import portfolioboss.ai.SearchResults;
 import portfolioboss.ai.StockAnalyzer;
+import portfolioboss.ai.StockSearches;
 import portfolioboss.ai.StockToAnalyze;
 import portfolioboss.ai.TavilyClient;
 import portfolioboss.api.response.AnalysisRunResponse;
@@ -30,7 +30,7 @@ import java.util.concurrent.Future;
 
 /**
  * One run of the stock analysis (AI_ANALYSIS_TODO.md, session 2), started only by the user's button (decision 10): for
- * each holding, Tavily's two searches and one call to Claude, all the stocks at once; then every analysis that
+ * each holding, Tavily's four searches and one call to Claude, all the stocks at once; then every analysis that
  * succeeded is stored as a {@code stock_analysis} row. It writes nothing else, and never reaches Interactive Brokers.
  *
  * <p>Not {@code @Transactional} on purpose: the searches and Claude take seconds, and no database connection should
@@ -116,19 +116,25 @@ public class AnalysisService {
         return pendingOutcomes.stream().map(Future::resultNow).toList();
     }
 
-    /** Never throws: a failure becomes an outcome with its reason, so one stock can't stop the others. */
+    /**
+     * Never throws: a failure becomes an outcome with its reason, so one stock can't stop the others. Only the results
+     * that name the stock go to Claude (decision 17), and the very same are stored with its answer (decision 22).
+     */
     private StockOutcome analyzeOne(HoldingEntity holding, LocalDate today) {
         String symbol = holding.symbol();
         try {
-            SearchResults analystResults = tavilyClient.searchAnalystForecasts(symbol);
-            SearchResults newsResults = tavilyClient.searchNews(symbol);
-            ClaudeReply reply = stockAnalyzer.analyze(stockToAnalyze(holding), today, analystResults, newsResults);
-            int tavilyCredits = analystResults.credits() + newsResults.credits();
-            return new StockOutcome(holding.id(), symbol, reply, tavilyCredits, null);
+            StockSearches searchesAboutTheStock = new StockSearches(
+                    tavilyClient.searchAnalystForecasts(symbol),
+                    tavilyClient.searchMarketBeatAnalystActions(symbol),
+                    tavilyClient.searchLatestAnalystActions(symbol),
+                    tavilyClient.searchNews(symbol))
+                    .mentioning(symbol);
+            ClaudeReply reply = stockAnalyzer.analyze(stockToAnalyze(holding), today, searchesAboutTheStock);
+            return new StockOutcome(holding.id(), symbol, reply, searchesAboutTheStock, null);
         } catch (RuntimeException e) {
             String failureMessage = describeFailure(e);
             System.err.println("[ai error] " + symbol + ": " + failureMessage);
-            return new StockOutcome(holding.id(), symbol, null, 0, failureMessage);
+            return new StockOutcome(holding.id(), symbol, null, null, failureMessage);
         }
     }
 
@@ -167,19 +173,24 @@ public class AnalysisService {
     }
 
     /**
-     * What one stock's analysis came to: Claude's reply and the credits its searches cost, or — {@code reply} being
-     * {@code null} — why it failed.
+     * What one stock's analysis came to: Claude's reply and the search results it read, or — {@code reply} and
+     * {@code searches} being {@code null} — why it failed.
      */
-    private record StockOutcome(long holdingId, String symbol, ClaudeReply reply, int tavilyCredits,
+    private record StockOutcome(long holdingId, String symbol, ClaudeReply reply, StockSearches searches,
                                 String failureMessage) {
 
         private boolean succeeded() {
             return reply != null;
         }
 
+        /** What its searches cost; a stock that failed is not counted. */
+        private int tavilyCredits() {
+            return searches == null ? 0 : searches.credits();
+        }
+
         private StockAnalysisEntity toEntity(Instant analyzedAt) {
-            return new StockAnalysisEntity(holdingId, analyzedAt, reply.model(), reply.result(),
-                    Math.toIntExact(reply.inputTokens()), Math.toIntExact(reply.outputTokens()), tavilyCredits,
+            return new StockAnalysisEntity(holdingId, analyzedAt, reply.model(), reply.result(), searches,
+                    Math.toIntExact(reply.inputTokens()), Math.toIntExact(reply.outputTokens()), tavilyCredits(),
                     reply.costUsd());
         }
     }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
+import { AnalyzeButton } from './components/AnalyzeButton';
 import { ClosedPositionsSection } from './components/ClosedPositionsSection';
 import { EmptyBox } from './components/EmptyBox';
 import { needsAttention } from './components/HoldingWarnings';
@@ -167,7 +168,15 @@ function App() {
                 <div className="mt-1 text-xs text-slate-400">{sectionSubtitle}</div>
                 {attentionSummary && <AttentionSummary summary={attentionSummary} />}
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
+                {openHoldings.length > 0 && (
+                  <AnalyzeButton
+                    holdingIds={null}
+                    label="Analyze"
+                    hint={`Search the web for the analyst ratings and news of every open holding, and have Claude read them: about $0.03 and 3 Tavily credits a stock (${openHoldings.length} now)`}
+                    onDataChanged={reload}
+                  />
+                )}
                 <ShowClosedToggle closedCount={closedCount} showClosed={showClosed} onChange={setShowClosed} />
                 <div className="flex items-center gap-1 text-xs">
                   <span className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_COLORS[loadStatus]}`} />

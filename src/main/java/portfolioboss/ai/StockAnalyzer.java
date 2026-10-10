@@ -18,13 +18,13 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.util.List;
 
 /**
- * One call to Claude per stock (AI_ANALYSIS_TODO.md, 2.2): it reads the two searches' results and answers in the JSON
+ * One call to Claude per stock (AI_ANALYSIS_TODO.md, 2.2): it reads the four searches' results and answers in the JSON
  * schema of {@link StockAnalysisResult} — no tools and no searching of its own (decision 1). The SDK derives the schema
  * from the record, the API holds Claude to it, and the SDK reads the answer back into the record. Claude only reports;
- * what is decided from the answer is worked out in code ({@code StockAnalysisResult.consensus()} and {@code signal}).
+ * what is decided from the answer is worked out in code ({@code calculation.ConsensusCalculator},
+ * {@code AnalystTrendCalculator} and {@code SignalCalculator}).
  */
 @Component
 public class StockAnalyzer {
@@ -45,7 +45,12 @@ public class StockAnalyzer {
      */
     private static final String REFUSAL_FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
-    /** Session 0's instructions, with decision 16's change: a consensus per source, never merged or chosen. */
+    /**
+     * Session 0's instructions, with decision 16's change — a consensus per source, never merged or chosen —, decision
+     * 18's — no analysts' trend, which the code works out from the actions —, decision 19's — MarketBeat's results for
+     * the actions, up to 10 of them, each once —, decision 20's — each action's result date — and decision 21's: the two
+     * news searches for actions, roundups of several companies, dates without a year, headlines from the news only.
+     */
     private static final String INSTRUCTIONS = """
             You extract facts about one stock from web search results, for a long-term investor's portfolio tool. \
             Answer in the JSON schema you are given.
@@ -59,10 +64,11 @@ public class StockAnalyzer {
             - What the results don't support is null, or an empty list. Never guess, estimate or round a figure the \
             results don't state.
             - Report only: no recommendation to buy or sell, and no price prediction.
-            - Dates are YYYY-MM-DD. "Today" is in the user message.
+            - Dates are YYYY-MM-DD. "Today" is in the user message. A date written without a year ("Tuesday, \
+            August 4th") is the latest such date that is not after today.
 
-            consensusBySource: one entry per search result that shows the analysts' consensus for this stock. Don't \
-            merge sources and don't choose between them.
+            consensusBySource: one entry per result in analyst_search_results that shows the analysts' consensus for \
+            this stock. Don't merge sources and don't choose between them.
             - sourceUrl: the result's url. publishedDate: the result's published date, or null.
             - analystCount: how many analysts the source says it covers.
             - ratingCounts: how many analysts give each rating, only when the source shows the breakdown; a rating \
@@ -71,20 +77,24 @@ public class StockAnalyzer {
             - ratingLabel: the source's own consensus on this scale: STRONG_BUY, BUY, HOLD, SELL, STRONG_SELL \
             ("Moderate Buy" and "Outperform" are BUY, "Underperform" is SELL).
 
-            analystTrend: IMPROVING, STABLE or DETERIORATING over the last 90 days, from upgrades and raised targets \
-            against downgrades and lowered targets, or from a change in the share of buy ratings on a source that \
-            shows its history. null when the results show neither.
+            recentActions: up to 10 actions by analyst firms from the last 90 days, from any of the results — \
+            marketbeat_search_results holds MarketBeat's articles listing the analysts' recent reports, and \
+            latest_actions_search_results the week's news about analysts' actions — the newest first. A result that \
+            lists actions on several companies gives only those on this stock. An action reported by two results is \
+            listed once. action is UPGRADE, DOWNGRADE, \
+            INITIATE, REITERATE, TARGET_RAISED or TARGET_LOWERED (a new target with the same rating is TARGET_RAISED \
+            or TARGET_LOWERED). fromRating and toRating are the firm's own words. previousPriceTarget and priceTarget \
+            are the targets before and after: "$18.50 ➝ $27.00" is 18.50 and 27.00, and a target with no earlier one \
+            stated has previousPriceTarget null. url is the result it comes from, and sourcePublishedDate that \
+            result's published date, or null.
 
-            recentActions: up to 5 actions by analyst firms from the last 90 days, the newest first. action is \
-            UPGRADE, DOWNGRADE, INITIATE, REITERATE, TARGET_RAISED or TARGET_LOWERED (a new target with the same \
-            rating is TARGET_RAISED or TARGET_LOWERED). fromRating and toRating are the firm's own words. \
-            previousPriceTarget and priceTarget are the targets before and after. url is the result it comes from.
+            headlines: up to 3 of the most important news headlines about this stock from the last 14 days, from \
+            news_search_results, the title word for word as published, with the date, the publisher as source, and \
+            the url of the result.
 
-            headlines: up to 3 of the most important news headlines from the last 14 days, the title word for word \
-            as published, with the date, the publisher as source, and the url of the result.
-
-            sentiment: how the news reads for someone who holds the stock: POSITIVE, NEUTRAL or NEGATIVE; null when \
-            there is no news from the last 14 days. sentimentReason: one short sentence in English saying why, or null.
+            sentiment: how the news in news_search_results reads for someone who holds the stock: POSITIVE, NEUTRAL \
+            or NEGATIVE; null when there is no news from the last 14 days. sentimentReason: one short sentence in \
+            English saying why, or null.
             """;
 
     /** {@code null} while {@code ANTHROPIC_API_KEY} is not set: the analysis is then off and never calls this. */
@@ -97,16 +107,16 @@ public class StockAnalyzer {
     }
 
     /**
-     * Only the results that name the stock reach Claude (decision 17). A refusal, or an answer cut off at
-     * {@link #MAX_TOKENS}, fails the stock: an {@code IllegalStateException} with a message the UI can show.
+     * Claude reads {@code searches} as given — {@code api.AnalysisService} keeps only the results that name the stock
+     * ({@link StockSearches#mentioning}, decision 17). A refusal, or an answer cut off at {@link #MAX_TOKENS}, fails the
+     * stock: an {@code IllegalStateException} with a message the UI can show.
      */
-    public ClaudeReply analyze(StockToAnalyze stock, LocalDate today, SearchResults analystResults,
-                               SearchResults newsResults) {
+    public ClaudeReply analyze(StockToAnalyze stock, LocalDate today, StockSearches searches) {
         if (anthropicClient == null) {
             throw new IllegalStateException("ANTHROPIC_API_KEY is not set");
         }
         StructuredMessage<StockAnalysisResult> response =
-                anthropicClient.messages().create(buildRequest(stock, today, analystResults, newsResults));
+                anthropicClient.messages().create(buildRequest(stock, today, searches));
         StopReason stopReason = response.stopReason().orElse(null);
         if (StopReason.REFUSAL.equals(stopReason)) {
             throw new IllegalStateException("Claude declined to answer" + describeRefusal(response));
@@ -121,10 +131,8 @@ public class StockAnalyzer {
 
     /** The whole request, built without sending it — so a test can see exactly what would go out. */
     protected StructuredMessageCreateParams<StockAnalysisResult> buildRequest(StockToAnalyze stock, LocalDate today,
-                                                                               SearchResults analystResults,
-                                                                               SearchResults newsResults) {
-        String userMessage = describeStockAndResults(stock, today, analystResults.mentioning(stock.symbol()),
-                newsResults.mentioning(stock.symbol()));
+                                                                               StockSearches searches) {
+        String userMessage = describeStockAndResults(stock, today, searches);
         StructuredOutputConfig<StockAnalysisResult> outputConfig = StructuredOutputConfig.<StockAnalysisResult>builder()
                 .format(StockAnalysisResult.class)
                 .effort(OutputConfig.Effort.LOW)
@@ -141,20 +149,21 @@ public class StockAnalyzer {
     }
 
     /** The stock and today's date, then each search's results inside tags that mark them as data. */
-    private String describeStockAndResults(StockToAnalyze stock, LocalDate today, SearchResults analystResults,
-                                           SearchResults newsResults) {
+    private String describeStockAndResults(StockToAnalyze stock, LocalDate today, StockSearches searches) {
         String marketPrice = stock.marketPrice() == null ? "unknown" : stock.marketPrice().toString();
         return "Stock: " + stock.symbol() + "\n"
                 + "Currency: " + stock.currency() + "\n"
                 + "Last price at the broker: " + marketPrice + "\n"
                 + "Today: " + today + "\n\n"
-                + describeResults("analyst_search_results", analystResults.results()) + "\n\n"
-                + describeResults("news_search_results", newsResults.results());
+                + describeResults("analyst_search_results", searches.analystForecasts()) + "\n\n"
+                + describeResults("marketbeat_search_results", searches.marketBeatActions()) + "\n\n"
+                + describeResults("latest_actions_search_results", searches.latestActions()) + "\n\n"
+                + describeResults("news_search_results", searches.news());
     }
 
-    private String describeResults(String tagName, List<SearchResult> results) {
+    private String describeResults(String tagName, SearchResults searchResults) {
         StringBuilder description = new StringBuilder("<" + tagName + ">\n");
-        for (SearchResult result : results) {
+        for (SearchResult result : searchResults.results()) {
             description.append("<result>\n")
                     .append("title: ").append(result.title()).append("\n")
                     .append("url: ").append(result.url()).append("\n")

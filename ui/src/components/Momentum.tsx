@@ -1,20 +1,10 @@
 import { Check, CircleHelp, X } from 'lucide-react';
 import { EMPTY_VALUE, formatMoney, formatSignedPercent } from '../lib/format';
-import type { Momentum, MomentumLabel } from '../types/portfolio';
-
-const LABEL_COLOR_CLASSES: Record<MomentumLabel, string> = {
-  STRONG: 'bg-emerald-500/10 text-emerald-400',
-  NEUTRAL: 'bg-amber-500/10 text-amber-400',
-  WEAK: 'bg-rose-500/10 text-rose-400',
-};
-const UNKNOWN_COLOR_CLASS = 'bg-slate-800 text-slate-400';
+import { labelClassOf, MOMENTUM_TONES } from '../lib/signalColors';
+import type { Momentum } from '../types/portfolio';
 
 /** What each label suggests — a legend for reading the score, not advice; PortfolioBoss places no orders. */
 const LABEL_MEANINGS = 'STRONG 4–5: hold or add · NEUTRAL 2–3: wait, don’t add · WEAK 0–1: consider selling part';
-
-function labelColorClass(label: MomentumLabel | null): string {
-  return label === null ? UNKNOWN_COLOR_CLASS : LABEL_COLOR_CLASSES[label];
-}
 
 /** "4/5", or "?/5" while one of the checks is unknown. */
 function scoreText(momentum: Momentum): string {
@@ -35,7 +25,7 @@ export function MomentumScore({ momentum }: { momentum: Momentum | null }) {
   return (
     <span
       title={scoreHint(momentum)}
-      className={`rounded px-1.5 py-0.5 font-sans text-[10px] font-semibold ${labelColorClass(momentum.label)}`}
+      className={`rounded px-1.5 py-0.5 font-sans text-[10px] font-semibold ${labelClassOf(momentum.label, MOMENTUM_TONES)}`}
     >
       M {scoreText(momentum)}
     </span>
@@ -148,7 +138,7 @@ export function MomentumDetails({ momentum }: { momentum: Momentum | null }) {
         Momentum
         {momentum !== null && (
           <>
-            <span className={`rounded px-1.5 py-0.5 text-[10px] ${labelColorClass(momentum.label)}`}>
+            <span className={`rounded px-1.5 py-0.5 text-[10px] ${labelClassOf(momentum.label, MOMENTUM_TONES)}`}>
               {momentum.label ?? 'no score'} {scoreText(momentum)}
             </span>
             <span className="font-normal normal-case text-slate-500">· daily closes as of {momentum.asOf}</span>

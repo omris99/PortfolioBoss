@@ -1,4 +1,5 @@
 import type {
+  AnalysisRun,
   CashMovementRequest,
   ManualPositionRequest,
   NewManualPositionRequest,
@@ -73,10 +74,22 @@ export function deleteCashMovement(movementId: number): Promise<void> {
 }
 
 /**
- * Sends one write. The body goes as JSON — the only kind the write endpoints accept. The response body is not
- * read on success: after a write the caller reloads the whole portfolio.
+ * Analyzes the analyst ratings and news of the given holdings, or of every open one (`null`): two web searches and one
+ * Claude call a stock, paid — about $0.03 and 3 Tavily credits each. Answers once every stock is done, which takes tens of
+ * seconds, with what the run did and cost; the analyses themselves come with the next reload of the portfolio.
  */
+export async function analyzeHoldings(holdingIds: number[] | null): Promise<AnalysisRun> {
+  const response = await sendRequest('POST', '/api/analysis', { holdingIds });
+  return (await response.json()) as AnalysisRun;
+}
+
+/** Sends one write whose answer is not needed: after a write the caller reloads the whole portfolio. */
 async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, body?: unknown): Promise<void> {
+  await sendRequest(method, url, body);
+}
+
+/** Sends one request, its body as JSON — the only kind the write endpoints accept — and answers the successful response. */
+async function sendRequest(method: 'PUT' | 'POST' | 'DELETE', url: string, body?: unknown): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -90,6 +103,7 @@ async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, body?: u
   if (!response.ok) {
     throw new ApiError(await readErrorMessage(response));
   }
+  return response;
 }
 
 /**

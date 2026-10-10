@@ -1,8 +1,8 @@
 package portfolioboss.calculation;
 
 import org.junit.jupiter.api.Test;
-import portfolioboss.ai.AnalystTrend;
 import portfolioboss.ai.Sentiment;
+import portfolioboss.model.AnalystTrend;
 import portfolioboss.model.HoldingSignal;
 import portfolioboss.model.MomentumLabel;
 

@@ -1,7 +1,7 @@
 package portfolioboss.calculation;
 
-import portfolioboss.ai.AnalystTrend;
 import portfolioboss.ai.Sentiment;
+import portfolioboss.model.AnalystTrend;
 import portfolioboss.model.HoldingSignal;
 import portfolioboss.model.MomentumLabel;
 
@@ -15,7 +15,7 @@ import java.util.stream.Stream;
  * ({@code null}) while fewer than two of the three are known. A plain rule, so what each color means is known.
  *
  * @param momentumLabel from the daily closes; {@code null} while there are not enough of them
- * @param analystTrend  from the latest analysis; {@code null} when the search results showed none
+ * @param analystTrend  from the latest analysis's actions ({@link AnalystTrendCalculator}); {@code null} without any
  * @param sentiment     from the latest analysis; {@code null} when there was no recent news
  */
 public record SignalCalculator(MomentumLabel momentumLabel, AnalystTrend analystTrend, Sentiment sentiment) {

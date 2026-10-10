@@ -8,14 +8,16 @@ import {
   formatSignedPercent,
   profitLossColorClass,
 } from '../lib/format';
-import type { ClosedPosition, Holding } from '../types/portfolio';
+import type { ClosedPosition, Holding, HoldingSignal } from '../types/portfolio';
+import { AnalysisDetails } from './AnalysisDetails';
 import { ExpandRowButton } from './ExpandRowButton';
 import { HoldingPeriod } from './HoldingPeriod';
 import { HoldingWarningIcon } from './HoldingWarnings';
 import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
 import { InvestorSplitTable } from './InvestorSplitTable';
-import { MomentumDetails, MomentumScore } from './Momentum';
+import { MomentumDetails } from './Momentum';
 import { SECTOR_OPTIONS_LIST_ID, SectorCell } from './SectorCell';
+import { SignalCell } from './Signal';
 import { TradesPanel } from './TradesPanel';
 
 // ── sorting ─────────────────────────────────────────────────────────────────────────────────────
@@ -129,6 +131,19 @@ function QuantityWithSplit({ holding }: { holding: Holding }) {
   );
 }
 
+/** How far up a colour of the dot sorts the Signal column; the momentum score (0–5) is added within a colour. */
+const SIGNAL_SORT_RANKS: Record<HoldingSignal, number> = { GREEN: 30, YELLOW: 20, RED: 10 };
+
+/**
+ * The dot first, then the momentum score within a colour: green 5/5 is 35, red 0/5 is 10. A holding with no dot yet sorts
+ * by its score alone (0–5), after every coloured one; with neither, it is empty and sorts last.
+ */
+function signalSortValue(holding: Holding): number | null {
+  const momentumScore = holding.momentum?.score ?? null;
+  if (holding.signal === null) return momentumScore;
+  return SIGNAL_SORT_RANKS[holding.signal] + (momentumScore ?? 0);
+}
+
 // The console report's columns in its order, with the signal and the sector after the symbol and the dates and
 // holding period, which are derived from the trades entered by hand, at the end.
 const COLUMNS: ColumnDefinition[] = [
@@ -142,13 +157,13 @@ const COLUMNS: ColumnDefinition[] = [
     valueColorClass: () => 'font-semibold text-slate-100',
   },
   {
-    // The momentum score for now; the analysts and the news join it in AI_ANALYSIS_TODO.md's session 3.
+    // The dot, the momentum, the analysts and the news in one column (AI_ANALYSIS_TODO.md, decision 15).
     key: 'signal',
     title: 'Signal',
     alignment: 'left',
-    sortValue: (holding) => holding.momentum?.score ?? null,
+    sortValue: signalSortValue,
     firstSortDirection: 'descending',
-    renderValue: (holding) => <MomentumScore momentum={holding.momentum} />,
+    renderValue: (holding) => <SignalCell holding={holding} />,
   },
   {
     key: 'sector',
@@ -298,8 +313,8 @@ function HoldingRow({
         <ExpandRowButton
           isExpanded={isExpanded}
           onToggle={onToggleExpanded}
-          subject={`the momentum and trades of ${holding.symbol}`}
-          expandHint="Show the momentum, and show and enter trades"
+          subject={`the signal and trades of ${holding.symbol}`}
+          expandHint="Show the momentum, the analysts and the news, and show and enter trades"
         />
       </td>
       {COLUMNS.map((column) => {
@@ -396,6 +411,7 @@ export function PositionsTable({
                     <td colSpan={COLUMNS.length + 1} className="px-3 pb-3">
                       <div className="flex flex-col gap-3">
                         <MomentumDetails momentum={holding.momentum} />
+                        <AnalysisDetails holding={holding} onDataChanged={onDataChanged} />
                         <InvestorSplitTable
                           position={{ kind: 'holding', holding }}
                           closedPositions={closedPositionsOf(holding, closedPositions)}

@@ -8,7 +8,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import portfolioboss.ai.AnalystAction;
 import portfolioboss.ai.AnalystActionType;
 import portfolioboss.ai.AnalystRating;
-import portfolioboss.ai.AnalystTrend;
 import portfolioboss.ai.Headline;
 import portfolioboss.ai.RatingCounts;
 import portfolioboss.ai.Sentiment;
@@ -24,6 +23,7 @@ import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.StockAnalysisResponse;
 import portfolioboss.api.response.TradeResponse;
 import portfolioboss.model.AnalystConsensus;
+import portfolioboss.model.AnalystTrend;
 import portfolioboss.model.CashMovementType;
 import portfolioboss.model.HoldingSignal;
 import portfolioboss.model.HoldingStatus;
@@ -259,7 +259,9 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].ratingCounts.strongSell").value(0))
                 .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].averageTarget").value(328.22))
                 .andExpect(jsonPath("$.holdings[0].analysis.consensusBySource[0].ratingLabel").value("BUY"))
-                .andExpect(jsonPath("$.holdings[0].analysis.analystTrend").value("STABLE"))
+                .andExpect(jsonPath("$.holdings[0].analysis.analystTrend").value("DETERIORATING"))
+                .andExpect(jsonPath("$.holdings[0].analysis.raisedTargetCount").value(0))
+                .andExpect(jsonPath("$.holdings[0].analysis.loweredTargetCount").value(1))
                 .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].date").value("2026-10-02"))
                 .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].firm").value("Some Firm"))
                 .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].action").value("TARGET_LOWERED"))
@@ -269,6 +271,7 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].priceTarget").value(355.0))
                 .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].url")
                         .value("https://example.com/action"))
+                .andExpect(jsonPath("$.holdings[0].analysis.recentActions[0].sourcePublishedDate").value("2026-09-18"))
                 .andExpect(jsonPath("$.holdings[0].analysis.headlines[0].date").value("2026-10-07"))
                 .andExpect(jsonPath("$.holdings[0].analysis.headlines[0].title").value("Apple unveils a new product"))
                 .andExpect(jsonPath("$.holdings[0].analysis.headlines[0].source").value("Reuters"))
@@ -386,13 +389,13 @@ class PortfolioControllerTest {
                 new RatingCounts(0, 30, 16, 2, 0), 328.22, AnalystRating.BUY);
         AnalystAction targetLowered = new AnalystAction(LocalDate.of(2026, 10, 2), "Some Firm",
                 AnalystActionType.TARGET_LOWERED, "Overweight", "Overweight", 360.0, 355.0,
-                "https://example.com/action");
+                "https://example.com/action", LocalDate.of(2026, 9, 18));
         Headline headline = new Headline(LocalDate.of(2026, 10, 7), "Apple unveils a new product", "Reuters",
                 "https://example.com/news");
         return new StockAnalysisResponse(Instant.parse("2026-10-09T07:30:00Z"), "claude-sonnet-5-5",
                 new AnalystConsensus(AnalystRating.BUY, 48, 328.22, 64.11, FINANCHILL, 328.09, 340.02, 4),
-                List.of(financhill), AnalystTrend.STABLE, List.of(targetLowered), List.of(headline), Sentiment.NEUTRAL,
-                "Product news without surprises.");
+                List.of(financhill), AnalystTrend.DETERIORATING, List.of(targetLowered), List.of(headline),
+                Sentiment.NEUTRAL, "Product news without surprises.", 0, 1);
     }
 
     /** IB sent a position but no cost or price figures for it, no sector and no trades entered. */

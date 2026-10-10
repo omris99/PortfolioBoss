@@ -13,12 +13,13 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.ai.AiKeys;
-import portfolioboss.ai.AnalystTrend;
 import portfolioboss.ai.ClaudeReply;
+import portfolioboss.ai.SearchResult;
 import portfolioboss.ai.SearchResults;
 import portfolioboss.ai.Sentiment;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.ai.StockAnalyzer;
+import portfolioboss.ai.StockSearches;
 import portfolioboss.ai.StockToAnalyze;
 import portfolioboss.ai.TavilyClient;
 import portfolioboss.api.response.AnalysisRunResponse;
@@ -55,10 +56,9 @@ class AnalysisServiceTest {
 
     private static final Instant SYNCED_AT = Instant.parse("2026-10-08T07:00:00Z");
     private static final StockAnalysisResult FOUND_NOTHING =
-            new StockAnalysisResult(List.of(), null, List.of(), List.of(), null, null);
-    private static final ClaudeReply REPLY = new ClaudeReply(new StockAnalysisResult(List.of(), AnalystTrend.STABLE,
-            List.of(), List.of(), Sentiment.NEUTRAL, "Nothing new."), "claude-sonnet-5-5", 10_500, 900,
-            new BigDecimal("0.030000"));
+            new StockAnalysisResult(List.of(), List.of(), List.of(), null, null);
+    private static final ClaudeReply REPLY = new ClaudeReply(new StockAnalysisResult(List.of(), List.of(), List.of(),
+            Sentiment.NEUTRAL, "Nothing new."), "claude-sonnet-5-5", 10_500, 900, new BigDecimal("0.030000"));
 
     @Autowired
     private AnalysisService analysisService;
@@ -93,8 +93,10 @@ class AnalysisServiceTest {
         intelHoldingId = insertHolding(270639, "INTC", 30.0, "CLOSED");
         given(aiKeys.findMissingKeyName()).willReturn(null);
         given(tavilyClient.searchAnalystForecasts(anyString())).willReturn(new SearchResults(List.of(), 2));
+        given(tavilyClient.searchMarketBeatAnalystActions(anyString())).willReturn(new SearchResults(List.of(), 1));
+        given(tavilyClient.searchLatestAnalystActions(anyString())).willReturn(new SearchResults(List.of(), 1));
         given(tavilyClient.searchNews(anyString())).willReturn(new SearchResults(List.of(), 1));
-        given(stockAnalyzer.analyze(any(), any(), any(), any())).willReturn(REPLY);
+        given(stockAnalyzer.analyze(any(), any(), any())).willReturn(REPLY);
     }
 
     @Test
@@ -104,7 +106,7 @@ class AnalysisServiceTest {
         assertThat(storedAnalysisSymbols()).containsExactly("AAPL", "AEVA");
         assertThat(summary.analyzed()).isEqualTo(2);
         assertThat(summary.failed()).isEmpty();
-        assertThat(summary.tavilyCredits()).isEqualTo(6);
+        assertThat(summary.tavilyCredits()).isEqualTo(10);
         assertThat(summary.inputTokens()).isEqualTo(21_000);
         assertThat(summary.outputTokens()).isEqualTo(1_800);
         assertThat(summary.costUsd()).isEqualByComparingTo("0.06");
@@ -116,7 +118,7 @@ class AnalysisServiceTest {
         analysisService.analyze(List.of(appleHoldingId));
 
         then(stockAnalyzer).should()
-                .analyze(eq(new StockToAnalyze("AAPL", "USD", 200.0)), any(), any(), any());
+                .analyze(eq(new StockToAnalyze("AAPL", "USD", 200.0)), any(), any());
     }
 
     @Test
@@ -130,9 +132,42 @@ class AnalysisServiceTest {
                 .containsEntry("model", "claude-sonnet-5-5")
                 .containsEntry("input_tokens", 10_500)
                 .containsEntry("output_tokens", 900)
-                .containsEntry("tavily_credits", 3)
+                .containsEntry("tavily_credits", 5)
                 .containsEntry("cost_usd", new BigDecimal("0.030000"))
                 .containsEntry("sentiment", "NEUTRAL");
+    }
+
+    /**
+     * Decisions 17 and 22: a MarketBeat article about FedEx is dropped before Claude reads the results — its address
+     * kept — and what is stored with the analysis is exactly what Claude read, so a missing fact can be traced to the
+     * search or to Claude.
+     */
+    @Test
+    void storesTheSearchResultsClaudeReadAndOnlyThoseAboutTheStock() {
+        SearchResult aboutApple = new SearchResult("Apple Inc. $AAPL Shares Sold",
+                "https://www.marketbeat.com/instant-alerts/aapl", "Fri, 09 Oct 2026 07:28:41 GMT",
+                "Morgan Stanley lowered their price target on Apple from $360.00 to $355.00.");
+        SearchResult aboutFedex = new SearchResult("FedEx (FDX) price target cut",
+                "https://www.marketbeat.com/instant-alerts/fdx", null, "Analysts cut FedEx's target.");
+        given(tavilyClient.searchMarketBeatAnalystActions("AAPL"))
+                .willReturn(new SearchResults(List.of(aboutApple, aboutFedex), 1));
+
+        analysisService.analyze(List.of(appleHoldingId));
+        entityManager.flush();
+
+        StockSearches whatClaudeRead = new StockSearches(new SearchResults(List.of(), 2),
+                new SearchResults(List.of(aboutApple), 1, List.of(aboutFedex.url())), new SearchResults(List.of(), 1),
+                new SearchResults(List.of(), 1));
+        then(stockAnalyzer).should().analyze(any(), any(), eq(whatClaudeRead));
+        assertThat(stockAnalysisRepository.findLatestOfEveryHolding().getFirst().searchResults())
+                .isEqualTo(whatClaudeRead);
+        assertThat(jdbc.queryForObject(
+                "select search_results -> 'marketBeatActions' -> 'results' -> 0 ->> 'published_date' "
+                        + "from stock_analysis", String.class))
+                .isEqualTo("Fri, 09 Oct 2026 07:28:41 GMT");
+        assertThat(jdbc.queryForObject(
+                "select search_results -> 'marketBeatActions' -> 'droppedUrls' ->> 0 from stock_analysis", String.class))
+                .isEqualTo("https://www.marketbeat.com/instant-alerts/fdx");
     }
 
     @Test
@@ -148,15 +183,15 @@ class AnalysisServiceTest {
     @Test
     void aStockThatFailsIsNotStoredAndKeepsItsPreviousAnalysis() {
         stockAnalysisRepository.save(new StockAnalysisEntity(aevaHoldingId, SYNCED_AT, "claude-sonnet-5-5",
-                FOUND_NOTHING, 9_000, 800, 3, new BigDecimal("0.026000")));
-        given(stockAnalyzer.analyze(argThat(stock -> stock != null && stock.symbol().equals("AEVA")), any(), any(),
-                any())).willThrow(new IllegalStateException("Claude declined to answer"));
+                FOUND_NOTHING, null, 9_000, 800, 3, new BigDecimal("0.026000")));
+        given(stockAnalyzer.analyze(argThat(stock -> stock != null && stock.symbol().equals("AEVA")), any(), any()))
+                .willThrow(new IllegalStateException("Claude declined to answer"));
 
         AnalysisRunResponse summary = analysisService.analyze(null);
 
         assertThat(summary.analyzed()).isEqualTo(1);
         assertThat(summary.failed()).containsExactly(new FailedAnalysisResponse("AEVA", "Claude declined to answer"));
-        assertThat(summary.tavilyCredits()).isEqualTo(3);
+        assertThat(summary.tavilyCredits()).isEqualTo(5);
         entityManager.flush();
         List<StockAnalysisEntity> latest = stockAnalysisRepository.findLatestOfEveryHolding();
         assertThat(latest).extracting(StockAnalysisEntity::holdingId).containsExactly(appleHoldingId, aevaHoldingId);

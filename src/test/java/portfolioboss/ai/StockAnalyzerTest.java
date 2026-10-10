@@ -28,8 +28,9 @@ class StockAnalyzerTest {
 
     /**
      * The message is exactly this — the symbol, the currency, IB's price, today's date and the results about the stock —
-     * so no quantity, cost, investor or account number can be in it (decision 8). The result about FedEx is left out
-     * (decision 17).
+     * so no quantity, cost, investor or account number can be in it (decision 8). The results about FedEx, about
+     * Fair Isaac (a MarketBeat article the experiment of 2026-10-10 got for another symbol) and a roundup that doesn't
+     * name the stock are left out by {@link StockSearches#mentioning}, as {@code AnalysisService} does (decision 17).
      */
     @Test
     void theMessageHoldsTheStockTodayAndOnlyTheResultsAboutIt() {
@@ -38,12 +39,26 @@ class StockAnalyzerTest {
                         "48 analysts: 30 Buy, 16 Hold, 2 Sell. Average price target $328.22."),
                 new SearchResult("FedEx stock forecast", "https://example.com/fdx", "2026-10-04",
                         "FDX analysts expect growth.")), 2);
+        SearchResults marketBeatResults = new SearchResults(List.of(
+                new SearchResult("Apple Inc. $AAPL Shares Sold by Some Fund",
+                        "https://www.marketbeat.com/instant-alerts/filing-apple-inc-aapl-shares-sold", "2026-10-09",
+                        "Morgan Stanley lowered their price target on Apple from $360.00 to $355.00."),
+                new SearchResult("Fair Isaac (NYSE:FICO) Price Target Cut",
+                        "https://www.marketbeat.com/instant-alerts/analyst-fair-isaac-nyse-fico-price-target-cut", null,
+                        "BMO Capital Markets cut its target to $1,150.00.")), 1);
+        SearchResults latestActionsResults = new SearchResults(List.of(
+                new SearchResult("U.S. Analyst Updates: October 6th", "https://example.com/updates", "2026-10-06",
+                        "Apple (AAPL) — Evercore ISI raised its price target to $380.00 from $365.00."),
+                new SearchResult("Friday's analyst upgrades and downgrades", "https://example.com/roundup",
+                        "2026-10-09", "Raymond James raised its target on a Canadian bank.")), 1);
         SearchResults newsResults = new SearchResults(List.of(
                 new SearchResult("AAPL shares rise after the event", "https://example.com/news", null,
                         "Shares of Apple rose 2%.")), 1);
 
-        String userMessage = userMessageOf(stockAnalyzer.buildRequest(APPLE, TODAY, analystResults, newsResults)
-                .rawParams());
+        StockSearches searchesAboutApple =
+                new StockSearches(analystResults, marketBeatResults, latestActionsResults, newsResults).mentioning("AAPL");
+
+        String userMessage = userMessageOf(stockAnalyzer.buildRequest(APPLE, TODAY, searchesAboutApple).rawParams());
 
         assertThat(userMessage).isEqualTo("""
                 Stock: AAPL
@@ -59,6 +74,24 @@ class StockAnalyzerTest {
                 48 analysts: 30 Buy, 16 Hold, 2 Sell. Average price target $328.22.
                 </result>
                 </analyst_search_results>
+
+                <marketbeat_search_results>
+                <result>
+                title: Apple Inc. $AAPL Shares Sold by Some Fund
+                url: https://www.marketbeat.com/instant-alerts/filing-apple-inc-aapl-shares-sold
+                published: 2026-10-09
+                Morgan Stanley lowered their price target on Apple from $360.00 to $355.00.
+                </result>
+                </marketbeat_search_results>
+
+                <latest_actions_search_results>
+                <result>
+                title: U.S. Analyst Updates: October 6th
+                url: https://example.com/updates
+                published: 2026-10-06
+                Apple (AAPL) — Evercore ISI raised its price target to $380.00 from $365.00.
+                </result>
+                </latest_actions_search_results>
 
                 <news_search_results>
                 <result>
@@ -95,6 +128,37 @@ class StockAnalyzerTest {
     }
 
     /**
+     * Decision 19: MarketBeat's results feed the actions — up to 10, so the target moves aren't crowded out by firms
+     * that only kept their rating — and the consensus stays the analyst search's, so its pages aren't counted twice.
+     */
+    @Test
+    void theInstructionsTakeTenActionsFromAnyResultAndTheConsensusFromTheAnalystSearch() {
+        String instructions = emptyRequestForApple().system().orElseThrow().asString();
+
+        assertThat(instructions)
+                .contains("recentActions: up to 10 actions by analyst firms from the last 90 days, from any of the results")
+                .contains("consensusBySource: one entry per result in analyst_search_results")
+                .contains("An action reported by two results is listed once.");
+    }
+
+    /**
+     * Decision 21: the news searches for actions bring roundups of many companies and MarketBeat's "on Tuesday, August
+     * 4th"; the headlines and the sentiment stay the week's news about the stock.
+     */
+    @Test
+    void theInstructionsHandleRoundupsDatesWithoutAYearAndKeepTheHeadlinesToTheNews() {
+        String instructions = emptyRequestForApple().system().orElseThrow().asString();
+
+        assertThat(instructions)
+                .contains("A result that lists actions on several companies gives only those on this stock.")
+                .contains("A date written without a year (\"Tuesday, August 4th\") is the latest such date that is not "
+                        + "after today.")
+                .contains("headlines: up to 3 of the most important news headlines about this stock from the last 14 "
+                        + "days, from news_search_results")
+                .contains("sentiment: how the news in news_search_results reads");
+    }
+
+    /**
      * The schema the SDK derives from {@link StockAnalysisResult}: every field required, {@code null} allowed exactly
      * where the record says {@code @Nullable} — and no more than the 16 such fields Claude accepts in one schema.
      */
@@ -106,7 +170,6 @@ class StockAnalyzerTest {
         collectNullableFields(schema, "", nullableFields);
 
         assertThat(nullableFields).containsExactlyInAnyOrder(
-                "analystTrend",
                 "consensusBySource[].analystCount",
                 "consensusBySource[].averageTarget",
                 "consensusBySource[].publishedDate",
@@ -116,6 +179,7 @@ class StockAnalyzerTest {
                 "recentActions[].fromRating",
                 "recentActions[].previousPriceTarget",
                 "recentActions[].priceTarget",
+                "recentActions[].sourcePublishedDate",
                 "recentActions[].toRating",
                 "sentiment",
                 "sentimentReason");
@@ -126,7 +190,8 @@ class StockAnalyzerTest {
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
     private MessageCreateParams emptyRequestForApple() {
-        return stockAnalyzer.buildRequest(APPLE, TODAY, new SearchResults(List.of(), 2), new SearchResults(List.of(), 1))
+        return stockAnalyzer.buildRequest(APPLE, TODAY, new StockSearches(new SearchResults(List.of(), 2),
+                        new SearchResults(List.of(), 1), new SearchResults(List.of(), 1), new SearchResults(List.of(), 1)))
                 .rawParams();
     }
 

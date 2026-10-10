@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The two Tavily searches of AI_ANALYSIS_TODO.md, decision 2, for one stock. Tavily is a search engine made for
+ * The four Tavily searches of AI_ANALYSIS_TODO.md, decisions 2, 19 and 21, for one stock. Tavily is a search engine made for
  * language models: for each result it returns the title, the address, the date and the parts of the page that match
  * the search. Only the symbol leaves the app (decision 8). Plain HTTP through Spring's {@code RestClient}, no SDK.
  */
@@ -23,6 +23,9 @@ public class TavilyClient {
     /** How long one search may take; a slower one fails, and the stock with it. */
     private static final Duration SEARCH_TIMEOUT = Duration.ofSeconds(30);
     private static final int MAX_RESULTS = 5;
+    private static final String MARKETBEAT_DOMAIN = "marketbeat.com";
+    /** After the symbol, in both searches for analysts' actions (decision 21). */
+    private static final String ANALYST_ACTIONS_QUERY = " analyst price target upgrade downgrade";
 
     private final RestClient restClient;
     private final AiKeys aiKeys;
@@ -54,6 +57,40 @@ public class TavilyClient {
                 "time_range", "month",
                 "search_depth", "advanced",
                 "chunks_per_source", 3,
+                "max_results", MAX_RESULTS,
+                "include_published_date", true,
+                "include_usage", true));
+    }
+
+    /**
+     * MarketBeat's news articles of the last month about the stock — the source the user trusts most (decision 19). Each
+     * has a paragraph listing the analysts' recent reports with both targets ("raised their price target from $92.00 to
+     * $114.00 … on Tuesday, October 6th"), and a new article is a new address, so it isn't stuck in the search engine's
+     * copy the way a forecast page is (decision 21). Only what the search returns, never a page itself (decision 7).
+     */
+    public SearchResults searchMarketBeatAnalystActions(String symbol) {
+        return search(Map.of(
+                "query", symbol + ANALYST_ACTIONS_QUERY,
+                "topic", "news",
+                "time_range", "month",
+                "search_depth", "basic",
+                "max_results", MAX_RESULTS,
+                "include_domains", List.of(MARKETBEAT_DOMAIN),
+                "include_published_date", true,
+                "include_usage", true));
+    }
+
+    /**
+     * The week's news about analysts' actions on the stock, on any site — the newest moves, often in daily roundups of
+     * many companies (decision 21): in the experiment it alone found Goldman's cut of AEVA's target, which MarketBeat's
+     * articles didn't have.
+     */
+    public SearchResults searchLatestAnalystActions(String symbol) {
+        return search(Map.of(
+                "query", symbol + ANALYST_ACTIONS_QUERY,
+                "topic", "news",
+                "time_range", "week",
+                "search_depth", "basic",
                 "max_results", MAX_RESULTS,
                 "include_published_date", true,
                 "include_usage", true));

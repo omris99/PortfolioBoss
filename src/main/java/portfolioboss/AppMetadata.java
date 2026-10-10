@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.16.0";
+    public static final String VERSION = "0.18.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,28 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.18.0: [Fresher analyst actions, kept search results]
+ * AnalystTrendCalculator: only price-target moves count, an action stating the target before and after; a rating alone (Zacks Rank, Weiss, Wall Street Zen) moves nothing (was every upgrade and downgrade too).
+ * GET /api/portfolio: upActionCount / downActionCount renamed raisedTargetCount / loweredTargetCount; the UI shows "Trend IMPROVING · 3 targets raised, 0 lowered", or why there is no trend.
+ * TavilyClient: two news searches for analysts' actions, MarketBeat's articles of the month and the week's news on any site, since forecast pages lag weeks in the search engine's copy; 35 credits a run.
+ * StockAnalyzer: up to 10 actions (was 5), each once, only this stock's from a multi-company roundup, a date without a year read as the latest not after today; headlines from the news search only.
+ * AnalystAction.sourcePublishedDate: the search engine's date for the page an action came from; the UI shows "copy of 2026-09-18" next to each action and the consensus source.
+ * V7 migration: stock_analysis.search_results keeps the search results Claude read and the addresses the symbol filter left out, so a missing action can be traced to the search or to Claude.
+ * StockSearches added: one stock's four searches; AnalysisService filters them by symbol once, sends that to Claude and stores the same object.
+ * Tests: StockSearchesTest, the four searches in TavilyClientTest, the stored search results in AnalysisServiceTest, analyses of earlier shapes in StockAnalysisRepositoryTest.
+ *
+ * VERSION 0.17.0: [The analysis in the UI]
+ * SignalCell (UI): the Signal column shows the colored dot, "M 4/5", and "A" (analysts' trend) and "N" (news), each green when good, amber in between, rose for a warning sign; details on hover.
+ * Signal column sorting: green, then yellow, then red, by momentum score within a color, then holdings not yet analyzed by score alone (was the momentum score only).
+ * AnalysisDetails (UI): an "Analysts and news" box in a holding's expanded row — consensus, target and upside, the spread across sources, the trend, recent actions, the news sentiment and headlines, all linked.
+ * Links from search results open only when they are http(s) pages; any other address (javascript:, say) is shown as plain text.
+ * AnalyzeButton (UI): "Analyze" above the table runs every open holding, "Analyze SYMBOL" in the box one stock; then "Analyzed 7 · 21 credits · $0.21" and any failed stocks, or the API's reason (a missing key).
+ * AnalystTrendCalculator added: the code decides the analysts' trend from the recent actions — more upgrades and raised targets IMPROVING, more downgrades and cuts DETERIORATING, as many STABLE, none unknown.
+ * Claude no longer answers a trend: it left it unknown in 4 of 7 stocks even with deciding actions (NVDA, two raised targets); analyses stored before get the new rule when read.
+ * GET /api/portfolio: analysis.analystTrend is now the code's, with upActionCount and downActionCount, shown as "Trend IMPROVING · 2 up, 0 down".
+ * Analyst actions read in plain words: RATING KEPT (was REITERATE), NEW COVERAGE (was INITIATE), UPGRADED, DOWNGRADED, TARGET RAISED, TARGET LOWERED.
+ * Tests: AnalystTrendCalculatorTest (NVDA, INTC and TTWO of the first run from the UI), and StockAnalysisRepositoryTest reads an analysis stored with Claude's old trend.
+ *
  * VERSION 0.16.0: [Analyst ratings and news analysis]
  * POST /api/analysis added: for each open holding, or the ids given, two Tavily searches and one call to Claude, every stock at once; it runs only when asked, never on a schedule.
  * TavilyClient: the analysts' forecast pages of the last month and the week's news; only the symbol goes to Tavily, and only results that name it go on to Claude.

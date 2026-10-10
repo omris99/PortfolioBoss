@@ -11,6 +11,7 @@ import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.StockAnalysisResponse;
 import portfolioboss.api.response.TradeResponse;
+import portfolioboss.calculation.AnalystTrendCalculator;
 import portfolioboss.calculation.ConsensusCalculator;
 import portfolioboss.calculation.HoldingHistory;
 import portfolioboss.calculation.InvestorSummary;
@@ -34,6 +35,7 @@ import portfolioboss.ib.Benchmark;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
 import portfolioboss.model.AnalystConsensus;
+import portfolioboss.model.AnalystTrend;
 import portfolioboss.model.HoldingSignal;
 import portfolioboss.model.MomentumLabel;
 import portfolioboss.utils.Utils;
@@ -174,8 +176,8 @@ public class PortfolioReadService {
     }
 
     /**
-     * The analysis as stored, with the consensus chosen from it on this read — the target measured against IB's latest
-     * price — so that a change of rule applies to old analyses too.
+     * The analysis as stored, with the consensus and the analysts' trend worked out from it on this read — the target
+     * measured against IB's latest price — so that a change of rule applies to old analyses too.
      */
     private StockAnalysisResponse analysisResponseOf(StockAnalysisEntity latestAnalysis, Holding holding) {
         if (latestAnalysis == null) {
@@ -184,7 +186,7 @@ public class PortfolioReadService {
         StockAnalysisResult result = latestAnalysis.result();
         AnalystConsensus consensus =
                 new ConsensusCalculator(result.consensusBySource(), Utils.finiteOrNull(holding.marketPrice())).consensus();
-        return new StockAnalysisResponse(latestAnalysis, consensus);
+        return new StockAnalysisResponse(latestAnalysis, consensus, new AnalystTrendCalculator(result.recentActions()));
     }
 
     /** The dot needs two of its three signs, so without an analysis — the momentum alone — there is none. */
@@ -194,7 +196,8 @@ public class PortfolioReadService {
         }
         MomentumLabel momentumLabel = momentum == null ? null : momentum.label();
         StockAnalysisResult result = latestAnalysis.result();
-        return new SignalCalculator(momentumLabel, result.analystTrend(), result.sentiment()).signal();
+        AnalystTrend analystTrend = new AnalystTrendCalculator(result.recentActions()).trend();
+        return new SignalCalculator(momentumLabel, analystTrend, result.sentiment()).signal();
     }
 
     /** Derived on every read from the stored closes, never stored itself — like {@code firstBuyDate}. */

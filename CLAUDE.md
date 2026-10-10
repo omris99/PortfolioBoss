@@ -32,12 +32,15 @@ its sessions 1 (schema, computation, read API), 2 (write endpoints for investors
 3 (UI) and 4 (each investor's part of a shared position's profit) are done; its "out of scope" list holds the ideas for
 later. [AI_ANALYSIS_TODO.md](AI_ANALYSIS_TODO.md) is next: for each holding, momentum from IB's daily closes, and an
 analysis of analyst ratings and news — the server searches Tavily, Claude (Sonnet 5.5, no tools) only extracts JSON, and
-the code picks the consensus source and a colored signal — run only from a button. Its sessions 0 (the experiment that
-settled the model and the searches), 1 (momentum: a 0–5 score from IB's daily closes, in `/api/portfolio`) and 2 (the
-analysis backend: `POST /api/analysis`, the `stock_analysis` table, the analysis and the dot in `/api/portfolio`) are
-done, and so is the momentum part of session 3's UI, brought forward (the Signal column and the momentum box in a
-holding's expanded row); the rest of session 3 (the analysis in the UI) is next. Its API keys go in the git-ignored
-`config/local.env`, which Claude never reads or prints.
+the code picks the consensus source, the analysts' trend and a colored signal — run only from a button. Its sessions 0
+(the experiment that settled the model and the searches), 1 (momentum: a 0–5 score from IB's daily closes, in
+`/api/portfolio`) and 2 (the analysis backend: `POST /api/analysis`, the `stock_analysis` table, the analysis and the dot
+in `/api/portfolio`) are done; session 3 (the UI: the Signal column, the analysis box in a holding's expanded row, the
+Analyze buttons) is built, and its runs from the browser brought decisions 18–22: the analysts' trend worked out by the
+code from price-target moves, four searches (news articles for the analysts' actions, since forecast pages lag weeks in
+the search engine's copy), each source's copy date in the UI, and the search results Claude read kept with every
+analysis — what is left of its check is in the plan. Its API keys go in the git-ignored `config/local.env`, which
+Claude never reads or prints.
 
 ## Hard invariant: read-only
 
@@ -88,8 +91,8 @@ npm run build            # tsc -b && vite build; the type check is the only UI c
 ```
 
 The UI shows the portfolio as of the last sync. It reloads `/api/portfolio` after every write (sector,
-trades, manual positions, investors, deposits), but new figures from IB need a new `run.sh` (a refresh button is a
-later step).
+trades, manual positions, investors, deposits) and after every analysis run, but new figures from IB need a new `run.sh`
+(a refresh button is a later step).
 
 Tests: `mvn -q test` (JUnit 5; no TWS, but the database tests need `portfolioboss_test` running — see
 above). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc` + `@MockitoBean` on `PortfolioReadService`)
@@ -106,14 +109,17 @@ codes, validation messages and the JSON-only rule, the `*WriteServiceTest`s for 
 and `HoldingHistoryTest` cover the average-cost math, `InvestorSummaryCalculatorTest` (INVESTORS_TODO.md's worked
 example among them) and `PositionTradesTest` the split between investors, `OrderCommissionTest` the default commission,
 `UtilsTest` the trimming of typed text. The analysis: **no test calls Tavily or Claude** (it costs money and needs the
-network). `ConsensusCalculatorTest` (AAPL and TTWO of the live check, MarketBeat first, the 1–5 scale's limits) and
-`SignalCalculatorTest` cover the decisions; `SearchResultsTest` the symbol filter; `TavilyClientTest` the two searches
+network). `ConsensusCalculatorTest` (AAPL and TTWO of the live check, MarketBeat first, the 1–5 scale's limits),
+`AnalystTrendCalculatorTest` (price-target moves only, on NVDA, INTC and TTWO of the first run from the UI) and
+`SignalCalculatorTest` cover the decisions; `SearchResultsTest` the symbol filter and the addresses it leaves out,
+`StockSearchesTest` the four searches together (credits, filter); `TavilyClientTest` the four searches
 against a fake Tavily (`MockRestServiceServer`); `StockAnalyzerTest` the request to Claude built without sending it — the
 whole user message (nothing about the holding but symbol, currency and price), the model and effort, and the schema
 derived from `StockAnalysisResult` (`null` allowed exactly where it says `@Nullable`, at most 16 such fields), plus that
-the SDK's client builds with the Jackson in use; `StockAnalysisRepositoryTest` (`@DataJpaTest`) the JSONB round trip and
-the latest analysis per holding; `AnalysisServiceTest` (`@DataJpaTest`, Tavily and Claude `@MockitoBean`s) a run, a failed
-stock, 404 / 400 / 503; `AnalysisControllerTest` the status codes and the JSON-only rule. After a
+the SDK's client builds with the Jackson in use; `StockAnalysisRepositoryTest` (`@DataJpaTest`) the JSONB round trip of the result
+and the search results, analyses stored in earlier shapes still read (Claude's old `analystTrend`, no copy dates, no
+search results, no dropped addresses), and the latest analysis per holding; `AnalysisServiceTest` (`@DataJpaTest`, Tavily
+and Claude `@MockitoBean`s) a run, a failed stock, the search results stored exactly as Claude read them, 404 / 400 / 503; `AnalysisControllerTest` the status codes and the JSON-only rule. After a
 change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
 would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
 `target/surefire-reports/` keeps the reports of tests that have since been deleted.
@@ -130,7 +136,8 @@ PostgreSQL accepts.
 environment variable of the same name wins. A missing key turns only the analysis off: the app starts as usual, prints
 `[ai] analysis off: TAVILY_API_KEY is not set (config/local.env)` instead of `[ai] analysis ready`, and `POST
 /api/analysis` answers 503 with that name. Claude never reads or prints the file — only checks a key's name and length.
-Tavily's free plan has 1,000 credits a month; a full run of 7 stocks is 21 credits and about $0.21 of Claude.
+Tavily's free plan has 1,000 credits a month; a full run of 7 stocks is 35 credits and about $0.30 of Claude, so a run
+every day would pass the free plan and a few a week would not.
 
 **External dependency not in the repo:** the TWS API jar at `~/DevTools/twsapi/TwsApi.jar` (shared
 with IBBot). It is not on Maven Central, so `run.sh` registers it once in the local Maven repository
@@ -178,13 +185,14 @@ Main (Spring Boot: brings the web server up, then Spring runs the runner)
 PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
         │                     (builds api/response/*Response              driven by HTTP requests, not by TWS)
         │                      with calculation/HoldingHistory, InvestorSummaryCalculator, Momentum,
-        │                      ConsensusCalculator, SignalCalculator)
+        │                      ConsensusCalculator, AnalystTrendCalculator, SignalCalculator)
         └──JSON──> ui/ (React; the dev server proxies /api to :8080)
 
-AnalysisController ──> AnalysisService ──per stock, all at once──> TavilyClient ──HTTPS──> Tavily (2 searches)
+AnalysisController ──> AnalysisService ──per stock, all at once──> TavilyClient ──HTTPS──> Tavily (4 searches)
         ▲              (keys: ai/AiKeys)                            StockAnalyzer ──HTTPS──> Claude (JSON only, no tools)
-        │                      └──writes──> Postgres (stock_analysis rows only; a failed stock writes nothing)
-        └──JSON── POST /api/analysis — from a button only (the UI's comes in AI_ANALYSIS_TODO.md session 3)
+        │                      └──writes──> Postgres (stock_analysis rows only, with the search results Claude read;
+        │                                             a failed stock writes nothing)
+        └──JSON── POST /api/analysis — only from ui/'s Analyze buttons (every open holding, or one), then a reload
 
 HoldingWriteController ──writes── HoldingWriteService ──writes── Postgres  (sector and trade rows only;
         ▲  (api/request/*Request, @Valid;                                 never IB, never a holding row
@@ -284,7 +292,11 @@ kept — and leaves the others alone; `sync(snapshot)` is the same with no close
 `stock_analysis` (`StockAnalysisEntity`): one row per holding per analysis run — `holding_id` (a plain id, like
 `investorId`), `analyzed_at`, `model` (the one that actually answered), `result` (`JSONB`: Claude's answer, the
 `ai.StockAnalysisResult` record, mapped with `@JdbcTypeCode(SqlTypes.JSON)` — a JSON column takes a schema change without a
-migration), the tokens, Tavily's credits and `cost_usd`; every run is kept, the UI shows the latest. `HoldingRepository`
+migration), the tokens, Tavily's credits and `cost_usd`; every run is kept, the UI shows the latest.
+`V7__stock_analysis_search_results.sql` added `stock_analysis.search_results` (`JSONB`, `NULL` before 2026-10-10): the
+`ai.StockSearches` Claude read for that analysis — the four searches' results that name the stock, and the addresses of
+those that didn't — so that a fact missing from an analysis can be traced to the search or to Claude (decision 22); the
+API doesn't serve it, it is there for a look in SQL. `HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
 default method `accountOwner()`), `InvestorCashMovementRepository`, `AccountStateRepository`, `DailyCloseRepository`
@@ -293,7 +305,7 @@ because a derived `deleteBy…` loads every row and deletes them one at a time) 
 (`findLatestOfEveryHolding` — PostgreSQL's own `DISTINCT ON (holding_id)` in a `nativeQuery`) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V7__….sql`.
+  checksum): a schema change is a new `V8__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -314,19 +326,21 @@ Things that are easy to break:
   `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
-  database and compared table by table first). One that only adds a table (V5, V6) still gets the backup first, checked
-  for the same row counts as the database. A live check that writes test data (a made-up investor) runs against a
+  database and compared table by table first). One that only adds a table or a column (V5, V6, V7) still gets the
+  backup first, checked for the same row counts as the database. A live check that writes test data (a made-up investor) runs against a
   scratch copy too, pointed at with `SPRING_DATASOURCE_URL`: there is no way to delete an investor.
 
 `portfolioboss.calculation` holds only the computation — split on 2026-10-09 at the user's request, since most of its
 files were not calculations: `HoldingHistory`, `ClosedPosition`, `TradeFact`, for the investors `PositionTrades`,
 `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, for the momentum `Momentum`, for the
-analysis `ConsensusCalculator` and `SignalCalculator`, and `OrderCommission` (the default commission) — pure Java, no
+analysis `ConsensusCalculator`, `AnalystTrendCalculator` and `SignalCalculator`, and `OrderCommission` (the default
+commission) — pure Java, no
 Spring and no database, so it is unit tested directly. What it computes on comes from three packages of plain data:
 `ib` (what IB reports, above), `ai` (Claude's answer, below) and **`model`** — the values the whole app shares: the
 enums the entities and the JSON share with the computation (`TradeSide`, `HoldingStatus`, `CashMovementType`), the
 warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels
-(`MomentumLabel`, `HoldingSignal`) and `AnalystConsensus` (see Conventions for which package uses which). A holding's
+(`MomentumLabel`, `AnalystTrend`, `HoldingSignal`) and `AnalystConsensus` (see Conventions for which package uses which).
+A holding's
 `firstBuyDate`, `lastSellDate`, `holdingDays` and closed positions are derived from its `trade` rows, never stored:
 `HoldingHistory.of(List<TradeFact>)` walks them in chronological order (a buy before a sell on the same date) tracking
 a running quantity, and splits them into **position periods** (the private record `PositionPeriod`): a buy while flat
@@ -403,23 +417,36 @@ guess. The private record `DailyCloses` sorts one contract's closes once and com
 The stock analysis (AI_ANALYSIS_TODO.md, session 2) lives in `portfolioboss.ai` (console `[ai]` / `[ai error]`).
 `AiKeys` holds the two keys (`@Value("${TAVILY_API_KEY:}")` — the colon's empty default keeps a missing key from stopping
 the app), says which is missing (`findMissingKeyName()`), and prints the `[ai]` line once the app is up
-(`@EventListener(ApplicationReadyEvent.class)`). `TavilyClient` runs decision 2's two searches through Spring's
-`RestClient` (no SDK, 30 s each): `searchAnalystForecasts(symbol)` (`topic: general`, a month, `advanced`, 2 credits) and
-`searchNews(symbol)` (`news`, a week, `basic`, 1 credit), both with `include_published_date` and `include_usage`. A
-`SearchResults` is the results (`SearchResult`, read straight from Tavily's JSON) and the credits; `mentioning(symbol)`
-keeps the results that name the symbol as a whole word, in any case (decision 17). `StockAnalyzer` is the one call to
+(`@EventListener(ApplicationReadyEvent.class)`). `TavilyClient` runs four searches (decisions 2, 19 and 21) through
+Spring's `RestClient` (no SDK, 30 s each), all with `include_published_date` and `include_usage`:
+`searchAnalystForecasts(symbol)` (`topic: general`, a month, `advanced`, 2 credits — forecast pages, for the consensus),
+`searchMarketBeatAnalystActions(symbol)` (`news`, a month, `include_domains: marketbeat.com`, `basic`, 1 credit —
+MarketBeat's articles, each listing the analysts' recent reports with both targets), `searchLatestAnalystActions(symbol)`
+(`news`, a week, any site, 1 credit — the newest moves, often in roundups of many companies) and `searchNews(symbol)`
+(`news`, a week, 1 credit). The two action searches exist because a forecast page keeps one address and the search
+engine's copy of it lags one to three weeks, while every analyst move is a new article the same day. A `SearchResults` is
+the results (`SearchResult`, read straight from Tavily's JSON), the credits and `droppedUrls`; `mentioning(symbol)` keeps
+the results that name the symbol as a whole word, in any case (decision 17), and the addresses of the others.
+`StockSearches` holds the four together, with `credits()` and its own `mentioning(symbol)`. `StockAnalyzer` is the one call to
 Claude (`claude-sonnet-5-5`, effort `low`, 16,000 max tokens, 60 s, no tools): fixed instructions, and a user message of
-`StockToAnalyze(symbol, currency, marketPrice)`, today's date and the filtered results inside tags that mark them as
-data. It asks for structured output: the SDK derives the JSON schema from the record `ai.StockAnalysisResult`
-(`consensusBySource` of `SourceConsensus` with a nested `RatingCounts`, `analystTrend`, `recentActions` of
-`AnalystAction`, `headlines` of `Headline`, `sentiment`, `sentimentReason`), the API holds Claude to it, and the SDK reads
-the answer back into the record — one definition for the schema, the answer, the `JSONB` column and the JSON. It also sends
+`StockToAnalyze(symbol, currency, marketPrice)`, today's date and the four searches' results as given, each inside tags
+that mark them as data (`analyst_`, `marketbeat_`, `latest_actions_`, `news_search_results`). The instructions take the
+consensus from the analyst search only (so MarketBeat's pages aren't counted twice in the spread), up to 10 actions from
+any results, each once, only this stock's from a roundup, a date without a year as the latest such date not after today,
+each action's result date as `sourcePublishedDate` (decision 20, shown in the UI as "copy of …"), and the headlines and
+the sentiment from the news search only. It asks for structured output: the SDK derives the JSON schema from the record `ai.StockAnalysisResult`
+(`consensusBySource` of `SourceConsensus` with a nested `RatingCounts`, `recentActions` of `AnalystAction`, `headlines`
+of `Headline`, `sentiment`, `sentimentReason`), the API holds Claude to it, and the SDK reads the answer back into the
+record — one definition for the schema, the answer, the `JSONB` column and the JSON. Until 2026-10-09 it also held
+Claude's own `analystTrend`; the analyses stored then still have the key, which Jackson 3 skips when reading (its
+default for a key with no component). It also sends
 `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`: a refusal in the "cyber" or "frontier_llm" category is
 retried on Sonnet 5). A refusal or an answer cut off at the limit fails the stock; `ClaudeReply` is the result, the model
 that actually answered, the tokens and their dollars ($2 / $10 per million, constants). `api.AnalysisService` — not
 `@Transactional`, so no connection waits on the network — checks the keys (503), finds the holdings (`{}` or `null`: every
-open one; an unknown id 404, a closed holding 400), runs every stock at once on virtual threads (two searches, then
-Claude) and stores the ones that succeeded with one `saveAll`. A failed stock comes back as a `FailedAnalysisResponse
+open one; an unknown id 404, a closed holding 400), runs every stock at once on virtual threads (the four searches one
+after another, `StockSearches.mentioning` once, then Claude) and stores the ones that succeeded with one `saveAll` — each
+with the very `StockSearches` Claude read (decision 22). A failed stock comes back as a `FailedAnalysisResponse
 (symbol, message)`, stores nothing and keeps its previous analysis. The answer, `AnalysisRunResponse(analyzed, failed,
 tavilyCredits, inputTokens, outputTokens, costUsd)`, is also the `[ai] analyzed N of M stocks: …, $0.2056` line.
 
@@ -429,12 +456,29 @@ pages gives a target (the site in the address is `marketbeat.com`), the choice i
 then a source with a rating breakdown and a target, then the most analysts, the later date, the address; the rating is
 worked out from the breakdown on one scale (Strong Buy 1 … Strong Sell 5; up to 1.5 / 2.5 / 3.5 / 4.5), else it is the
 source's own label; the spread of the targets is over every source — a `model.AnalystConsensus`.
+`AnalystTrendCalculator(recentActions)` (decision 18) is the `model.AnalystTrend`, from **price-target moves only**: an
+action counts when it states the target before and after — `raisedTargetCount()` against `loweredTargetCount()`; more
+raised `IMPROVING`, more lowered `DETERIORATING`, as many (or targets stated and none moved) `STABLE`, no action with a
+target `null`. A rating alone moves nothing, so the services that grade without a target — Zacks Rank, Weiss Ratings,
+Wall Street Zen — drop out with no list of names (the user's rule). Claude decided the trend until 2026-10-09 and answered
+differently from run to run (NVDA: `IMPROVING` with one raised target, then unknown with two); for a day the code also
+counted upgrades and downgrades, and a Zacks downgrade made TTWO `DETERIORATING`.
 `SignalCalculator(momentumLabel, analystTrend, sentiment).signal()` (decision 6) is the `model.HoldingSignal`: red for two
 warning signs or more (weak momentum, deteriorating analysts, negative news), green for none, yellow for one, `null` while
 fewer than two of the three are known. Things that are easy to break:
 - The SDK makes a field nullable only for an annotation named `Nullable` on the field itself: `jakarta.annotation
   .Nullable` works, JSpecify's (a type annotation) would not be seen. Claude accepts at most 16 nullable fields in one
   schema (13 now) — that is why the five counts are one nullable `RatingCounts`.
+- Removing a component from a record in `ai` is safe for the stored analyses (the old key is skipped) and so is adding
+  one (the missing key reads as `null` — `SearchResults`' compact constructor turns a missing `droppedUrls` into an empty
+  list); renaming one loses that field from every analysis stored before.
+- The trend rests on what the searches happened to bring — up to 10 actions, from results that differ between runs (NVDA
+  was `IMPROVING` at one run and `STABLE` an hour later, when Daiwa's cut came back too; `search_results` shows which) —
+  and the rule is coarse on purpose: one small target cut is `DETERIORATING`, and one firm's two moves both count (INTC:
+  Mizuho down on 9/3, up on 10/6 — "only each firm's latest move" is an open idea). The UI shows the counts.
+- The search engine's copy of a page can be weeks old (INTC's stockanalysis.com page: 9/18, read on 10/10), so a row seen
+  in an analysis may be gone from the live page; the UI shows each source's copy date. Tavily Extract (tried once on
+  MarketBeat) returned the same old copy, and reading MarketBeat's pages directly is against its terms (decision 7).
 - The records in `ai` *are* the schema: a new component is a new required field Claude must fill. Computation on them
   belongs in `calculation`, not on the records.
 - The SDK's client checks the Jackson version when it is built, at startup (`StockAnalyzerTest` builds one); Spring Boot
@@ -477,8 +521,10 @@ and `TradeResponse.investorId` were appended for the split. `HoldingResponse.mom
 into the JSON as it is) — or `null` while no closes are stored for the holding: `PortfolioReadService` loads the closes of
 every holding and of SPY in one query, and hands each holding's, with SPY's, to `Momentum.of`. `HoldingResponse.analysis`
 and `signal` (appended after it) are the latest analysis and the dot: a `StockAnalysisResponse` — `analyzedAt`, `model`,
-`consensus` (`model.AnalystConsensus` as it is, chosen on this read against IB's latest price; `null` without any source)
-and the rest of `StockAnalysisResult` as it is — or `null` while the holding has never been analyzed, and the
+`consensus` (`model.AnalystConsensus` as it is, chosen on this read against IB's latest price; `null` without any source),
+`analystTrend` (the code's since decision 18, under the key that carried Claude's) with `raisedTargetCount` /
+`loweredTargetCount` (appended), and the rest of `StockAnalysisResult` as it is (each action with its
+`sourcePublishedDate`) — or `null` while the holding has never been analyzed, and the
 `HoldingSignal`, `null` without an analysis; `PortfolioReadService` loads the latest analysis of every holding in one
 query. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
@@ -602,8 +648,8 @@ Things that are easy to break:
 - Milestone 1 direction: Maven, Spring Boot REST, the PostgreSQL schema and entities, the sync at connection,
   deriving buy/sell dates and holding period from `trade` rows, the write endpoints for the sector and trades,
   the UI to show and enter them, the reconciliation warnings, the closed positions (commissions, average cost,
-  manual positions) and the investors sharing the account are in, and so are the momentum score and the analysis
-  backend of AI_ANALYSIS_TODO.md (its UI is next); the API reads only from the database.
+  manual positions) and the investors sharing the account are in, and so are the momentum score and the analysis of
+  AI_ANALYSIS_TODO.md, backend and UI; the API reads only from the database.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

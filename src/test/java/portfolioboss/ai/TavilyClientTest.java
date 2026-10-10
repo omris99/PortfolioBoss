@@ -20,7 +20,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * The two searches of AI_ANALYSIS_TODO.md, decision 2, against a fake Tavily: {@code MockRestServiceServer} answers
+ * The four searches of AI_ANALYSIS_TODO.md, decisions 2, 19 and 21, against a fake Tavily: {@code MockRestServiceServer} answers
  * the client's requests itself, so nothing reaches the network or costs a credit. The answers are in the shape of
  * Tavily's documentation, with fields the client doesn't use, to show they are ignored.
  */
@@ -52,6 +52,22 @@ class TavilyClientTest {
               "response_time": 1.67,
               "usage": { "credits": 2 },
               "request_id": "123e4567-e89b-12d3-a456-426614174111"
+            }
+            """;
+
+    private static final String MARKETBEAT_ANSWER = """
+            {
+              "query": "AAPL analyst price target upgrade downgrade",
+              "results": [
+                {
+                  "url": "https://www.marketbeat.com/instant-alerts/filing-apple-inc-aapl-shares-sold-2026-10-09",
+                  "title": "Apple Inc. $AAPL Shares Sold by Some Fund",
+                  "content": "Morgan Stanley set a $355.00 price objective on shares of Apple in a report on Thursday.",
+                  "score": 0.88,
+                  "published_date": "Fri, 09 Oct 2026 07:28:41 GMT"
+                }
+              ],
+              "usage": { "credits": 1 }
             }
             """;
 
@@ -95,6 +111,53 @@ class TavilyClientTest {
                         "48 analysts: 30 Buy, 16 Hold, 2 Sell. Average price target $328.22."),
                 new SearchResult("AAPL Stock Forecast & Price Target", "https://stockanalysis.com/stocks/aapl/forecast/",
                         null, "The average price target of 44 analysts is $328.09."));
+    }
+
+    /**
+     * Decisions 19 and 21: MarketBeat's news articles of the last month, for 1 credit — new addresses, not a forecast
+     * page stuck in the search engine's copy — and still only the symbol leaves the app.
+     */
+    @Test
+    void theMarketBeatSearchAsksForItsArticlesOfTheLastMonth() {
+        fakeTavily.expect(requestTo(SEARCH_URL))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer " + TEST_KEY))
+                .andExpect(jsonPath("$.query").value("AAPL analyst price target upgrade downgrade"))
+                .andExpect(jsonPath("$.topic").value("news"))
+                .andExpect(jsonPath("$.time_range").value("month"))
+                .andExpect(jsonPath("$.search_depth").value("basic"))
+                .andExpect(jsonPath("$.include_domains").value("marketbeat.com"))
+                .andExpect(jsonPath("$.max_results").value(5))
+                .andExpect(jsonPath("$.include_published_date").value(true))
+                .andExpect(jsonPath("$.include_usage").value(true))
+                .andExpect(jsonPath("$.include_raw_content").doesNotExist())
+                .andRespond(withSuccess(MARKETBEAT_ANSWER, MediaType.APPLICATION_JSON));
+
+        SearchResults searchResults = tavilyClient.searchMarketBeatAnalystActions("AAPL");
+
+        fakeTavily.verify();
+        assertThat(searchResults.credits()).isEqualTo(1);
+        assertThat(searchResults.results()).extracting(SearchResult::url).containsExactly(
+                "https://www.marketbeat.com/instant-alerts/filing-apple-inc-aapl-shares-sold-2026-10-09");
+    }
+
+    /** Decision 21: the week's news about analysts' actions, on any site, for 1 credit. */
+    @Test
+    void theLatestActionsSearchAsksForTheWeeksNewsOnAnySite() {
+        fakeTavily.expect(requestTo(SEARCH_URL))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer " + TEST_KEY))
+                .andExpect(jsonPath("$.query").value("AAPL analyst price target upgrade downgrade"))
+                .andExpect(jsonPath("$.topic").value("news"))
+                .andExpect(jsonPath("$.time_range").value("week"))
+                .andExpect(jsonPath("$.search_depth").value("basic"))
+                .andExpect(jsonPath("$.include_domains").doesNotExist())
+                .andExpect(jsonPath("$.max_results").value(5))
+                .andExpect(jsonPath("$.include_published_date").value(true))
+                .andRespond(withSuccess(NEWS_ANSWER, MediaType.APPLICATION_JSON));
+
+        SearchResults searchResults = tavilyClient.searchLatestAnalystActions("AAPL");
+
+        fakeTavily.verify();
+        assertThat(searchResults.credits()).isEqualTo(1);
     }
 
     @Test

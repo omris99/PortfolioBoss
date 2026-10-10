@@ -8,8 +8,9 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import portfolioboss.ai.AnalystAction;
+import portfolioboss.ai.AnalystActionType;
 import portfolioboss.ai.AnalystRating;
-import portfolioboss.ai.AnalystTrend;
 import portfolioboss.ai.RatingCounts;
 import portfolioboss.ai.Sentiment;
 import portfolioboss.ai.SourceConsensus;
@@ -30,6 +31,7 @@ import portfolioboss.ib.Benchmark;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
+import portfolioboss.model.AnalystTrend;
 import portfolioboss.model.CashMovementType;
 import portfolioboss.model.HoldingSignal;
 import portfolioboss.model.HoldingStatus;
@@ -384,9 +386,10 @@ class PortfolioReadServiceTest {
     }
 
     /**
-     * Apple's newer analysis is served, with the consensus chosen from it and its target against IB's price of 200.
-     * Analysts deteriorating and negative news are two warning signs, so the dot is red despite the strong momentum.
-     * Microsoft was never analyzed: no analysis and no dot.
+     * Apple's newer analysis is served, with the consensus chosen from it and its target against IB's price of 200, and
+     * the analysts' trend worked out from its one action, a target lowered from 260 to 240. Analysts deteriorating and
+     * negative news are two warning signs, so the dot is red despite the strong momentum. Microsoft was never analyzed:
+     * no analysis and no dot.
      */
     @Test
     void servesTheLatestAnalysisWithItsConsensusAndItsDot() {
@@ -394,10 +397,10 @@ class PortfolioReadServiceTest {
                 APPLE_CON_ID, risingCloses(0.003),
                 Benchmark.SPY_CON_ID, risingCloses(0.001)));
         long appleHoldingId = holdingIdOf(APPLE_CON_ID);
-        stockAnalysisRepository.save(appleAnalysis(appleHoldingId, FIRST_RUN, AnalystTrend.IMPROVING,
-                Sentiment.POSITIVE));
-        stockAnalysisRepository.save(appleAnalysis(appleHoldingId, SECOND_RUN, AnalystTrend.DETERIORATING,
-                Sentiment.NEGATIVE));
+        stockAnalysisRepository.save(appleAnalysis(appleHoldingId, FIRST_RUN, AnalystActionType.TARGET_RAISED, 240.0,
+                260.0, Sentiment.POSITIVE));
+        stockAnalysisRepository.save(appleAnalysis(appleHoldingId, SECOND_RUN, AnalystActionType.TARGET_LOWERED, 260.0,
+                240.0, Sentiment.NEGATIVE));
 
         PortfolioResponse portfolio = readPortfolio().orElseThrow();
 
@@ -405,6 +408,8 @@ class PortfolioReadServiceTest {
         StockAnalysisResponse appleAnalysis = apple.analysis();
         assertThat(appleAnalysis.analyzedAt()).isEqualTo(SECOND_RUN);
         assertThat(appleAnalysis.analystTrend()).isEqualTo(AnalystTrend.DETERIORATING);
+        assertThat(appleAnalysis.raisedTargetCount()).isZero();
+        assertThat(appleAnalysis.loweredTargetCount()).isEqualTo(1);
         assertThat(appleAnalysis.consensus().rating()).isEqualTo(AnalystRating.BUY);
         assertThat(appleAnalysis.consensus().averageTarget()).isEqualTo(250.0);
         assertThat(appleAnalysis.consensus().targetUpsidePercent()).isCloseTo(25.0, within(1e-9));
@@ -513,14 +518,19 @@ class PortfolioReadServiceTest {
                 new BigDecimal(price));
     }
 
-    /** One source with a breakdown (30 Buy, 16 Hold, 2 Sell: {@code BUY}) and a $250 target. */
-    private StockAnalysisEntity appleAnalysis(long holdingId, Instant analyzedAt, AnalystTrend analystTrend,
-                                              Sentiment sentiment) {
+    /**
+     * One source with a breakdown (30 Buy, 16 Hold, 2 Sell: {@code BUY}) and a $250 target, and one analyst action that
+     * moves a firm's target.
+     */
+    private StockAnalysisEntity appleAnalysis(long holdingId, Instant analyzedAt, AnalystActionType actionType,
+                                              double previousPriceTarget, double priceTarget, Sentiment sentiment) {
         SourceConsensus source = new SourceConsensus("https://financhill.com/aapl", LocalDate.of(2026, 9, 20), 48,
                 new RatingCounts(0, 30, 16, 2, 0), 250.0, null);
-        StockAnalysisResult result = new StockAnalysisResult(List.of(source), analystTrend, List.of(), List.of(),
-                sentiment, null);
-        return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, 10_500, 900, 3,
+        AnalystAction action = new AnalystAction(LocalDate.of(2026, 9, 15), "Some Firm", actionType, null, "Buy",
+                previousPriceTarget, priceTarget, "https://example.com/action", LocalDate.of(2026, 9, 18));
+        StockAnalysisResult result = new StockAnalysisResult(List.of(source), List.of(action), List.of(), sentiment,
+                null);
+        return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, null, 10_500, 900, 3,
                 new BigDecimal("0.030000"));
     }
 

@@ -133,6 +133,10 @@ export interface Holding {
   investorQuantities: InvestorQuantity[];
   /** From the daily closes the last `run.sh` read from IB; `null` while none are stored for this holding. */
   momentum: Momentum | null;
+  /** The latest analysis of its analyst ratings and news; `null` while it has never been analyzed. */
+  analysis: StockAnalysis | null;
+  /** The colored dot; `null` without an analysis, or while fewer than two of its three signs are known. */
+  signal: HoldingSignal | null;
 }
 
 /** What a momentum score means: `STRONG` 4–5, `NEUTRAL` 2–3, `WEAK` 0–1 (AI_ANALYSIS_TODO.md, decision 5). */
@@ -168,6 +172,140 @@ export interface Momentum {
   /** 0–5. */
   score: number | null;
   label: MomentumLabel | null;
+}
+
+/**
+ * The colored dot next to a holding, worked out by the API from three warning signs — weak momentum, analysts
+ * deteriorating, negative news: `RED` for two or more, `GREEN` for none, `YELLOW` for one (AI_ANALYSIS_TODO.md, decision 6).
+ */
+export type HoldingSignal = 'GREEN' | 'YELLOW' | 'RED';
+/** One scale for every source: a source's own words ("Moderate Buy", "Outperform") are mapped onto it. */
+export type AnalystRating = 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
+/**
+ * Which way the analysts have moved, worked out by the API from the price targets in `recentActions` (decision 18): more
+ * raised than lowered is `IMPROVING`, more lowered `DETERIORATING`, as many — or none moved — `STABLE`. A rating
+ * without a target counts for nothing.
+ */
+export type AnalystTrend = 'IMPROVING' | 'STABLE' | 'DETERIORATING';
+export type AnalystActionType = 'UPGRADE' | 'DOWNGRADE' | 'INITIATE' | 'REITERATE' | 'TARGET_RAISED' | 'TARGET_LOWERED';
+/** How the week's news reads for someone holding the stock. */
+export type Sentiment = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+
+/** How many analysts give each rating, as one source shows them. */
+export interface RatingCounts {
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+}
+
+/** The analysts' consensus as one source shows it, extracted by Claude without merging it with any other. */
+export interface SourceConsensus {
+  sourceUrl: string;
+  /** 'yyyy-MM-dd' */
+  publishedDate: string | null;
+  analystCount: number | null;
+  /** `null` when the source shows no breakdown. */
+  ratingCounts: RatingCounts | null;
+  averageTarget: number | null;
+  /** The source's own consensus, on the one scale. */
+  ratingLabel: AnalystRating | null;
+}
+
+/**
+ * The consensus the API chose among the sources (MarketBeat first, AI_ANALYSIS_TODO.md decision 16), against IB's
+ * latest price, and how far every source's target spreads.
+ */
+export interface AnalystConsensus {
+  /** Worked out from the chosen source's breakdown, else its own label; `null` when it shows neither. */
+  rating: AnalystRating | null;
+  analystCount: number | null;
+  averageTarget: number | null;
+  /** How far `averageTarget` is above IB's market price, in percent; negative below it. */
+  targetUpsidePercent: number | null;
+  /** The chosen source. */
+  sourceUrl: string;
+  /** The lowest average target among the sources (`targetHigh` the highest); `null` when none gives one. */
+  targetLow: number | null;
+  targetHigh: number | null;
+  /** How many sources give an average target. */
+  sourceCount: number;
+}
+
+/** One recent move by an analyst firm. The ratings are the firm's own words, not the one scale. */
+export interface AnalystAction {
+  /** 'yyyy-MM-dd' */
+  date: string;
+  firm: string;
+  action: AnalystActionType;
+  fromRating: string | null;
+  toRating: string | null;
+  previousPriceTarget: number | null;
+  priceTarget: number | null;
+  /** The search result it comes from. */
+  url: string;
+  /**
+   * 'yyyy-MM-dd': the date the search engine gives that result — how old its copy of the page may be. `null` when it gives
+   * none, and in analyses stored before 2026-10-10.
+   */
+  sourcePublishedDate: string | null;
+}
+
+/** A news headline, word for word as published. */
+export interface Headline {
+  /** 'yyyy-MM-dd' */
+  date: string | null;
+  title: string;
+  /** Who published it ("Reuters"). */
+  source: string;
+  url: string;
+}
+
+/**
+ * A holding's latest analysis: what Claude found in two web searches, as it is, and the consensus the API chose from it.
+ * Claude reports only — what the results don't say is `null` or an empty list, never a guess.
+ */
+export interface StockAnalysis {
+  /** ISO-8601 instant. */
+  analyzedAt: string;
+  /** The model that actually answered. */
+  model: string;
+  /** `null` when no source showed a consensus. */
+  consensus: AnalystConsensus | null;
+  consensusBySource: SourceConsensus[];
+  /** `null` while no action states a price target. */
+  analystTrend: AnalystTrend | null;
+  /** Up to 10 from the last 90 days, the newest first. */
+  recentActions: AnalystAction[];
+  /** Up to 3, the most important of the last 14 days. */
+  headlines: Headline[];
+  sentiment: Sentiment | null;
+  /** One short sentence in English. */
+  sentimentReason: string | null;
+  /** The price targets raised among `recentActions` (the target before and after stated), which the trend weighs. */
+  raisedTargetCount: number;
+  /** The price targets lowered. */
+  loweredTargetCount: number;
+}
+
+/** A stock an analysis run could not analyze, and why; it keeps its previous analysis. */
+export interface FailedAnalysis {
+  symbol: string;
+  message: string;
+}
+
+/** The answer to `POST /api/analysis`: what one run did and cost. The analyses come with the next reload. */
+export interface AnalysisRun {
+  /** How many stocks were analyzed and stored. */
+  analyzed: number;
+  failed: FailedAnalysis[];
+  /** Tavily's credits (the free plan has 1,000 a month). */
+  tavilyCredits: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** What Claude's tokens cost, in dollars. */
+  costUsd: number;
 }
 
 /**
