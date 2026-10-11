@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { formatMoney, formatSignedPercent } from '../lib/format';
 import { ACTION_TONES, labelClassOf, RATING_TONES, SENTIMENT_TONES, TREND_TONES } from '../lib/signalColors';
+import { CHIP_CLASS, HINT_TEXT_CLASS, PANEL_CLASS, PANEL_TITLE_CLASS } from '../lib/styles';
 import type {
   AnalystAction,
   AnalystActionType,
@@ -62,7 +63,7 @@ function SourceLink({ url, children }: { url: string; children: ReactNode }) {
       href={webAddress}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-0.5 text-sky-400 transition-colors hover:text-sky-300 hover:underline"
+      className="inline-flex items-center gap-0.5 text-link underline-offset-2 hover:underline"
     >
       {children}
       <ExternalLink size={10} className="shrink-0" />
@@ -77,7 +78,7 @@ const COPY_DATE_HINT =
 /** "copy of 2026-09-18": how old the search engine's copy of a source may be (AI_ANALYSIS_TODO.md, decision 20). */
 function CopyDate({ date }: { date: string | null }) {
   return (
-    <span title={COPY_DATE_HINT} className="text-slate-500">
+    <span title={COPY_DATE_HINT} className="text-muted">
       {date === null ? 'copy date unknown' : `copy of ${date}`}
     </span>
   );
@@ -85,7 +86,7 @@ function CopyDate({ date }: { date: string | null }) {
 
 /** A small label in a colour: a rating, a trend, an action, a sentiment. */
 function ColoredLabel({ colorClass, children }: { colorClass: string; children: ReactNode }) {
-  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${colorClass}`}>{children}</span>;
+  return <span className={`${CHIP_CLASS} ${colorClass}`}>{children}</span>;
 }
 
 /** Its parts in a row with "·" between them; a missing part (`null`) leaves no double "·". */
@@ -95,7 +96,7 @@ function DottedLine({ parts }: { parts: ReactNode[] }) {
     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
       {presentParts.map((part, index) => (
         <Fragment key={index}>
-          {index > 0 && <span className="text-slate-600">·</span>}
+          {index > 0 && <span className="text-faint">·</span>}
           {part}
         </Fragment>
       ))}
@@ -106,14 +107,14 @@ function DottedLine({ parts }: { parts: ReactNode[] }) {
 function DetailsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{title}</div>
+      <div className="text-label text-muted">{title}</div>
       {children}
     </div>
   );
 }
 
 function EmptyNote({ children }: { children: ReactNode }) {
-  return <p className="text-slate-500">{children}</p>;
+  return <p className="text-muted">{children}</p>;
 }
 
 // ── analysts ────────────────────────────────────────────────────────────────────────────────────
@@ -144,7 +145,7 @@ function ConsensusLine({ consensus, sources }: { consensus: AnalystConsensus; so
           {consensus.rating === null ? 'NO RATING' : labelTextOf(consensus.rating)}
         </ColoredLabel>,
         consensus.analystCount === null ? null : <span>{consensus.analystCount} analysts</span>,
-        target === null ? null : <span className="font-mono">{target}</span>,
+        target === null ? null : <span>{target}</span>,
         <SourceLink url={consensus.sourceUrl}>{siteOf(consensus.sourceUrl)}</SourceLink>,
         <CopyDate date={publishedDateOf(consensus.sourceUrl, sources)} />,
       ]}
@@ -172,10 +173,10 @@ function TargetSpread({ consensus, sources }: { consensus: AnalystConsensus; sou
   return (
     <p
       title={sources.map(sourceSummaryOf).join('\n')}
-      className="cursor-help text-slate-400 underline decoration-slate-600 decoration-dotted underline-offset-2"
+      className="cursor-help text-muted underline decoration-line-strong decoration-dotted underline-offset-2"
     >
       Targets{' '}
-      <span className="font-mono">
+      <span>
         {formatMoney(consensus.targetLow)}–{formatMoney(consensus.targetHigh)}
       </span>{' '}
       across {consensus.sourceCount} sources
@@ -198,7 +199,7 @@ function TrendLine({ analysis }: { analysis: StockAnalysis }) {
           </ColoredLabel>
         </span>,
         analysis.analystTrend === null ? (
-          <span className="text-slate-500">{noTrendReason(analysis)}</span>
+          <span className="text-muted">{noTrendReason(analysis)}</span>
         ) : (
           <span title="Only price targets count, among the actions below: a rating without a target moves nothing">
             {targetMovesText(analysis)}
@@ -232,11 +233,11 @@ function ActionRow({ action }: { action: AnalystAction }) {
     <li>
       <DottedLine
         parts={[
-          <span className="font-mono text-slate-500">{action.date}</span>,
-          <span className="text-slate-200">{action.firm}</span>,
+          <span className="text-muted">{action.date}</span>,
+          <span className="font-medium">{action.firm}</span>,
           <ColoredLabel colorClass={labelClassOf(action.action, ACTION_TONES)}>{ACTION_NAMES[action.action]}</ColoredLabel>,
           ratingChange === null ? null : <span>{ratingChange}</span>,
-          targetChange === null ? null : <span className="font-mono">{targetChange}</span>,
+          targetChange === null ? null : <span>{targetChange}</span>,
           <SourceLink url={action.url}>{siteOf(action.url)}</SourceLink>,
           <CopyDate date={action.sourcePublishedDate} />,
         ]}
@@ -276,8 +277,8 @@ function HeadlineRow({ headline }: { headline: Headline }) {
     <li>
       <DottedLine
         parts={[
-          headline.date === null ? null : <span className="font-mono text-slate-500">{headline.date}</span>,
-          <span className="text-slate-400">{headline.source}</span>,
+          headline.date === null ? null : <span className="text-muted">{headline.date}</span>,
+          <span className="text-muted">{headline.source}</span>,
           <SourceLink url={headline.url}>{headline.title}</SourceLink>,
         ]}
       />
@@ -292,7 +293,7 @@ function NewsSection({ analysis }: { analysis: StockAnalysis }) {
         <ColoredLabel colorClass={labelClassOf(analysis.sentiment, SENTIMENT_TONES)}>
           {analysis.sentiment ?? 'UNKNOWN'}
         </ColoredLabel>
-        <span className="text-slate-300">{analysis.sentimentReason ?? 'No recent news in the search results.'}</span>
+        <span>{analysis.sentimentReason ?? 'No recent news in the search results.'}</span>
       </div>
       {analysis.headlines.length > 0 && (
         <ul className="flex flex-col gap-1">
@@ -320,14 +321,14 @@ function notAnalyzedText(holding: Holding): string {
 export function AnalysisDetails({ holding, onDataChanged }: { holding: Holding; onDataChanged: () => Promise<void> }) {
   const analysis = holding.analysis;
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
+    <div className={PANEL_CLASS}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div className={`flex flex-wrap items-center gap-2 ${PANEL_TITLE_CLASS}`}>
           Analysts and news
           {analysis !== null && (
             <>
               <SignalDot holding={holding} />
-              <span className="font-normal normal-case text-slate-500">
+              <span className="text-caption font-normal text-muted">
                 · {analyzedAtText(analysis)} by {analysis.model}
               </span>
             </>
@@ -337,7 +338,7 @@ export function AnalysisDetails({ holding, onDataChanged }: { holding: Holding; 
           <AnalyzeButton
             holdingIds={[holding.id]}
             label={`Analyze ${holding.symbol}`}
-            hint={`Search the web for the analyst ratings and news of ${holding.symbol}, and have Claude read them: about $0.03 and 3 Tavily credits`}
+            hint={`Search the web for the analyst ratings and news of ${holding.symbol}, and have Claude read them: about $0.04 and 5 Tavily credits`}
             onDataChanged={onDataChanged}
           />
         )}
@@ -350,7 +351,7 @@ export function AnalysisDetails({ holding, onDataChanged }: { holding: Holding; 
             <AnalystsSection analysis={analysis} />
             <NewsSection analysis={analysis} />
           </div>
-          <p className="text-[11px] text-slate-500">{SIGNAL_MEANINGS}</p>
+          <p className={HINT_TEXT_CLASS}>{SIGNAL_MEANINGS}</p>
         </>
       )}
     </div>

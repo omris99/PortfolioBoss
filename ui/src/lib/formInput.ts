@@ -34,4 +34,4 @@ export function trimmedOrNull(typedText: string): string | null {
 }
 
 export const INPUT_CLASS =
-  'rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none';
+  'h-8 rounded-md border border-strong bg-surface px-2 text-body text-ink placeholder:text-faint';

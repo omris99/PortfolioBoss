@@ -1,3 +1,5 @@
+import { formatDateTime } from '../lib/format';
+import { CHIP_CLASS } from '../lib/styles';
 import { dotClassOf, labelClassOf, SENTIMENT_TONES, TREND_TONES } from '../lib/signalColors';
 import type { Holding, HoldingSignal, StockAnalysis } from '../types/portfolio';
 import { MomentumScore } from './Momentum';
@@ -12,9 +14,9 @@ const SIGNAL_DESCRIPTIONS: Record<HoldingSignal, string> = {
   RED: 'two warning signs or more',
 };
 
-/** "analyzed 09/10/2026, 11:41:24", in the browser's own date format. */
+/** "analyzed 2026-10-09 11:41", in this computer's time zone. */
 export function analyzedAtText(analysis: StockAnalysis): string {
-  return `analyzed ${new Date(analysis.analyzedAt).toLocaleString()}`;
+  return `analyzed ${formatDateTime(analysis.analyzedAt)}`;
 }
 
 function signalHint(holding: Holding): string {
@@ -26,13 +28,45 @@ function signalHint(holding: Holding): string {
   return `${holding.signal}: ${SIGNAL_DESCRIPTIONS[holding.signal]} · ${analyzedAt}`;
 }
 
-/** The coloured dot, what it means on hover; an empty ring while there is none. */
-export function SignalDot({ holding }: { holding: Holding }) {
+/** A dot of one colour, `label` said on hover and to screen readers; an empty ring for `null`. */
+export function SignalColorDot({ signal, label }: { signal: HoldingSignal | null; label: string }) {
   return (
     <span
-      title={signalHint(holding)}
-      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${dotClassOf(holding.signal)}`}
+      role="img"
+      aria-label={label}
+      title={label}
+      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${dotClassOf(signal)}`}
     />
+  );
+}
+
+/** A holding's coloured dot, what it means on hover; an empty ring while there is none. */
+export function SignalDot({ holding }: { holding: Holding }) {
+  return <SignalColorDot signal={holding.signal} label={signalHint(holding)} />;
+}
+
+/** What the colours mean, behind a "?": the warning signs, then each colour with its dot. */
+export function SignalLegend() {
+  const legendRows: { signal: HoldingSignal | null; name: string; meaning: string }[] = [
+    { signal: 'GREEN', name: 'GREEN', meaning: 'no warning sign' },
+    { signal: 'YELLOW', name: 'YELLOW', meaning: 'one' },
+    { signal: 'RED', name: 'RED', meaning: 'two or more' },
+    { signal: null, name: 'Empty ring', meaning: 'no signal yet: not analyzed, or too little known' },
+  ];
+  return (
+    <>
+      <p>The dot counts warning signs: weak momentum, analysts deteriorating, negative news.</p>
+      <ul className="mt-2 grid gap-1.5">
+        {legendRows.map((row) => (
+          <li key={row.name} className="flex items-center gap-2">
+            <SignalColorDot signal={row.signal} label={row.name} />
+            <span>
+              <b className="font-semibold">{row.name}</b> · {row.meaning}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -62,7 +96,7 @@ function newsHint(analysis: StockAnalysis): string {
 /** "A" or "N" in the colour of what was found, the details on hover. */
 function LetterLabel({ letter, colorClass, hint }: { letter: string; colorClass: string; hint: string }) {
   return (
-    <span title={hint} className={`rounded px-1 py-0.5 font-sans text-[10px] font-semibold ${colorClass}`}>
+    <span title={hint} className={`${CHIP_CLASS} ${colorClass}`}>
       {letter}
     </span>
   );

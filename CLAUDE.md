@@ -7,12 +7,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A read-only decision-support tool for a **long-term** Interactive Brokers portfolio — the calm
 counterpart to the sibling IBBot intraday trading project (`~/DevProjects/IBBot`). It connects to
 TWS, syncs the holdings into a local PostgreSQL database on every connection, and serves that
-database to a React UI (`ui/`) that shows the positions table — the API always reads from the
-database, never straight from TWS. In the same table the user enters what IB doesn't know (a holding's
-sector and its buy/sell trades), and below it the closed positions — derived from those trades, plus the manual
-positions sold before PortfolioBoss saw them — and, above it, a card per investor for an account several people's
-money shares (each one's cash, value and profit), all of which the UI writes to the same database through a few JSON
-endpoints. Each holding also gets a momentum score from IB's daily closes and, on the press of a button, an analysis of
+database to a React UI (`ui/`) of four pages — the API always reads from the database, never straight from TWS: an
+Overview (the account's figures, what needs a look, how the signals stand), the positions table, in which the user
+enters what IB doesn't know (a holding's sector and its buy/sell trades), the closed positions — derived from those
+trades, plus the manual positions sold before PortfolioBoss saw them — and a card per investor for an account several
+people's money shares (each one's cash, value and profit), all of which the UI writes to the same database through a
+few JSON endpoints. Each holding also gets a momentum score from IB's daily closes and, on the press of a button, an analysis of
 its analyst ratings and news (Tavily searches, Claude extracts, the code decides), stored in the same database. It is a
 Maven / Spring Boot application (Java 21, Spring Boot 4.1.1).
 
@@ -40,7 +40,11 @@ Analyze buttons) is built, and its runs from the browser brought decisions 18–
 code from price-target moves, four searches (news articles for the analysts' actions, since forecast pages lag weeks in
 the search engine's copy), each source's copy date in the UI, and the search results Claude read kept with every
 analysis — what is left of its check is in the plan. Its API keys go in the git-ignored `config/local.env`, which
-Claude never reads or prints.
+Claude never reads or prints. The UI's redesign (begun 2026-10-11) is designed screen by screen in Claude Design from
+[DESIGN_BRIEF.md](DESIGN_BRIEF.md) — every screen's content, the color meanings to keep, made-up sample data (never the
+real portfolio) — and built from that design system's tokens and component specs, not its preview code: the light
+theme, the four pages with their addresses and the Overview are in; the Positions page's own design (a drawer for a
+holding's details, a Columns menu, forms in modals) is next.
 
 ## Hard invariant: read-only
 
@@ -82,7 +86,8 @@ Boot 4's name, not `-web`), JUnit 5. [run.sh](run.sh) is a thin wrapper around `
 running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
 and opens `http://localhost:5174` in the browser (stop everything with Ctrl+C). If TWS could not be
 read this run, it serves whatever the previous sync stored instead (see "Running requires TWS" below).
-The UI is a separate Vite app (Node 20.19+) whose dependencies must be installed once:
+The UI is a separate Vite app (Node 20.19+ — which is why react-router stays on 7.x: 8.x needs Node 22) whose
+dependencies must be installed once:
 
 ```bash
 cd ui && npm install     # first time only
@@ -201,11 +206,11 @@ HoldingWriteController ──writes── HoldingWriteService ──writes──
 
 ManualPositionWriteController ──writes── ManualPositionWriteService ──writes── Postgres  (manual_position rows and
         ▲                                                                          their trades; never a holding)
-        └──JSON── ui/'s closed positions section (new manual position, its details and trades)
+        └──JSON── ui/'s Closed page (new manual position, its details and trades)
 
 InvestorWriteController ──writes── InvestorWriteService ──writes── Postgres  (investor and investor_cash_movement
         ▲                                                                    rows; never the account owner's cash)
-        └──JSON── ui/'s investor cards (add, rename) and deposits panel
+        └──JSON── ui/'s Investors page: the cards (add, rename) and deposits panel
 ```
 
 The sync-at-connection lifecycle, which is the part worth knowing:
@@ -609,6 +614,10 @@ Things that are easy to break:
 - Readability over brevity, in Java and TypeScript alike: descriptive names (`holding`,
   `sortState`, `response`), never one-letter variables (the conventional `e` in a `catch` is fine),
   and small functions/components with a single job instead of long inline expressions.
+- The UI's colors are the design system's roles only: `ui/tailwind.config.js` defines no raw Tailwind color
+  (`slate-500` simply doesn't exist), the values are CSS variables in `ui/src/index.css`, and the recurring pieces —
+  buttons, fields, panels, tables, tags — are shared classes in `ui/src/lib/styles.ts`. Green and red are for profit
+  and loss and the signal's tones only (BUY/SELL are grey).
 - One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` owns the TWS
   host/port/client id and the single `IbGateway`. Don't add a second entry point or a second place
   that connects to TWS.

@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import {
   formatDate,
@@ -8,6 +8,7 @@ import {
   formatSignedPercent,
   profitLossColorClass,
 } from '../lib/format';
+import { TABLE_CLASS, TABLE_HEAD_ROW_CLASS, TABLE_ROW_CLASS, TAG_CLASS } from '../lib/styles';
 import type { ClosedPosition, Holding, HoldingSignal } from '../types/portfolio';
 import { AnalysisDetails } from './AnalysisDetails';
 import { ExpandRowButton } from './ExpandRowButton';
@@ -88,7 +89,7 @@ interface ColumnDefinition {
   /** The order on the first click: A→Z for text, oldest first for dates, largest first for numbers. */
   firstSortDirection: SortDirection;
   renderValue: (holding: Holding, tableActions: TableActions) => ReactNode;
-  /** Text colour classes for the cell; a neutral grey when omitted. */
+  /** Text colour classes for the cell; the ordinary text colour when omitted. */
   valueColorClass?: (holding: Holding) => string;
 }
 
@@ -96,11 +97,7 @@ function SymbolWithStatus({ holding }: { holding: Holding }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       {holding.symbol}
-      {holding.status === 'CLOSED' && (
-        <span className="rounded bg-slate-800 px-1 py-0.5 font-sans text-[9px] font-medium uppercase text-slate-400">
-          closed
-        </span>
-      )}
+      {holding.status === 'CLOSED' && <span className={TAG_CLASS}>closed</span>}
       <HoldingWarningIcon warnings={holding.warnings} />
     </span>
   );
@@ -126,7 +123,7 @@ function QuantityWithSplit({ holding }: { holding: Holding }) {
     .join(' · ');
   return (
     <span title={namedSplit}>
-      {formatQuantity(holding.position)} <span className="text-slate-500">({split})</span>
+      {formatQuantity(holding.position)} <span className="text-muted">({split})</span>
     </span>
   );
 }
@@ -154,7 +151,7 @@ const COLUMNS: ColumnDefinition[] = [
     sortValue: (holding) => holding.symbol,
     firstSortDirection: 'ascending',
     renderValue: (holding) => <SymbolWithStatus holding={holding} />,
-    valueColorClass: () => 'font-semibold text-slate-100',
+    valueColorClass: () => 'font-semibold',
   },
   {
     // The dot, the momentum, the analysts and the news in one column (AI_ANALYSIS_TODO.md, decision 15).
@@ -280,13 +277,13 @@ function SortableHeaderCell({
       <button
         type="button"
         onClick={() => onSort(column)}
-        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-slate-300 ${
-          isSortedByThisColumn ? 'text-slate-200' : ''
+        className={`inline-flex items-center gap-1 transition-colors hover:text-ink ${
+          isSortedByThisColumn ? 'text-ink' : ''
         }`}
       >
         {column.title}
         {isSortedByThisColumn &&
-          (sortState.direction === 'ascending' ? <ArrowUp size={10} /> : <ArrowDown size={10} />)}
+          (sortState.direction === 'ascending' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
       </button>
     </th>
   );
@@ -297,19 +294,20 @@ function HoldingRow({
   isExpanded,
   onToggleExpanded,
   tableActions,
+  rowRef,
 }: {
   holding: Holding;
   isExpanded: boolean;
   onToggleExpanded: () => void;
   tableActions: TableActions;
+  /** Given to the open row only, so the table can bring it into view. */
+  rowRef?: Ref<HTMLTableRowElement>;
 }) {
   // A closed holding is shown dimmed; its trades stay editable, which is where its history gets completed.
   const closedClass = holding.status === 'CLOSED' ? 'opacity-60' : '';
   return (
-    <tr
-      className={`border-b border-slate-800/60 transition-colors last:border-b-0 hover:bg-slate-800/30 ${closedClass}`}
-    >
-      <td className="w-6 py-2 pl-2">
+    <tr ref={rowRef} className={`${TABLE_ROW_CLASS} ${closedClass}`}>
+      <td className="w-8 py-1.5 pl-2">
         <ExpandRowButton
           isExpanded={isExpanded}
           onToggle={onToggleExpanded}
@@ -318,12 +316,9 @@ function HoldingRow({
         />
       </td>
       {COLUMNS.map((column) => {
-        const colorClass = column.valueColorClass?.(holding) ?? 'text-slate-300';
+        const colorClass = column.valueColorClass?.(holding) ?? '';
         return (
-          <td
-            key={column.key}
-            className={`whitespace-nowrap px-3 py-2 font-mono text-xs ${alignmentClass(column)} ${colorClass}`}
-          >
+          <td key={column.key} className={`whitespace-nowrap px-3 py-2 ${alignmentClass(column)} ${colorClass}`}>
             {column.renderValue(holding, tableActions)}
           </td>
         );
@@ -346,30 +341,37 @@ function closedPositionsOf(holding: Holding, closedPositions: ClosedPosition[]):
 /**
  * `onDataChanged` reloads the portfolio; the sector cells and the trades panel call it after every save.
  * `closedPositions` are every closed position of the portfolio: each holding's open row shows its own, split by investor.
+ * One row is open at a time, `expandedHoldingId`, which the page keeps in the address; `onToggleExpanded` opens or
+ * closes a row.
  */
 export function PositionsTable({
   holdings,
   closedPositions,
+  expandedHoldingId,
+  onToggleExpanded,
   onDataChanged,
 }: {
   holdings: Holding[];
   closedPositions: ClosedPosition[];
+  expandedHoldingId: number | null;
+  onToggleExpanded: (holdingId: number) => void;
   onDataChanged: () => Promise<void>;
 }) {
   // Largest position first, like the console report.
   const [sortState, setSortState] = useState<SortState>({ columnKey: 'marketValue', direction: 'descending' });
-  // One trades panel open at a time.
-  const [expandedHoldingId, setExpandedHoldingId] = useState<number | null>(null);
+  const expandedRowRef = useRef<HTMLTableRowElement>(null);
 
   const sortedHoldings = useMemo(() => sortHoldings(holdings, sortState), [holdings, sortState]);
   const sectorOptions = useMemo(() => distinctSectorsOf(holdings), [holdings]);
   const tableActions: TableActions = { onDataChanged };
 
+  // Arriving with a row already open — from a link on the Overview, say — brings it into view, once.
+  useEffect(() => {
+    expandedRowRef.current?.scrollIntoView({ block: 'start' });
+  }, []);
+
   const handleSort = (clickedColumn: ColumnDefinition) =>
     setSortState((currentSort) => sortStateAfterClicking(currentSort, clickedColumn));
-
-  const toggleExpanded = (holdingId: number) =>
-    setExpandedHoldingId((currentlyExpandedId) => (currentlyExpandedId === holdingId ? null : holdingId));
 
   return (
     <div className="overflow-x-auto">
@@ -378,10 +380,10 @@ export function PositionsTable({
           <option key={sector} value={sector} />
         ))}
       </datalist>
-      <table className="w-full border-collapse text-sm">
+      <table className={TABLE_CLASS}>
         <thead>
-          <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wide text-slate-500">
-            <th className="w-6">
+          <tr className={TABLE_HEAD_ROW_CLASS}>
+            <th className="w-8">
               <span className="sr-only">Trades</span>
             </th>
             {COLUMNS.map((column) => (
@@ -403,12 +405,13 @@ export function PositionsTable({
                 <HoldingRow
                   holding={holding}
                   isExpanded={isExpanded}
-                  onToggleExpanded={() => toggleExpanded(holding.id)}
+                  onToggleExpanded={() => onToggleExpanded(holding.id)}
                   tableActions={tableActions}
+                  rowRef={isExpanded ? expandedRowRef : undefined}
                 />
                 {isExpanded && (
-                  <tr className="border-b border-slate-800/60">
-                    <td colSpan={COLUMNS.length + 1} className="px-3 pb-3">
+                  <tr className="border-b">
+                    <td colSpan={COLUMNS.length + 1} className="px-3 pb-4 pt-1">
                       <div className="flex flex-col gap-3">
                         <MomentumDetails momentum={holding.momentum} />
                         <AnalysisDetails holding={holding} onDataChanged={onDataChanged} />

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { deleteManualPosition, errorMessageOf } from '../lib/apiClient';
+import { DANGER_BUTTON_CLASS, ERROR_TEXT_CLASS } from '../lib/styles';
 import type { ClosedPosition } from '../types/portfolio';
 import { ManualPositionDetailsForm } from './ManualPositionForms';
 import { TradesPanel } from './TradesPanel';
@@ -18,9 +19,9 @@ function DeletePositionButton({ isDeleting, onDelete }: { isDeleting: boolean; o
       type="button"
       onClick={onDelete}
       disabled={isDeleting}
-      className="flex items-center gap-1 rounded-md border border-rose-500/40 px-3 py-1 text-xs text-rose-300 transition-colors hover:bg-rose-500/10 disabled:opacity-50"
+      className={DANGER_BUTTON_CLASS}
     >
-      <Trash2 size={12} />
+      <Trash2 size={16} />
       {isDeleting ? 'Deleting…' : 'Delete position'}
     </button>
   );
@@ -59,7 +60,7 @@ export function ManualPositionPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
+      <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border bg-page p-4">
         <ManualPositionDetailsForm
           manualPositionId={manualPositionId}
           closedPosition={closedPosition}
@@ -67,7 +68,7 @@ export function ManualPositionPanel({
         />
         <DeletePositionButton isDeleting={isDeleting} onDelete={() => void handleDeletePosition()} />
       </div>
-      {deleteErrorMessage && <p className="text-[11px] text-rose-400">{deleteErrorMessage}</p>}
+      {deleteErrorMessage && <p className={ERROR_TEXT_CLASS}>{deleteErrorMessage}</p>}
 
       <TradesPanel
         owner={{

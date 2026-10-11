@@ -8,6 +8,15 @@ import {
   numberOrNull,
   trimmedOrNull,
 } from '../lib/formInput';
+import {
+  ERROR_TEXT_CLASS,
+  FIELD_LABEL_CLASS,
+  HINT_TEXT_CLASS,
+  PANEL_CLASS,
+  PANEL_TITLE_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
+} from '../lib/styles';
 import type { ClosedPosition, ManualPositionRequest, NewManualPositionRequest } from '../types/portfolio';
 import { InvestorSelect } from './InvestorSelect';
 import { accountOwnerOf, useInvestors } from './InvestorsContext';
@@ -24,9 +33,6 @@ const DEFAULT_CURRENCY = 'USD';
 
 /** The API's rule (`Utils.calculateOrderCommission`), said where the field is. */
 const COMMISSION_HINT = 'Leave empty for the default: 1 cent a share, at least $5. Enter 0 for no commission.';
-
-const BUTTON_CLASS =
-  'rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-50';
 
 // ── what is typed ───────────────────────────────────────────────────────────────────────────────
 
@@ -151,10 +157,7 @@ function FormField({
   children: ReactNode;
 }) {
   return (
-    <label
-      title={title}
-      className={`flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500 ${className}`}
-    >
+    <label title={title} className={`${FIELD_LABEL_CLASS} ${className}`}>
       {label}
       {children}
     </label>
@@ -285,10 +288,10 @@ export function NewManualPositionForm({ onSaved, onCancel }: { onSaved: () => Pr
   return (
     <form
       onSubmit={(event) => void handleSubmit(event)}
-      className="flex flex-col gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300"
+      className={PANEL_CLASS}
     >
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Add a closed position</div>
-      <p className="text-[11px] text-slate-500">
+      <div className={PANEL_TITLE_CLASS}>Add a closed position</div>
+      <p className={HINT_TEXT_CLASS}>
         A position bought and sold before PortfolioBoss saw it. Start with one buy and one sell; more buys and sells are
         added in its row. A holding PortfolioBoss knows is completed through its trades, in Positions.
       </p>
@@ -351,20 +354,20 @@ export function NewManualPositionForm({ onSaved, onCancel }: { onSaved: () => Pr
             onChange={(text) => updateFormValue('sellCommissionText', text)}
           />
         </FormField>
-        <button type="submit" disabled={isSaving} className={BUTTON_CLASS}>
+        <button type="submit" disabled={isSaving} className={PRIMARY_BUTTON_CLASS}>
           {isSaving ? 'Saving…' : 'Add closed position'}
         </button>
         <button
           type="button"
           onClick={onCancel}
           disabled={isSaving}
-          className="rounded-md border border-slate-700 px-3 py-1 text-xs text-slate-300 transition-colors hover:text-slate-100 disabled:opacity-50"
+          className={SECONDARY_BUTTON_CLASS}
         >
           Cancel
         </button>
       </div>
 
-      {errorMessage && <p className="text-[11px] text-rose-400">{errorMessage}</p>}
+      {errorMessage && <p className={ERROR_TEXT_CLASS}>{errorMessage}</p>}
     </form>
   );
 }
@@ -409,11 +412,11 @@ export function ManualPositionDetailsForm({
     <form onSubmit={(event) => void handleSubmit(event)} className="flex min-w-0 flex-1 flex-col gap-2">
       <div className="flex flex-wrap items-end gap-2">
         <DetailsFields values={formValues} onChange={updateFormValue} />
-        <button type="submit" disabled={isSaving} className={BUTTON_CLASS}>
+        <button type="submit" disabled={isSaving} className={PRIMARY_BUTTON_CLASS}>
           {isSaving ? 'Saving…' : 'Save details'}
         </button>
       </div>
-      {errorMessage && <p className="text-[11px] text-rose-400">{errorMessage}</p>}
+      {errorMessage && <p className={ERROR_TEXT_CLASS}>{errorMessage}</p>}
     </form>
   );
 }

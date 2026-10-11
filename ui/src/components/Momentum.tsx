@@ -1,6 +1,7 @@
 import { Check, CircleHelp, X } from 'lucide-react';
 import { EMPTY_VALUE, formatMoney, formatSignedPercent } from '../lib/format';
 import { labelClassOf, MOMENTUM_TONES } from '../lib/signalColors';
+import { CHIP_CLASS, HINT_TEXT_CLASS, PANEL_CLASS, PANEL_TITLE_CLASS } from '../lib/styles';
 import type { Momentum } from '../types/portfolio';
 
 /** What each label suggests — a legend for reading the score, not advice; PortfolioBoss places no orders. */
@@ -25,7 +26,7 @@ export function MomentumScore({ momentum }: { momentum: Momentum | null }) {
   return (
     <span
       title={scoreHint(momentum)}
-      className={`rounded px-1.5 py-0.5 font-sans text-[10px] font-semibold ${labelClassOf(momentum.label, MOMENTUM_TONES)}`}
+      className={`${CHIP_CLASS} ${labelClassOf(momentum.label, MOMENTUM_TONES)}`}
     >
       M {scoreText(momentum)}
     </span>
@@ -104,11 +105,11 @@ function checksOf(momentum: Momentum): MomentumCheck[] {
 }
 
 function CheckIcon({ passed }: { passed: boolean | null }) {
-  if (passed === null) return <CircleHelp size={12} className="shrink-0 text-slate-500" aria-label="unknown" />;
+  if (passed === null) return <CircleHelp size={14} className="shrink-0 text-unknown" aria-label="unknown" />;
   return passed ? (
-    <Check size={12} className="shrink-0 text-emerald-400" aria-label="holds" />
+    <Check size={14} className="shrink-0 text-positive" aria-label="holds" />
   ) : (
-    <X size={12} className="shrink-0 text-rose-400" aria-label="fails" />
+    <X size={14} className="shrink-0 text-negative" aria-label="fails" />
   );
 }
 
@@ -119,10 +120,10 @@ function textOf(check: MomentumCheck): string {
 
 function CheckRow({ check }: { check: MomentumCheck }) {
   return (
-    <li className="flex items-center gap-1.5">
+    <li className="flex items-center gap-2">
       <CheckIcon passed={check.passed} />
-      <span className="text-slate-300">{textOf(check)}</span>
-      <span className="font-mono text-slate-500">· {check.detail}</span>
+      <span>{textOf(check)}</span>
+      <span className="text-muted">· {check.detail}</span>
     </li>
   );
 }
@@ -133,20 +134,20 @@ function CheckRow({ check }: { check: MomentumCheck }) {
  */
 export function MomentumDetails({ momentum }: { momentum: Momentum | null }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs">
-      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    <div className={PANEL_CLASS}>
+      <div className={`flex items-center gap-2 ${PANEL_TITLE_CLASS}`}>
         Momentum
         {momentum !== null && (
           <>
-            <span className={`rounded px-1.5 py-0.5 text-[10px] ${labelClassOf(momentum.label, MOMENTUM_TONES)}`}>
+            <span className={`${CHIP_CLASS} ${labelClassOf(momentum.label, MOMENTUM_TONES)}`}>
               {momentum.label ?? 'no score'} {scoreText(momentum)}
             </span>
-            <span className="font-normal normal-case text-slate-500">· daily closes as of {momentum.asOf}</span>
+            <span className="text-caption font-normal text-muted">· daily closes as of {momentum.asOf}</span>
           </>
         )}
       </div>
       {momentum === null ? (
-        <p className="text-slate-500">No daily closes stored yet: they are read from IB on every run.sh.</p>
+        <p className="text-muted">No daily closes stored yet: they are read from IB on every run.sh.</p>
       ) : (
         <>
           <ul className="flex flex-col gap-1">
@@ -154,7 +155,7 @@ export function MomentumDetails({ momentum }: { momentum: Momentum | null }) {
               <CheckRow key={check.key} check={check} />
             ))}
           </ul>
-          <p className="text-[11px] text-slate-500">{LABEL_MEANINGS}</p>
+          <p className={HINT_TEXT_CLASS}>{LABEL_MEANINGS}</p>
         </>
       )}
     </div>

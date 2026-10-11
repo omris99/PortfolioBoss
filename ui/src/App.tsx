@@ -1,23 +1,15 @@
-import { useState } from 'react';
-import { RefreshCw, TriangleAlert } from 'lucide-react';
-import { AnalyzeButton } from './components/AnalyzeButton';
-import { ClosedPositionsSection } from './components/ClosedPositionsSection';
+import type { ReactNode } from 'react';
+import { Navigate, Route, Routes } from 'react-router';
+import { AppShell, type LoadStatus } from './components/AppShell';
 import { EmptyBox } from './components/EmptyBox';
-import { needsAttention } from './components/HoldingWarnings';
 import { InvestorsProvider } from './components/InvestorsContext';
-import { InvestorsSummary } from './components/InvestorsSummary';
-import { PositionsTable } from './components/PositionsTable';
-import { SummaryBar } from './components/SummaryBar';
 import { usePortfolio } from './hooks/usePortfolio';
-import type { Holding, PortfolioSnapshot } from './types/portfolio';
-
-type LoadStatus = 'loading' | 'ready' | 'error';
-
-const STATUS_DOT_COLORS: Record<LoadStatus, string> = {
-  loading: 'bg-amber-400',
-  ready: 'bg-emerald-400',
-  error: 'bg-rose-400',
-};
+import { formatDateTime } from './lib/format';
+import { ClosedPositionsPage } from './pages/ClosedPositionsPage';
+import { InvestorsPage } from './pages/InvestorsPage';
+import { OverviewPage } from './pages/OverviewPage';
+import { PositionsPage } from './pages/PositionsPage';
+import type { PortfolioSnapshot } from './types/portfolio';
 
 function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStatus {
   if (errorMessage) return 'error';
@@ -26,178 +18,46 @@ function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStat
 }
 
 /**
- * The API also sends the holdings TWS no longer reports (CLOSED), whose sector and trades are kept. They are hidden
- * unless "Show closed" is on, and never counted in the summary.
+ * Loads the portfolio once for every page, and shows the page of the address: / the Overview, /positions (with
+ * /positions/12 opening holding 12's row), /closed and /investors. Any other address goes to the Overview.
  */
-function openHoldingsOf(snapshot: PortfolioSnapshot | null): Holding[] {
-  if (snapshot === null) return [];
-  return snapshot.holdings.filter((holding) => holding.status === 'OPEN');
-}
-
-/**
- * "2 holdings need attention (1 closed, hidden)", or `null` when none does. It counts every holding, not only the
- * shown ones: "closed without a sell" is only ever on a closed holding, which is hidden by default.
- */
-function attentionSummaryOf(allHoldings: Holding[], showClosed: boolean): string | null {
-  const holdingsNeedingAttention = allHoldings.filter(needsAttention);
-  if (holdingsNeedingAttention.length === 0) return null;
-
-  const hiddenCount = showClosed
-    ? 0
-    : holdingsNeedingAttention.filter((holding) => holding.status === 'CLOSED').length;
-  const subjectAndVerb = holdingsNeedingAttention.length === 1 ? 'holding needs' : 'holdings need';
-  const hiddenNote = hiddenCount > 0 ? ` (${hiddenCount} closed, hidden)` : '';
-  return `${holdingsNeedingAttention.length} ${subjectAndVerb} attention${hiddenNote}`;
-}
-
-function AttentionSummary({ summary }: { summary: string }) {
-  return (
-    <div className="mt-1 flex items-center gap-1 text-xs text-orange-500">
-      <TriangleAlert size={12} className="shrink-0" />
-      {summary}
-    </div>
-  );
-}
-
-function ShowClosedToggle({
-  closedCount,
-  showClosed,
-  onChange,
-}: {
-  closedCount: number;
-  showClosed: boolean;
-  onChange: (showClosed: boolean) => void;
-}) {
-  return (
-    <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-400">
-      <input
-        type="checkbox"
-        checked={showClosed}
-        onChange={(event) => onChange(event.target.checked)}
-        className="accent-emerald-500"
-      />
-      Show closed ({closedCount})
-    </label>
-  );
-}
-
-function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div
-      role="alert"
-      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-700/50 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
-    >
-      <div className="flex items-center gap-2">
-        <TriangleAlert size={16} className="shrink-0" />
-        {message}
-      </div>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-[11px] font-medium text-slate-300 transition-all hover:border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-400"
-      >
-        <RefreshCw size={14} />
-        Retry
-      </button>
-    </div>
-  );
-}
-
-function PositionsContent({
-  snapshot,
-  visibleHoldings,
-  isLoading,
-  onDataChanged,
-}: {
-  snapshot: PortfolioSnapshot | null;
-  visibleHoldings: Holding[];
-  isLoading: boolean;
-  onDataChanged: () => Promise<void>;
-}) {
-  if (snapshot === null) {
-    return <EmptyBox message={isLoading ? 'Loading holdings…' : 'No data.'} />;
-  }
-  if (visibleHoldings.length === 0) {
-    return <EmptyBox message="No open positions reported." />;
-  }
-  return (
-    <PositionsTable
-      holdings={visibleHoldings}
-      closedPositions={snapshot.closedPositions}
-      onDataChanged={onDataChanged}
-    />
-  );
-}
-
 function App() {
   const { snapshot, errorMessage, isLoading, reload } = usePortfolio();
-  const [showClosed, setShowClosed] = useState(false);
 
-  const openHoldings = openHoldingsOf(snapshot);
-  const allHoldings = snapshot?.holdings ?? [];
-  const closedCount = allHoldings.length - openHoldings.length;
-  const visibleHoldings = showClosed ? allHoldings : openHoldings;
-  const attentionSummary = attentionSummaryOf(allHoldings, showClosed);
-  const loadStatus = loadStatusOf(errorMessage, isLoading);
-  const sectionSubtitle = snapshot
-    ? `Account ${snapshot.account} · last synced from TWS ${new Date(snapshot.asOf).toLocaleString()}`
-    : 'The portfolio as of the last sync from TWS.';
+  /** The page, once the first snapshot is in; until then, a box saying it is loading (or that nothing came). */
+  const pageOnceLoaded = (renderPage: (loadedSnapshot: PortfolioSnapshot) => ReactNode): ReactNode =>
+    snapshot === null ? <EmptyBox message={isLoading ? 'Loading the portfolio…' : 'No data.'} /> : renderPage(snapshot);
 
   return (
     // Every component below can read the investors with useInvestors(), without receiving them as a prop.
     <InvestorsProvider investors={snapshot?.investors ?? []}>
-      <div className="min-h-full">
-        <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-6">
-          <header>
-            <h1 className="text-xl font-semibold text-slate-100">PortfolioBoss</h1>
-            <p className="mt-1 text-xs text-slate-400">
-              Read-only against Interactive Brokers · sector and trades are stored locally.
-            </p>
-          </header>
-
-          {errorMessage && <ErrorBanner message={errorMessage} onRetry={() => void reload()} />}
-
-          {snapshot && <SummaryBar snapshot={snapshot} openHoldings={openHoldings} />}
-
-          {snapshot && <InvestorsSummary investors={snapshot.investors} onDataChanged={reload} />}
-
-          <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-slate-100">Positions</div>
-                <div className="mt-1 text-xs text-slate-400">{sectionSubtitle}</div>
-                {attentionSummary && <AttentionSummary summary={attentionSummary} />}
-              </div>
-              <div className="flex flex-wrap items-center gap-4">
-                {openHoldings.length > 0 && (
-                  <AnalyzeButton
-                    holdingIds={null}
-                    label="Analyze"
-                    hint={`Search the web for the analyst ratings and news of every open holding, and have Claude read them: about $0.03 and 3 Tavily credits a stock (${openHoldings.length} now)`}
-                    onDataChanged={reload}
-                  />
-                )}
-                <ShowClosedToggle closedCount={closedCount} showClosed={showClosed} onChange={setShowClosed} />
-                <div className="flex items-center gap-1 text-xs">
-                  <span className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_COLORS[loadStatus]}`} />
-                  <span className="capitalize text-slate-300">{loadStatus}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <PositionsContent
-                snapshot={snapshot}
-                visibleHoldings={visibleHoldings}
-                isLoading={isLoading}
-                onDataChanged={reload}
-              />
-            </div>
-          </section>
-
-          {snapshot && <ClosedPositionsSection closedPositions={snapshot.closedPositions} onDataChanged={reload} />}
-        </main>
-      </div>
+      <AppShell
+        account={snapshot?.account ?? null}
+        syncedAt={snapshot === null ? null : formatDateTime(snapshot.asOf)}
+        loadStatus={loadStatusOf(errorMessage, isLoading)}
+        errorMessage={errorMessage}
+        hasData={snapshot !== null}
+        onRetry={() => void reload()}
+      >
+        <Routes>
+          <Route index element={pageOnceLoaded((loaded) => <OverviewPage snapshot={loaded} />)} />
+          <Route
+            path="positions/:holdingId?"
+            element={pageOnceLoaded((loaded) => <PositionsPage snapshot={loaded} onDataChanged={reload} />)}
+          />
+          <Route
+            path="closed"
+            element={pageOnceLoaded((loaded) => (
+              <ClosedPositionsPage closedPositions={loaded.closedPositions} onDataChanged={reload} />
+            ))}
+          />
+          <Route
+            path="investors"
+            element={pageOnceLoaded((loaded) => <InvestorsPage investors={loaded.investors} onDataChanged={reload} />)}
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppShell>
     </InvestorsProvider>
   );
 }

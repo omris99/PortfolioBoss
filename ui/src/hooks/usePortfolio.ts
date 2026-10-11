@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { PortfolioSnapshot } from '../types/portfolio';
 
 // The API serves the last sync even with TWS off, so TWS is not the thing to check here.
-const API_UNREACHABLE_MESSAGE = 'Could not read the portfolio from the PortfolioBoss API. Is ./run.sh running?';
+const API_UNREACHABLE_MESSAGE = 'Could not reach the PortfolioBoss API. Is ./run.sh running?';
 
 /**
  * Loads the portfolio snapshot once on mount. `reload` loads it again: after a failed load, and after every write

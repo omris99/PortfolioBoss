@@ -1,5 +1,6 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import { TriangleAlert } from 'lucide-react';
+import { Link } from 'react-router';
 import {
   EMPTY_VALUE,
   formatDate,
@@ -9,6 +10,7 @@ import {
   formatSignedPercent,
   profitLossColorClass,
 } from '../lib/format';
+import { HINT_TEXT_CLASS, PANEL_CLASS, TABLE_CLASS, TABLE_HEAD_ROW_CLASS, TAG_CLASS } from '../lib/styles';
 import type { ClosedPosition } from '../types/portfolio';
 import { ExpandRowButton } from './ExpandRowButton';
 import { HoldingPeriod } from './HoldingPeriod';
@@ -47,7 +49,7 @@ function RealizedPnl({ closedPosition }: { closedPosition: ClosedPosition }) {
   return (
     <>
       {formatSignedMoney(closedPosition.realizedPnl)}{' '}
-      <span className="text-[10px] text-slate-500">{closedPosition.currency}</span>
+      <span className="text-caption text-muted">{closedPosition.currency}</span>
     </>
   );
 }
@@ -56,15 +58,9 @@ function RealizedPnl({ closedPosition }: { closedPosition: ClosedPosition }) {
 function NoteCell({ note }: { note: string | null }) {
   if (note === null) return <>{EMPTY_VALUE}</>;
   return (
-    <span title={note} className="block max-w-64 truncate font-sans">
+    <span title={note} className="block max-w-64 truncate">
       {note}
     </span>
-  );
-}
-
-function Tag({ colorClass, children }: { colorClass: string; children: ReactNode }) {
-  return (
-    <span className={`rounded px-1 py-0.5 font-sans text-[9px] font-medium uppercase ${colorClass}`}>{children}</span>
   );
 }
 
@@ -76,11 +72,9 @@ function SymbolWithTags({ closedPosition }: { closedPosition: ClosedPosition }) 
   return (
     <span className="inline-flex items-center gap-1.5">
       {closedPosition.symbol}
-      {closedPosition.source === 'MANUAL' && <Tag colorClass="bg-slate-800 text-slate-400">manual</Tag>}
+      {closedPosition.source === 'MANUAL' && <span className={TAG_CLASS}>manual</span>}
       {closedPosition.remainingQuantity > 0 && (
-        <Tag colorClass="bg-sky-500/10 text-sky-300">
-          partial · still holding {formatQuantity(closedPosition.remainingQuantity)}
-        </Tag>
+        <span className={TAG_CLASS}>partial · still holding {formatQuantity(closedPosition.remainingQuantity)}</span>
       )}
     </span>
   );
@@ -92,13 +86,12 @@ const COLUMNS: ColumnDefinition[] = [
     title: 'Symbol',
     alignment: 'left',
     renderValue: (closedPosition) => <SymbolWithTags closedPosition={closedPosition} />,
-    valueColorClass: () => 'font-semibold text-slate-100',
+    valueColorClass: () => 'font-semibold',
   },
   {
     title: 'Investor',
     alignment: 'left',
     renderValue: (closedPosition) => <InvestorName investorId={closedPosition.investorId} />,
-    valueColorClass: () => 'font-sans text-slate-300',
     onlyWithSeveralInvestors: true,
   },
   {
@@ -159,7 +152,7 @@ const COLUMNS: ColumnDefinition[] = [
     title: 'Note',
     alignment: 'left',
     renderValue: (closedPosition) => <NoteCell note={closedPosition.note} />,
-    valueColorClass: () => 'text-slate-400',
+    valueColorClass: () => 'text-muted',
   },
 ];
 
@@ -209,11 +202,10 @@ function ClosedPositionRow({
   isExpanded: boolean;
   onToggleExpanded: () => void;
 }) {
-  const borderClass =
-    closedPosition.warning === null && !isExpanded ? 'border-b border-slate-800/60 last:border-b-0' : '';
+  const borderClass = closedPosition.warning === null && !isExpanded ? 'border-b last:border-b-0' : '';
   return (
-    <tr className={`${borderClass} transition-colors hover:bg-slate-800/30`}>
-      <td className="w-6 py-2 pl-2">
+    <tr className={`${borderClass} transition-colors hover:bg-subtle`}>
+      <td className="w-8 py-1.5 pl-2">
         <ExpandRowButton
           isExpanded={isExpanded}
           onToggle={onToggleExpanded}
@@ -222,12 +214,9 @@ function ClosedPositionRow({
         />
       </td>
       {columns.map((column) => {
-        const colorClass = column.valueColorClass?.(closedPosition) ?? 'text-slate-300';
+        const colorClass = column.valueColorClass?.(closedPosition) ?? '';
         return (
-          <td
-            key={column.title}
-            className={`whitespace-nowrap px-3 py-2 font-mono text-xs ${alignmentClass(column)} ${colorClass}`}
-          >
+          <td key={column.title} className={`whitespace-nowrap px-3 py-2 ${alignmentClass(column)} ${colorClass}`}>
             {column.renderValue(closedPosition)}
           </td>
         );
@@ -242,10 +231,10 @@ function ClosedPositionRow({
  */
 function ClosedPositionWarningRow({ message, columnCount }: { message: string; columnCount: number }) {
   return (
-    <tr className="border-b border-slate-800/60 last:border-b-0">
-      <td colSpan={columnCount} className="px-3 pb-2 text-xs text-orange-500">
-        <div className="flex items-center gap-1">
-          <TriangleAlert size={12} className="shrink-0" />
+    <tr className="border-b last:border-b-0">
+      <td colSpan={columnCount} className="px-3 pb-2 text-warn-real">
+        <div className="flex items-center gap-2">
+          <TriangleAlert size={14} className="shrink-0" />
           {message}
         </div>
       </td>
@@ -253,19 +242,24 @@ function ClosedPositionWarningRow({ message, columnCount }: { message: string; c
   );
 }
 
-function holdingRowHint(closedPosition: ClosedPosition): string {
-  return (
-    `From the trades of ${closedPosition.symbol}: correct them in its trades panel, in Positions ` +
-    '(with "Show closed" on, if the holding is closed).'
-  );
-}
-
-/** A holding's trades of this stretch, read-only: they are corrected in the positions table. */
+/**
+ * A holding's trades of this stretch, read-only: they are corrected in the positions table, where the link opens the
+ * holding's row — a closed holding's too.
+ */
 function HoldingTradesOfStretch({ closedPosition }: { closedPosition: ClosedPosition }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
+    <div className={PANEL_CLASS}>
       <TradeList trades={closedPosition.trades} />
-      <p className="text-[11px] text-slate-500">{holdingRowHint(closedPosition)}</p>
+      <p className={HINT_TEXT_CLASS}>
+        From the trades of {closedPosition.symbol}: correct them in its trades panel, in{' '}
+        <Link
+          to={`/positions/${closedPosition.holdingId}`}
+          className="font-medium text-accent underline underline-offset-2"
+        >
+          Positions
+        </Link>
+        .
+      </p>
     </div>
   );
 }
@@ -292,7 +286,7 @@ function ClosedPositionDetailsRow({
 }) {
   const manualPositionId = closedPosition.manualPositionId;
   return (
-    <tr className="border-b border-slate-800/60 last:border-b-0">
+    <tr className="border-b last:border-b-0">
       <td colSpan={columnCount} className="px-3 pb-3">
         {manualPositionId === null ? (
           <HoldingTradesOfStretch closedPosition={closedPosition} />
@@ -336,10 +330,10 @@ export function ClosedPositionsTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
+      <table className={TABLE_CLASS}>
         <thead>
-          <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wide text-slate-500">
-            <th className="w-6">
+          <tr className={TABLE_HEAD_ROW_CLASS}>
+            <th className="w-8">
               <span className="sr-only">Trades</span>
             </th>
             {columns.map((column) => (
@@ -412,13 +406,13 @@ function RealizedPnlByInvestor({ closedPositions }: { closedPositions: ClosedPos
     .filter(({ totalsByCurrency }) => totalsByCurrency.length > 0);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
       {investorTotals.map(({ investor, totalsByCurrency }, index) => (
         <span key={investor.id} className="inline-flex items-center gap-1.5">
-          {index > 0 && <span className="text-slate-600">·</span>}
-          <span className="text-slate-500">{investor.name}</span>
+          {index > 0 && <span className="text-faint">·</span>}
+          <span className="text-muted">{investor.name}</span>
           {totalsByCurrency.map(([currency, total]) => (
-            <span key={currency} className={`font-mono ${profitLossColorClass(total)}`}>
+            <span key={currency} className={profitLossColorClass(total)}>
               {formatSignedMoney(total)} {currency}
             </span>
           ))}
@@ -442,19 +436,19 @@ export function RealizedPnlTotals({ closedPositions }: { closedPositions: Closed
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        <span className="text-slate-500">Realized P&amp;L</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="text-muted">Realized P&amp;L</span>
         {totalsByCurrency.map(([currency, total]) => (
-          <span key={currency} className={`font-mono font-semibold ${profitLossColorClass(total)}`}>
+          <span key={currency} className={`font-semibold ${profitLossColorClass(total)}`}>
             {formatSignedMoney(total)} {currency}
           </span>
         ))}
         {withoutPricesCount > 0 && (
-          <span className="text-slate-500" title={MISSING_PRICE_HINT}>
+          <span className="text-muted" title={MISSING_PRICE_HINT}>
             ({withoutPricesCount} without prices)
           </span>
         )}
-        {withWarningCount > 0 && <span className="text-orange-500">({withWarningCount} to check)</span>}
+        {withWarningCount > 0 && <span className="text-warn-real">({withWarningCount} to check)</span>}
       </div>
       <RealizedPnlByInvestor closedPositions={closedPositions} />
     </div>

@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ICON_BUTTON_CLASS } from '../lib/styles';
 
 /** The chevron that opens a row's trades under it, in the positions table and the closed positions table alike. */
 export function ExpandRowButton({
@@ -21,9 +22,9 @@ export function ExpandRowButton({
       title={isExpanded ? 'Hide trades' : expandHint}
       aria-label={`${isExpanded ? 'Hide' : 'Show'} ${subject}`}
       onClick={onToggle}
-      className="rounded p-0.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+      className={ICON_BUTTON_CLASS}
     >
-      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
     </button>
   );
 }

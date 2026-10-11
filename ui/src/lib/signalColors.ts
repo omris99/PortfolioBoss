@@ -9,24 +9,24 @@ import type {
 
 /**
  * The colours every part of a holding's signal is shown in — the momentum, the analysts, the news, the dot — so a colour
- * means the same thing everywhere: emerald good, amber in between, rose a warning sign, grey unknown or neither way.
+ * means the same thing everywhere: green good, amber in between, red a warning sign, grey unknown or neither way.
  */
 type SignalTone = 'good' | 'inBetween' | 'warning' | 'plain';
 
 /** A small label: a tinted background behind the text. */
 const LABEL_CLASSES: Record<SignalTone, string> = {
-  good: 'bg-emerald-500/10 text-emerald-400',
-  inBetween: 'bg-amber-500/10 text-amber-400',
-  warning: 'bg-rose-500/10 text-rose-400',
-  plain: 'bg-slate-800 text-slate-400',
+  good: 'bg-positive-soft text-positive',
+  inBetween: 'bg-inbetween-soft text-inbetween',
+  warning: 'bg-negative-soft text-negative',
+  plain: 'bg-unknown-soft text-unknown',
 };
 
 /** The dot: filled in its colour, an empty ring while there is none. */
 const DOT_CLASSES: Record<SignalTone, string> = {
-  good: 'bg-emerald-400',
-  inBetween: 'bg-amber-400',
-  warning: 'bg-rose-400',
-  plain: 'border border-slate-600',
+  good: 'bg-signal-green',
+  inBetween: 'bg-signal-yellow',
+  warning: 'bg-signal-red',
+  plain: 'ring-[1.5px] ring-inset ring-signal-none',
 };
 
 export const MOMENTUM_TONES: Record<MomentumLabel, SignalTone> = {

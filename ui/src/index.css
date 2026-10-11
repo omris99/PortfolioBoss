@@ -2,12 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * The design system's colors by role (Claude Design, "PortfolioBoss", tokens.json). Light theme only. Components never
+ * use these directly: tailwind.config.js names them (`bg-surface`, `text-muted`, `border-strong`…).
+ */
+:root {
+  --color-page: #f5f4f0;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-subtle: #efede8;
+  --color-border: #e2dfd8;
+  --color-border-strong: #8c877d;
+
+  --color-text: #1d2026;
+  --color-text-muted: #575c66;
+  --color-text-faint: #6b707a;
+
+  --color-accent: #0f5b6b;
+  --color-on-accent: #ffffff;
+  --color-accent-soft: #e3eff1;
+  --color-link: #1a5aad;
+
+  --color-positive: #16723a;
+  --color-positive-soft: #e5f3e9;
+  --color-negative: #b3261e;
+  --color-negative-soft: #fbeae8;
+  --color-negative-line: #efc6c1;
+  --color-inbetween: #8a5300;
+  --color-inbetween-soft: #fbf0da;
+  --color-unknown: #646973;
+  --color-unknown-soft: #eeeef0;
+
+  --color-warn-minor: #7a6100;
+  --color-warn-minor-icon: #9c7c00;
+  --color-warn-minor-soft: #fbf5d8;
+  --color-warn-real: #b0470c;
+  --color-warn-real-soft: #fdeee3;
+
+  --color-signal-green: #1f8a47;
+  --color-signal-yellow: #b88400;
+  --color-signal-red: #c8322a;
+  --color-signal-none: #868b94;
+
+  --color-status-loading: var(--color-signal-yellow);
+  --color-status-ready: var(--color-signal-green);
+  --color-status-error: var(--color-signal-red);
+}
+
 html,
 body,
 #root {
   height: 100%;
 }
 
+/* IBM Plex Sans has tabular figures already; saying so keeps columns of figures aligned with the fallback fonts too. */
 body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+  @apply bg-page font-sans text-body text-ink antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The design's focus ring: a 2px white gap, then 2px of accent, following the control's corners. */
+:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow:
+    0 0 0 2px var(--color-surface),
+    0 0 0 4px var(--color-accent);
 }

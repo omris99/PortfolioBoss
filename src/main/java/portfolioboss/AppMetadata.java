@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.18.0";
+    public static final String VERSION = "0.19.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,17 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.19.0: [Light theme and pages]
+ * UI theme: light, from the Claude Design system — colors by role only (CSS variables named in tailwind.config.js), IBM Plex Sans, a focus ring; was a dark slate theme with raw Tailwind colors.
+ * UI pages with their own addresses (react-router): / Overview, /positions, /closed, /investors, under a top bar with the account, the last sync and the load status; was one long page.
+ * OverviewPage added: the account's four figures, "Needs attention" (real warnings, RED signals, holdings never analyzed; minor warnings counted) and "Signal at a glance" with a "?" legend.
+ * InvestorsStrip added on the Overview: each investor's total value and total P&L, linking to the Investors page; shown only with more than one investor.
+ * PositionsPage: /positions/12 opens holding 12's row and scrolls to it, Back closes it, a closed holding's address shows the closed ones; the Overview and the closed positions link there.
+ * InvestorsPage: with the account owner alone it explains what an investor is and offers "Add investor" (was a small link above the positions).
+ * styles.ts added: one look for every button, field, panel, table and tag; BUY/SELL and deposit/withdrawal turn grey, green and red are left to profit and loss.
+ * Numbers: the real minus sign (−) for negatives, tabular digits instead of a monospace font, and times read "2026-10-10 16:05".
+ * AnalyzeButton hint: about $0.04 and 5 Tavily credits a stock (was $0.03 and 3, from before the four searches).
+ *
  * VERSION 0.18.0: [Fresher analyst actions, kept search results]
  * AnalystTrendCalculator: only price-target moves count, an action stating the target before and after; a rating alone (Zacks Rank, Weiss, Wall Street Zen) moves nothing (was every upgrade and downgrade too).
  * GET /api/portfolio: upActionCount / downActionCount renamed raisedTargetCount / loweredTargetCount; the UI shows "Trend IMPROVING · 3 targets raised, 0 lowered", or why there is no trend.

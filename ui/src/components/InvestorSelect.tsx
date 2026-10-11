@@ -1,4 +1,5 @@
 import { INPUT_CLASS } from '../lib/formInput';
+import { FIELD_LABEL_CLASS } from '../lib/styles';
 import { hasSeveralInvestors, useInvestors } from './InvestorsContext';
 
 /**
@@ -16,7 +17,7 @@ export function InvestorSelect({
   if (!hasSeveralInvestors(investors)) return null;
 
   return (
-    <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500">
+    <label className={FIELD_LABEL_CLASS}>
       Investor
       <select
         value={investorId ?? ''}

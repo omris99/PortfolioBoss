@@ -1,5 +1,7 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { changeSector, errorMessageOf } from '../lib/apiClient';
+import { INPUT_CLASS } from '../lib/formInput';
+import { ERROR_TEXT_CLASS } from '../lib/styles';
 import type { Holding } from '../types/portfolio';
 
 /** The `<datalist>` of the sectors already entered, rendered once by the table, so each is offered as you type. */
@@ -19,7 +21,7 @@ export function SectorCell({ holding, onDataChanged }: { holding: Holding; onDat
       type="button"
       title="Edit sector"
       onClick={() => setIsEditing(true)}
-      className={`rounded px-1 transition-colors hover:bg-slate-800 ${holding.sector === null ? 'text-slate-500' : ''}`}
+      className={`rounded-sm px-1 transition-colors hover:bg-subtle ${holding.sector === null ? 'text-muted' : ''}`}
     >
       {holding.sector ?? '+ add'}
     </button>
@@ -92,9 +94,9 @@ function SectorEditor({
         onChange={(event) => setTypedSector(event.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={() => void saveIfChanged()}
-        className="w-36 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 font-sans text-xs text-slate-100 focus:border-emerald-500 focus:outline-none"
+        className={`${INPUT_CLASS} w-36`}
       />
-      {errorMessage && <span className="whitespace-normal font-sans text-[11px] text-rose-400">{errorMessage}</span>}
+      {errorMessage && <span className={`whitespace-normal ${ERROR_TEXT_CLASS}`}>{errorMessage}</span>}
     </div>
   );
 }

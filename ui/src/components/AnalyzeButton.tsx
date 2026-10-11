@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { LoaderCircle, Sparkles } from 'lucide-react';
 import { analyzeHoldings, errorMessageOf } from '../lib/apiClient';
+import { PRIMARY_BUTTON_CLASS } from '../lib/styles';
 import type { AnalysisRun } from '../types/portfolio';
 
 /** "Analyzed 7 · 21 credits · $0.21": the stocks stored, Tavily's credits and Claude's dollars. */
@@ -14,7 +15,7 @@ function FailedStocks({ run }: { run: AnalysisRun }) {
   const symbols = run.failed.map((failure) => failure.symbol).join(', ');
   const reasons = run.failed.map((failure) => `${failure.symbol}: ${failure.message}`).join('\n');
   return (
-    <span title={reasons} className="text-rose-400">
+    <span title={reasons} className="text-negative">
       · Failed: {symbols}
     </span>
   );
@@ -57,23 +58,23 @@ export function AnalyzeButton({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
+    <div className="flex flex-wrap items-center gap-3 text-caption">
       <button
         type="button"
         title={hint}
         onClick={() => void handleClick()}
         disabled={isRunning}
-        className="flex items-center gap-1 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-60"
+        className={PRIMARY_BUTTON_CLASS}
       >
-        {isRunning ? <LoaderCircle size={12} className="animate-spin" /> : <Sparkles size={12} />}
+        {isRunning ? <LoaderCircle size={16} className="animate-spin" /> : <Sparkles size={16} />}
         {isRunning ? 'Analyzing…' : label}
       </button>
       {lastRun && (
-        <span className="text-slate-400">
+        <span className="text-muted">
           {runSummaryOf(lastRun)} <FailedStocks run={lastRun} />
         </span>
       )}
-      {errorMessage && <span className="text-rose-400">{errorMessage}</span>}
+      {errorMessage && <span className="text-negative">{errorMessage}</span>}
     </div>
   );
 }

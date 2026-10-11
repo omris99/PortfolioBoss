@@ -2,15 +2,24 @@ import { useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { deleteTrade, errorMessageOf } from '../lib/apiClient';
 import { EMPTY_VALUE, formatMoney, formatQuantity } from '../lib/format';
+import {
+  CHIP_CLASS,
+  DELETE_ICON_BUTTON_CLASS,
+  ERROR_TEXT_CLASS,
+  ICON_BUTTON_CLASS,
+  PANEL_CLASS,
+  TABLE_CLASS,
+  TABLE_HEAD_ROW_CLASS,
+  TABLE_ROW_CLASS,
+} from '../lib/styles';
 import type { Trade, TradeSide } from '../types/portfolio';
 import { HoldingWarningList } from './HoldingWarnings';
 import { hasSeveralInvestors, investorNameOf, useInvestors } from './InvestorsContext';
 import { TradeForm, type TradeOwner } from './TradeForm';
 
+/** Grey for both: in the design only a profit or a loss is green or red. */
 function TradeSideBadge({ side }: { side: TradeSide }) {
-  const colorClass =
-    side === 'BUY' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300';
-  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${colorClass}`}>{side}</span>;
+  return <span className={`${CHIP_CLASS} bg-subtle text-ink`}>{side}</span>;
 }
 
 /** What the ✏️ and 🗑 of each row do. A list without them is read-only. */
@@ -28,18 +37,18 @@ function TradeRowButtons({ trade, rowActions }: { trade: Trade; rowActions: Trad
         type="button"
         title="Edit this trade"
         onClick={() => rowActions.onEdit(trade)}
-        className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+        className={ICON_BUTTON_CLASS}
       >
-        <Pencil size={12} />
+        <Pencil size={14} />
       </button>
       <button
         type="button"
         title="Delete this trade"
         onClick={() => rowActions.onDelete(trade)}
         disabled={rowActions.deletingTradeId === trade.id}
-        className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
+        className={DELETE_ICON_BUTTON_CLASS}
       >
-        <Trash2 size={12} />
+        <Trash2 size={14} />
       </button>
     </div>
   );
@@ -57,18 +66,18 @@ function TradeRow({
 }) {
   const isBeingEdited = rowActions?.tradeIdBeingEdited === trade.id;
   return (
-    <tr className={`border-b border-slate-800/60 last:border-b-0 ${isBeingEdited ? 'bg-emerald-500/5' : ''}`}>
-      {investorName !== null && <td className="px-2 py-1">{investorName}</td>}
-      <td className="px-2 py-1 font-mono">{trade.tradeDate}</td>
-      <td className="px-2 py-1">
+    <tr className={`${TABLE_ROW_CLASS} ${isBeingEdited ? 'bg-accent-soft' : ''}`}>
+      {investorName !== null && <td className="px-3 py-1.5">{investorName}</td>}
+      <td className="px-3 py-1.5">{trade.tradeDate}</td>
+      <td className="px-3 py-1.5">
         <TradeSideBadge side={trade.side} />
       </td>
-      <td className="px-2 py-1 text-right font-mono">{formatQuantity(trade.quantity)}</td>
-      <td className="px-2 py-1 text-right font-mono">{formatMoney(trade.price)}</td>
-      <td className="px-2 py-1 text-right font-mono">{formatMoney(trade.commission)}</td>
-      <td className="px-2 py-1 text-slate-400">{trade.note ?? EMPTY_VALUE}</td>
+      <td className="px-3 py-1.5 text-right">{formatQuantity(trade.quantity)}</td>
+      <td className="px-3 py-1.5 text-right">{formatMoney(trade.price)}</td>
+      <td className="px-3 py-1.5 text-right">{formatMoney(trade.commission)}</td>
+      <td className="px-3 py-1.5 text-muted">{trade.note ?? EMPTY_VALUE}</td>
       {rowActions !== null && (
-        <td className="px-2 py-1 text-right">
+        <td className="px-3 py-1 text-right">
           <TradeRowButtons trade={trade} rowActions={rowActions} />
         </td>
       )}
@@ -84,18 +93,18 @@ export function TradeList({ trades, rowActions = null }: { trades: Trade[]; rowA
   const investors = useInvestors();
   const showsInvestor = hasSeveralInvestors(investors);
   return (
-    <table className="w-full border-collapse">
+    <table className={TABLE_CLASS}>
       <thead>
-        <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wide text-slate-500">
-          {showsInvestor && <th className="px-2 py-1 text-left font-medium">Investor</th>}
-          <th className="px-2 py-1 text-left font-medium">Date</th>
-          <th className="px-2 py-1 text-left font-medium">Side</th>
-          <th className="px-2 py-1 text-right font-medium">Qty</th>
-          <th className="px-2 py-1 text-right font-medium">Price</th>
-          <th className="px-2 py-1 text-right font-medium">Commission</th>
-          <th className="px-2 py-1 text-left font-medium">Note</th>
+        <tr className={TABLE_HEAD_ROW_CLASS}>
+          {showsInvestor && <th className="px-3 py-1.5 text-left font-medium">Investor</th>}
+          <th className="px-3 py-1.5 text-left font-medium">Date</th>
+          <th className="px-3 py-1.5 text-left font-medium">Side</th>
+          <th className="px-3 py-1.5 text-right font-medium">Qty</th>
+          <th className="px-3 py-1.5 text-right font-medium">Price</th>
+          <th className="px-3 py-1.5 text-right font-medium">Commission</th>
+          <th className="px-3 py-1.5 text-left font-medium">Note</th>
           {rowActions !== null && (
-            <th className="px-2 py-1">
+            <th className="px-3 py-1.5">
               <span className="sr-only">Actions</span>
             </th>
           )}
@@ -176,14 +185,14 @@ export function TradesPanel({ owner, onDataChanged }: { owner: TradeOwner; onDat
   const formKey = tradeBeingEdited === null ? `new-${formGeneration}` : `edit-${tradeBeingEdited.id}`;
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
+    <div className={PANEL_CLASS}>
       {owner.kind === 'holding' && <HoldingWarningList warnings={owner.holding.warnings} />}
       {trades.length === 0 ? (
-        <p className="text-slate-500">No trades entered yet for {symbolOf(owner)}.</p>
+        <p className="text-muted">No trades entered yet for {symbolOf(owner)}.</p>
       ) : (
         <TradeList trades={trades} rowActions={rowActions} />
       )}
-      {deleteErrorMessage && <p className="text-[11px] text-rose-400">{deleteErrorMessage}</p>}
+      {deleteErrorMessage && <p className={ERROR_TEXT_CLASS}>{deleteErrorMessage}</p>}
 
       <TradeForm
         key={formKey}

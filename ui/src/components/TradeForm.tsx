@@ -1,6 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { addManualPositionTrade, addTrade, changeTrade, errorMessageOf } from '../lib/apiClient';
 import { INPUT_CLASS, isBlank, isPositiveWholeNumber, localTodayIsoDate, numberOrNull, trimmedOrNull } from '../lib/formInput';
+import {
+  ERROR_TEXT_CLASS,
+  FIELD_LABEL_CLASS,
+  HINT_TEXT_CLASS,
+  PANEL_TITLE_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
+  toggleButtonClass,
+} from '../lib/styles';
 import type { Holding, Trade, TradeRequest, TradeSide } from '../types/portfolio';
 import { InvestorSelect } from './InvestorSelect';
 import { accountOwnerOf, useInvestors } from './InvestorsContext';
@@ -138,19 +147,8 @@ function SideButton({
   onSelect: (side: TradeSide) => void;
 }) {
   const isSelected = side === selectedSide;
-  const selectedColorClass =
-    side === 'BUY'
-      ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
-      : 'border-rose-500/60 bg-rose-500/15 text-rose-300';
   return (
-    <button
-      type="button"
-      aria-pressed={isSelected}
-      onClick={() => onSelect(side)}
-      className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors ${
-        isSelected ? selectedColorClass : 'border-slate-700 text-slate-400 hover:text-slate-200'
-      }`}
-    >
+    <button type="button" aria-pressed={isSelected} onClick={() => onSelect(side)} className={toggleButtonClass(isSelected)}>
       {side}
     </button>
   );
@@ -211,7 +209,7 @@ export function TradeForm({
 
   return (
     <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-2">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <div className={PANEL_TITLE_CLASS}>
         {isEditing ? `Edit the trade of ${tradeBeingEdited.tradeDate}` : 'Add a trade'}
       </div>
 
@@ -221,7 +219,7 @@ export function TradeForm({
           onChange={(investorId) => updateFormValue('investorId', investorId)}
         />
 
-        <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500">
+        <label className={FIELD_LABEL_CLASS}>
           Date
           <input
             type="date"
@@ -238,7 +236,7 @@ export function TradeForm({
           <SideButton side="SELL" selectedSide={formValues.side} onSelect={(side) => updateFormValue('side', side)} />
         </div>
 
-        <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500">
+        <label className={FIELD_LABEL_CLASS}>
           Quantity
           <input
             type="number"
@@ -251,7 +249,7 @@ export function TradeForm({
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500">
+        <label className={FIELD_LABEL_CLASS}>
           Price
           <input
             type="number"
@@ -264,10 +262,7 @@ export function TradeForm({
           />
         </label>
 
-        <label
-          title={COMMISSION_HINT}
-          className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500"
-        >
+        <label title={COMMISSION_HINT} className={FIELD_LABEL_CLASS}>
           Commission
           <input
             type="number"
@@ -280,7 +275,7 @@ export function TradeForm({
           />
         </label>
 
-        <label className="flex min-w-48 flex-1 flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500">
+        <label className={`min-w-48 flex-1 ${FIELD_LABEL_CLASS}`}>
           Note
           <input
             type="text"
@@ -292,11 +287,7 @@ export function TradeForm({
           />
         </label>
 
-        <button
-          type="submit"
-          disabled={isSaving}
-          className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
-        >
+        <button type="submit" disabled={isSaving} className={PRIMARY_BUTTON_CLASS}>
           {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Add trade'}
         </button>
         {isEditing && (
@@ -304,7 +295,7 @@ export function TradeForm({
             type="button"
             onClick={onCancelEditing}
             disabled={isSaving}
-            className="rounded-md border border-slate-700 px-3 py-1 text-xs text-slate-300 transition-colors hover:text-slate-100 disabled:opacity-50"
+            className={SECONDARY_BUTTON_CLASS}
           >
             Cancel
           </button>
@@ -312,12 +303,12 @@ export function TradeForm({
       </div>
 
       {isBackfill && (
-        <p className="text-[11px] text-slate-500">
+        <p className={HINT_TEXT_CLASS}>
           Prefilled from IB: the whole position at IB's average cost, which includes commissions — set the date,
           and adjust the price if you know the execution price.
         </p>
       )}
-      {errorMessage && <p className="text-[11px] text-rose-400">{errorMessage}</p>}
+      {errorMessage && <p className={ERROR_TEXT_CLASS}>{errorMessage}</p>}
     </form>
   );
 }

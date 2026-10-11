@@ -1,26 +1,32 @@
 /** Shown for any value that is missing: a figure IB did not report, or a sector or date not entered yet. */
 export const EMPTY_VALUE = '—';
 
+/** The real minus sign, as wide as "+", rather than a hyphen. */
+const MINUS_SIGN = '−';
+
 const twoDecimalFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
+/** "1,250.00", or "−310.50" for a negative amount. */
 export function formatMoney(amount: number | null): string {
-  return amount === null ? EMPTY_VALUE : twoDecimalFormatter.format(amount);
+  if (amount === null) return EMPTY_VALUE;
+  const sign = amount < 0 ? MINUS_SIGN : '';
+  return `${sign}${twoDecimalFormatter.format(Math.abs(amount))}`;
 }
 
-/** Always shows the sign, e.g. "+1,250.00" or "-310.50". */
+/** Always shows the sign, e.g. "+1,250.00" or "−310.50". */
 export function formatSignedMoney(amount: number | null): string {
   if (amount === null) return EMPTY_VALUE;
-  const sign = amount >= 0 ? '+' : '-';
+  const sign = amount >= 0 ? '+' : MINUS_SIGN;
   return `${sign}${twoDecimalFormatter.format(Math.abs(amount))}`;
 }
 
 /** Always shows the sign, with two decimal places, e.g. "+45.92%". */
 export function formatSignedPercent(percent: number | null): string {
   if (percent === null) return EMPTY_VALUE;
-  const sign = percent >= 0 ? '+' : '-';
+  const sign = percent >= 0 ? '+' : MINUS_SIGN;
   return `${sign}${Math.abs(percent).toFixed(2)}%`;
 }
 
@@ -29,17 +35,26 @@ export function formatQuantity(shares: number): string {
   return Number.isInteger(shares) ? shares.toLocaleString('en-US') : shares.toFixed(4);
 }
 
-/** Green for a gain, red for a loss, grey when flat or unknown. */
+/** Green for a gain, red for a loss; the ordinary text color when flat or unknown. */
 export function profitLossColorClass(profitLoss: number | null): string {
-  if (profitLoss === null) return 'text-slate-400';
-  if (profitLoss > 0) return 'text-emerald-400';
-  if (profitLoss < 0) return 'text-rose-400';
-  return 'text-slate-400';
+  if (profitLoss === null || profitLoss === 0) return 'text-ink';
+  return profitLoss > 0 ? 'text-positive' : 'text-negative';
 }
 
 /** 'yyyy-MM-dd' is shown as it is: unambiguous in any locale, and it sorts correctly as text. */
 export function formatDate(isoDate: string | null): string {
   return isoDate ?? EMPTY_VALUE;
+}
+
+function twoDigits(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** An instant from the API ("2026-10-10T13:05:12Z") as "2026-10-10 16:05", in this computer's time zone. */
+export function formatDateTime(isoInstant: string): string {
+  const moment = new Date(isoInstant);
+  const date = `${moment.getFullYear()}-${twoDigits(moment.getMonth() + 1)}-${twoDigits(moment.getDate())}`;
+  return `${date} ${twoDigits(moment.getHours())}:${twoDigits(moment.getMinutes())}`;
 }
 
 const DAYS_PER_YEAR = 365;

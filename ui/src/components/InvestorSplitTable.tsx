@@ -7,6 +7,7 @@ import {
   formatSignedPercent,
   profitLossColorClass,
 } from '../lib/format';
+import { PANEL_CLASS, PANEL_TITLE_CLASS, TABLE_CLASS, TABLE_HEAD_ROW_CLASS } from '../lib/styles';
 import type { ClosedPosition, Holding, Investor, InvestorQuantity } from '../types/portfolio';
 import { accountOwnerOf, hasSeveralInvestors, useInvestors } from './InvestorsContext';
 
@@ -98,11 +99,11 @@ function totalRowOf(position: SplitPosition, closedPositions: ClosedPosition[]):
 // ── the table ───────────────────────────────────────────────────────────────────────────────────
 
 function HeaderCell({ alignment, children }: { alignment: 'left' | 'right'; children: ReactNode }) {
-  return <th className={`px-2 py-1 font-medium ${alignment === 'right' ? 'text-right' : 'text-left'}`}>{children}</th>;
+  return <th className={`px-3 py-1.5 font-medium ${alignment === 'right' ? 'text-right' : 'text-left'}`}>{children}</th>;
 }
 
 function FigureCell({ colorClass = '', children }: { colorClass?: string; children: ReactNode }) {
-  return <td className={`px-2 py-1 text-right font-mono ${colorClass}`}>{children}</td>;
+  return <td className={`px-3 py-1.5 text-right ${colorClass}`}>{children}</td>;
 }
 
 /** "—" when nothing of it was sold; "—" with a hint when a closed position has no realized P&L. */
@@ -146,10 +147,10 @@ function HoldingFigureCells({ part }: { part: SplitRow['part'] }) {
 }
 
 function SplitTableRow({ row, isHolding, isTotal }: { row: SplitRow; isHolding: boolean; isTotal: boolean }) {
-  const rowClass = isTotal ? 'border-t border-slate-700 font-semibold text-slate-100' : 'border-b border-slate-800/60';
+  const rowClass = isTotal ? 'border-t border-strong font-semibold' : 'border-b';
   return (
     <tr className={rowClass}>
-      <td className="px-2 py-1">{row.label}</td>
+      <td className="px-3 py-1.5">{row.label}</td>
       {isHolding && <HoldingFigureCells part={row.part} />}
       <RealizedPnlCell closedPositions={row.closedPositions} />
     </tr>
@@ -178,13 +179,13 @@ export function InvestorSplitTable({
   const isHolding = position.kind === 'holding';
   const investorRows = involvedInvestors.map((investor) => investorRowOf(investor, position, closedPositions));
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        By investor <span className="font-normal normal-case text-slate-500">· {currencyOf(position)}</span>
+    <div className={PANEL_CLASS}>
+      <div className={PANEL_TITLE_CLASS}>
+        By investor <span className="text-caption font-normal text-muted">· {currencyOf(position)}</span>
       </div>
-      <table className="w-full border-collapse">
+      <table className={TABLE_CLASS}>
         <thead>
-          <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wide text-slate-500">
+          <tr className={TABLE_HEAD_ROW_CLASS}>
             <HeaderCell alignment="left">Investor</HeaderCell>
             {isHolding && (
               <>

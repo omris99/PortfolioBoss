@@ -1,19 +1,25 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Pencil, Plus, TriangleAlert } from 'lucide-react';
-import { addInvestor, errorMessageOf, renameInvestor } from '../lib/apiClient';
+import { errorMessageOf, renameInvestor } from '../lib/apiClient';
 import { formatMoney, formatSignedMoney, formatSignedPercent, profitLossColorClass } from '../lib/format';
 import { INPUT_CLASS, isBlank } from '../lib/formInput';
+import {
+  CARD_CLASS,
+  ERROR_TEXT_CLASS,
+  HINT_TEXT_CLASS,
+  ICON_BUTTON_CLASS,
+  PANEL_TITLE_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
+  TAG_CLASS,
+} from '../lib/styles';
 import type { Investor, InvestorWarning } from '../types/portfolio';
 import { CashMovementsPanel } from './CashMovementsPanel';
-import { hasSeveralInvestors } from './InvestorsContext';
 
 const NAME_MAX_LENGTH = 60;   // the investor.name column
 
 /** The currency of every figure on a card but the realized P&L, which is listed with it first. */
 const ACCOUNT_CURRENCY = 'USD';
-
-const BUTTON_CLASS =
-  'rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-50';
 
 // ── adding and renaming ─────────────────────────────────────────────────────────────────────────
 
@@ -67,41 +73,38 @@ function InvestorNameForm({
           onChange={(event) => setName(event.target.value)}
           className={`${INPUT_CLASS} w-40`}
         />
-        <button type="submit" disabled={isSaving} className={BUTTON_CLASS}>
+        <button type="submit" disabled={isSaving} className={PRIMARY_BUTTON_CLASS}>
           {isSaving ? 'Saving…' : submitLabel}
         </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={isSaving}
-          className="rounded-md border border-slate-700 px-3 py-1 text-xs text-slate-300 transition-colors hover:text-slate-100 disabled:opacity-50"
-        >
+        <button type="button" onClick={onCancel} disabled={isSaving} className={SECONDARY_BUTTON_CLASS}>
           Cancel
         </button>
       </div>
-      {errorMessage && <p className="text-[11px] text-rose-400">{errorMessage}</p>}
+      {errorMessage && <p className={ERROR_TEXT_CLASS}>{errorMessage}</p>}
     </form>
   );
 }
 
+/** What an investor is, said where one is added and while there is none yet. */
+export const INVESTOR_EXPLANATION =
+  "Someone else whose money is in this IB account. Their deposits and trades are entered for them; the account owner " +
+  "gets the rest of IB's figures.";
+
 /** The form for a new investor, with a line on what one is. */
-function AddInvestorForm({ onAdd, onCancel }: { onAdd: (name: string) => Promise<void>; onCancel: () => void }) {
+export function AddInvestorForm({ onAdd, onCancel }: { onAdd: (name: string) => Promise<void>; onCancel: () => void }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Add an investor</div>
-      <p className="text-[11px] text-slate-500">
-        Someone else whose money is in this IB account. Their deposits and trades are entered for them; the account
-        owner gets the rest of IB's figures.
-      </p>
+    <div className={`flex flex-col gap-3 p-5 ${CARD_CLASS}`}>
+      <div className={PANEL_TITLE_CLASS}>Add an investor</div>
+      <p className={HINT_TEXT_CLASS}>{INVESTOR_EXPLANATION}</p>
       <InvestorNameForm initialName="" submitLabel="Add investor" onSubmit={onAdd} onCancel={onCancel} />
     </div>
   );
 }
 
-function AddInvestorButton({ onClick }: { onClick: () => void }) {
+export function AddInvestorButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={`flex items-center gap-1 ${BUTTON_CLASS}`}>
-      <Plus size={12} />
+    <button type="button" onClick={onClick} className={PRIMARY_BUTTON_CLASS}>
+      <Plus size={16} />
       Add investor
     </button>
   );
@@ -113,7 +116,7 @@ function AddInvestorButton({ onClick }: { onClick: () => void }) {
 function FigureRow({
   label,
   hint,
-  colorClass = 'text-slate-100',
+  colorClass = 'text-ink',
   children,
 }: {
   label: string;
@@ -123,10 +126,10 @@ function FigureRow({
 }) {
   return (
     <>
-      <dt title={hint} className="text-slate-500">
+      <dt title={hint} className="text-muted">
         {label}
       </dt>
-      <dd className={`text-right font-mono ${colorClass}`}>{children}</dd>
+      <dd className={`text-right ${colorClass}`}>{children}</dd>
     </>
   );
 }
@@ -145,8 +148,8 @@ function RealizedPnlByCurrency({ realizedPnlByCurrency }: { realizedPnlByCurrenc
   );
   if (currencyTotals.length === 0) {
     return (
-      <span className="text-slate-400">
-        {formatSignedMoney(0)} <span className="text-[10px] text-slate-500">{ACCOUNT_CURRENCY}</span>
+      <span>
+        {formatSignedMoney(0)} <span className="text-caption text-muted">{ACCOUNT_CURRENCY}</span>
       </span>
     );
   }
@@ -154,7 +157,7 @@ function RealizedPnlByCurrency({ realizedPnlByCurrency }: { realizedPnlByCurrenc
     <span className="flex flex-col items-end">
       {currencyTotals.map(([currency, total]) => (
         <span key={currency} className={profitLossColorClass(total)}>
-          {formatSignedMoney(total)} <span className="text-[10px] text-slate-500">{currency}</span>
+          {formatSignedMoney(total)} <span className="text-caption text-muted">{currency}</span>
         </span>
       ))}
     </span>
@@ -165,10 +168,10 @@ function RealizedPnlByCurrency({ realizedPnlByCurrency }: { realizedPnlByCurrenc
 function InvestorWarningList({ warnings }: { warnings: InvestorWarning[] }) {
   if (warnings.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-1 text-[11px] text-orange-500">
+    <ul className="flex flex-col gap-1 text-caption text-warn-real">
       {warnings.map((warning) => (
-        <li key={`${warning.type}-${warning.message}`} className="flex items-start gap-1.5">
-          <TriangleAlert size={12} className="mt-0.5 shrink-0" />
+        <li key={`${warning.type}-${warning.message}`} className="flex items-start gap-2">
+          <TriangleAlert size={14} className="shrink-0" />
           {warning.message}
         </li>
       ))}
@@ -198,19 +201,10 @@ function InvestorCardHeader({ investor, onDataChanged }: { investor: Investor; o
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm font-semibold text-slate-100">{investor.name}</span>
-      {investor.accountOwner && (
-        <span className="rounded bg-slate-800 px-1 py-0.5 text-[9px] font-medium uppercase text-slate-400">
-          account owner
-        </span>
-      )}
-      <button
-        type="button"
-        title="Rename"
-        onClick={() => setIsRenaming(true)}
-        className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-100"
-      >
-        <Pencil size={12} />
+      <span className="text-section-title">{investor.name}</span>
+      {investor.accountOwner && <span className={TAG_CLASS}>account owner</span>}
+      <button type="button" title="Rename" onClick={() => setIsRenaming(true)} className={ICON_BUTTON_CLASS}>
+        <Pencil size={14} />
       </button>
     </div>
   );
@@ -228,17 +222,17 @@ function sourceLineOf(investor: Investor): string {
  * the shares — unrealized, realized per currency, and the total in USD. Another investor's card also shows what they
  * deposited, and opens their deposits and withdrawals.
  */
-function InvestorCard({ investor, onDataChanged }: { investor: Investor; onDataChanged: () => Promise<void> }) {
+export function InvestorCard({ investor, onDataChanged }: { investor: Investor; onDataChanged: () => Promise<void> }) {
   const [showsCashMovements, setShowsCashMovements] = useState(false);
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-slate-700/80 bg-slate-900/60 p-4">
+    <div className={`flex flex-col gap-4 p-5 ${CARD_CLASS}`}>
       <div>
         <InvestorCardHeader investor={investor} onDataChanged={onDataChanged} />
-        <p className="mt-1 text-[11px] text-slate-500">{sourceLineOf(investor)}</p>
+        <p className="mt-1 text-caption text-muted">{sourceLineOf(investor)}</p>
       </div>
 
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
         {!investor.accountOwner && (
           <FigureRow label="Deposited" hint="Deposits less withdrawals">
             {formatMoney(investor.depositsMinusWithdrawals)}
@@ -257,7 +251,7 @@ function InvestorCard({ investor, onDataChanged }: { investor: Investor; onDataC
           colorClass={profitLossColorClass(investor.unrealizedPnl)}
         >
           {formatSignedMoney(investor.unrealizedPnl)}{' '}
-          <span className="text-[10px]">({formatSignedPercent(investor.unrealizedPnlPercent)})</span>
+          <span className="text-caption">({formatSignedPercent(investor.unrealizedPnlPercent)})</span>
         </FigureRow>
         <FigureRow label="Realized P&L" hint="Of the shares sold, per currency">
           <RealizedPnlByCurrency realizedPnlByCurrency={investor.realizedPnlByCurrency} />
@@ -278,7 +272,7 @@ function InvestorCard({ investor, onDataChanged }: { investor: Investor; onDataC
           <button
             type="button"
             onClick={() => setShowsCashMovements((isShown) => !isShown)}
-            className="self-start rounded-md border border-slate-700 px-3 py-1 text-xs text-slate-300 transition-colors hover:text-slate-100"
+            className={`self-start ${SECONDARY_BUTTON_CLASS}`}
           >
             {showsCashMovements ? 'Hide deposits' : `Deposits (${investor.cashMovements.length})`}
           </button>
@@ -286,66 +280,5 @@ function InvestorCard({ investor, onDataChanged }: { investor: Investor; onDataC
         </div>
       )}
     </div>
-  );
-}
-
-// ── the section ─────────────────────────────────────────────────────────────────────────────────
-
-/**
- * A card for each investor whose money is in the IB account, under the account summary. While the account owner is
- * the only one there is nothing to divide, so only a small "+ Add investor" shows.
- */
-export function InvestorsSummary({
-  investors,
-  onDataChanged,
-}: {
-  investors: Investor[];
-  onDataChanged: () => Promise<void>;
-}) {
-  const [isAdding, setIsAdding] = useState(false);
-
-  const handleAdd = async (name: string) => {
-    await addInvestor(name);
-    await onDataChanged();
-    setIsAdding(false);
-  };
-  const addInvestorForm = <AddInvestorForm onAdd={handleAdd} onCancel={() => setIsAdding(false)} />;
-
-  if (!hasSeveralInvestors(investors)) {
-    return isAdding ? (
-      addInvestorForm
-    ) : (
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setIsAdding(true)}
-          className="text-xs text-slate-500 transition-colors hover:text-emerald-300"
-        >
-          + Add investor
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold text-slate-100">Investors</div>
-          <div className="mt-1 text-xs text-slate-400">
-            Each investor's part of the account. Together they always add up to IB's figures.
-          </div>
-        </div>
-        {!isAdding && <AddInvestorButton onClick={() => setIsAdding(true)} />}
-      </div>
-
-      {isAdding && <div className="mt-4">{addInvestorForm}</div>}
-
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {investors.map((investor) => (
-          <InvestorCard key={investor.id} investor={investor} onDataChanged={onDataChanged} />
-        ))}
-      </div>
-    </section>
   );
 }

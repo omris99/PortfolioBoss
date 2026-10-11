@@ -75,7 +75,7 @@ export function deleteCashMovement(movementId: number): Promise<void> {
 
 /**
  * Analyzes the analyst ratings and news of the given holdings, or of every open one (`null`): two web searches and one
- * Claude call a stock, paid — about $0.03 and 3 Tavily credits each. Answers once every stock is done, which takes tens of
+ * Claude call a stock, paid — about $0.04 and 5 Tavily credits each. Answers once every stock is done, which takes tens of
  * seconds, with what the run did and cost; the analyses themselves come with the next reload of the portfolio.
  */
 export async function analyzeHoldings(holdingIds: number[] | null): Promise<AnalysisRun> {

@@ -3,6 +3,21 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { addCashMovement, changeCashMovement, deleteCashMovement, errorMessageOf } from '../lib/apiClient';
 import { EMPTY_VALUE, formatMoney } from '../lib/format';
 import { INPUT_CLASS, isBlank, localTodayIsoDate, trimmedOrNull } from '../lib/formInput';
+import {
+  CHIP_CLASS,
+  DELETE_ICON_BUTTON_CLASS,
+  ERROR_TEXT_CLASS,
+  FIELD_LABEL_CLASS,
+  ICON_BUTTON_CLASS,
+  PANEL_CLASS,
+  PANEL_TITLE_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
+  TABLE_CLASS,
+  TABLE_HEAD_ROW_CLASS,
+  TABLE_ROW_CLASS,
+  toggleButtonClass,
+} from '../lib/styles';
 import type { CashMovement, CashMovementRequest, CashMovementType, Investor } from '../types/portfolio';
 
 const NOTE_MAX_LENGTH = 500;   // the investor_cash_movement.note column
@@ -11,9 +26,9 @@ const TYPE_LABELS: Record<CashMovementType, string> = { DEPOSIT: 'Deposit', WITH
 
 // ── the list ────────────────────────────────────────────────────────────────────────────────────
 
+/** Grey for both, like BUY and SELL: in the design only a profit or a loss is green or red. */
 function CashMovementTypeBadge({ type }: { type: CashMovementType }) {
-  const colorClass = type === 'DEPOSIT' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300';
-  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${colorClass}`}>{TYPE_LABELS[type]}</span>;
+  return <span className={`${CHIP_CLASS} bg-subtle text-ink`}>{TYPE_LABELS[type]}</span>;
 }
 
 /** What the ✏️ and 🗑 of each row do, as in the trades list. */
@@ -33,31 +48,31 @@ function CashMovementRow({
 }) {
   const isBeingEdited = rowActions.movementIdBeingEdited === cashMovement.id;
   return (
-    <tr className={`border-b border-slate-800/60 last:border-b-0 ${isBeingEdited ? 'bg-emerald-500/5' : ''}`}>
-      <td className="px-2 py-1 font-mono">{cashMovement.movementDate}</td>
-      <td className="px-2 py-1">
+    <tr className={`${TABLE_ROW_CLASS} ${isBeingEdited ? 'bg-accent-soft' : ''}`}>
+      <td className="px-3 py-1.5">{cashMovement.movementDate}</td>
+      <td className="px-3 py-1.5">
         <CashMovementTypeBadge type={cashMovement.type} />
       </td>
-      <td className="px-2 py-1 text-right font-mono">{formatMoney(cashMovement.amount)}</td>
-      <td className="px-2 py-1 text-slate-400">{cashMovement.note ?? EMPTY_VALUE}</td>
-      <td className="px-2 py-1 text-right">
+      <td className="px-3 py-1.5 text-right">{formatMoney(cashMovement.amount)}</td>
+      <td className="px-3 py-1.5 text-muted">{cashMovement.note ?? EMPTY_VALUE}</td>
+      <td className="px-3 py-1 text-right">
         <div className="inline-flex gap-1">
           <button
             type="button"
             title="Edit"
             onClick={() => rowActions.onEdit(cashMovement)}
-            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+            className={ICON_BUTTON_CLASS}
           >
-            <Pencil size={12} />
+            <Pencil size={14} />
           </button>
           <button
             type="button"
             title="Delete"
             onClick={() => rowActions.onDelete(cashMovement)}
             disabled={rowActions.deletingMovementId === cashMovement.id}
-            className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
+            className={DELETE_ICON_BUTTON_CLASS}
           >
-            <Trash2 size={12} />
+            <Trash2 size={14} />
           </button>
         </div>
       </td>
@@ -73,14 +88,14 @@ function CashMovementList({
   rowActions: CashMovementRowActions;
 }) {
   return (
-    <table className="w-full border-collapse">
+    <table className={TABLE_CLASS}>
       <thead>
-        <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wide text-slate-500">
-          <th className="px-2 py-1 text-left font-medium">Date</th>
-          <th className="px-2 py-1 text-left font-medium">Type</th>
-          <th className="px-2 py-1 text-right font-medium">Amount</th>
-          <th className="px-2 py-1 text-left font-medium">Note</th>
-          <th className="px-2 py-1">
+        <tr className={TABLE_HEAD_ROW_CLASS}>
+          <th className="px-3 py-1.5 text-left font-medium">Date</th>
+          <th className="px-3 py-1.5 text-left font-medium">Type</th>
+          <th className="px-3 py-1.5 text-right font-medium">Amount</th>
+          <th className="px-3 py-1.5 text-left font-medium">Note</th>
+          <th className="px-3 py-1.5">
             <span className="sr-only">Actions</span>
           </th>
         </tr>
@@ -151,19 +166,8 @@ function TypeButton({
   onSelect: (type: CashMovementType) => void;
 }) {
   const isSelected = type === selectedType;
-  const selectedColorClass =
-    type === 'DEPOSIT'
-      ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
-      : 'border-rose-500/60 bg-rose-500/15 text-rose-300';
   return (
-    <button
-      type="button"
-      aria-pressed={isSelected}
-      onClick={() => onSelect(type)}
-      className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors ${
-        isSelected ? selectedColorClass : 'border-slate-700 text-slate-400 hover:text-slate-200'
-      }`}
-    >
+    <button type="button" aria-pressed={isSelected} onClick={() => onSelect(type)} className={toggleButtonClass(isSelected)}>
       {TYPE_LABELS[type]}
     </button>
   );
@@ -222,12 +226,12 @@ function CashMovementForm({
 
   return (
     <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-2">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <div className={PANEL_TITLE_CLASS}>
         {formTitleOf(movementBeingEdited)}
       </div>
 
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500">
+        <label className={FIELD_LABEL_CLASS}>
           Date
           <input
             type="date"
@@ -244,7 +248,7 @@ function CashMovementForm({
           <TypeButton type="WITHDRAWAL" selectedType={formValues.type} onSelect={(type) => updateFormValue('type', type)} />
         </div>
 
-        <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500">
+        <label className={FIELD_LABEL_CLASS}>
           Amount (USD)
           <input
             type="number"
@@ -257,7 +261,7 @@ function CashMovementForm({
           />
         </label>
 
-        <label className="flex min-w-40 flex-1 flex-col gap-1 text-[10px] uppercase tracking-wide text-slate-500">
+        <label className={`min-w-40 flex-1 ${FIELD_LABEL_CLASS}`}>
           Note
           <input
             type="text"
@@ -269,11 +273,7 @@ function CashMovementForm({
           />
         </label>
 
-        <button
-          type="submit"
-          disabled={isSaving}
-          className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
-        >
+        <button type="submit" disabled={isSaving} className={PRIMARY_BUTTON_CLASS}>
           {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Add'}
         </button>
         {isEditing && (
@@ -281,14 +281,14 @@ function CashMovementForm({
             type="button"
             onClick={onCancelEditing}
             disabled={isSaving}
-            className="rounded-md border border-slate-700 px-3 py-1 text-xs text-slate-300 transition-colors hover:text-slate-100 disabled:opacity-50"
+            className={SECONDARY_BUTTON_CLASS}
           >
             Cancel
           </button>
         )}
       </div>
 
-      {errorMessage && <p className="text-[11px] text-rose-400">{errorMessage}</p>}
+      {errorMessage && <p className={ERROR_TEXT_CLASS}>{errorMessage}</p>}
     </form>
   );
 }
@@ -354,13 +354,13 @@ export function CashMovementsPanel({
   const formKey = movementBeingEdited === null ? `new-${formGeneration}` : `edit-${movementBeingEdited.id}`;
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-300">
+    <div className={PANEL_CLASS}>
       {investor.cashMovements.length === 0 ? (
-        <p className="text-slate-500">No deposits entered yet for {investor.name}.</p>
+        <p className="text-muted">No deposits entered yet for {investor.name}.</p>
       ) : (
         <CashMovementList cashMovements={investor.cashMovements} rowActions={rowActions} />
       )}
-      {deleteErrorMessage && <p className="text-[11px] text-rose-400">{deleteErrorMessage}</p>}
+      {deleteErrorMessage && <p className={ERROR_TEXT_CLASS}>{deleteErrorMessage}</p>}
 
       <CashMovementForm
         key={formKey}
