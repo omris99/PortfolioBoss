@@ -1,37 +1,37 @@
-import { Check, CircleHelp, X } from 'lucide-react';
+import { Check, CircleDashed, X } from 'lucide-react';
 import { EMPTY_VALUE, formatMoney, formatSignedPercent } from '../lib/format';
 import { labelClassOf, MOMENTUM_TONES } from '../lib/signalColors';
-import { CHIP_CLASS, HINT_TEXT_CLASS, PANEL_CLASS, PANEL_TITLE_CLASS } from '../lib/styles';
-import type { Momentum } from '../types/portfolio';
+import { CHIP_CLASS } from '../lib/styles';
+import type { Momentum, MomentumLabel } from '../types/portfolio';
+import { HelpPopover } from './HelpPopover';
 
-/** What each label suggests — a legend for reading the score, not advice; PortfolioBoss places no orders. */
-const LABEL_MEANINGS = 'STRONG 4–5: hold or add · NEUTRAL 2–3: wait, don’t add · WEAK 0–1: consider selling part';
-
-/** "4/5", or "?/5" while one of the checks is unknown. */
-function scoreText(momentum: Momentum): string {
+/** "4/5", "?/5" while one of the checks is unknown, "—" without a single stored close. */
+export function momentumScoreText(momentum: Momentum | null): string {
+  if (momentum === null) return EMPTY_VALUE;
   return `${momentum.score ?? '?'}/5`;
 }
 
-function scoreHint(momentum: Momentum): string {
-  const closesDate = `closes as of ${momentum.asOf}`;
-  if (momentum.label === null) return `Momentum: no score yet, not enough daily closes for every check · ${closesDate}`;
-  return `Momentum ${momentum.label} (${scoreText(momentum)}) · ${closesDate}`;
+/** "STRONG 4/5", or the score alone while there is no label. */
+export function momentumText(momentum: Momentum | null): string {
+  if (momentum === null) return EMPTY_VALUE;
+  return momentum.label === null ? momentumScoreText(momentum) : `${momentum.label} ${momentumScoreText(momentum)}`;
 }
 
-/** The Signal cell: "M 4/5" in the label's colour, the details on hover. "—" without a single stored close. */
-export function MomentumScore({ momentum }: { momentum: Momentum | null }) {
-  if (momentum === null) {
-    return <span title="No daily closes stored yet: they are read from IB on every run.sh">{EMPTY_VALUE}</span>;
-  }
+/** The label and score in the label's tone: "STRONG 5/5". */
+export function MomentumChip({ momentum }: { momentum: Momentum | null }) {
   return (
-    <span
-      title={scoreHint(momentum)}
-      className={`${CHIP_CLASS} ${labelClassOf(momentum.label, MOMENTUM_TONES)}`}
-    >
-      M {scoreText(momentum)}
+    <span className={`${CHIP_CLASS} ${labelClassOf(momentum?.label ?? null, MOMENTUM_TONES)}`}>
+      {momentum === null ? EMPTY_VALUE : `${momentum.label ?? 'UNKNOWN'} ${momentumScoreText(momentum)}`}
     </span>
   );
 }
+
+/** What each label suggests — a guide for reading the score, not advice; PortfolioBoss places no orders. */
+const LABEL_MEANINGS: { label: MomentumLabel; range: string; meaning: string }[] = [
+  { label: 'STRONG', range: '4–5', meaning: 'hold or add' },
+  { label: 'NEUTRAL', range: '2–3', meaning: 'wait, don’t add' },
+  { label: 'WEAK', range: '0–1', meaning: 'consider selling part' },
+];
 
 // ── the five checks ─────────────────────────────────────────────────────────────────────────────
 
@@ -104,12 +104,17 @@ function checksOf(momentum: Momentum): MomentumCheck[] {
   ];
 }
 
+/** How many of the five checks hold: "3 of 5 checks pass" in the drawer's summary. */
+export function passedCheckCount(momentum: Momentum): number {
+  return checksOf(momentum).filter((check) => check.passed === true).length;
+}
+
 function CheckIcon({ passed }: { passed: boolean | null }) {
-  if (passed === null) return <CircleHelp size={14} className="shrink-0 text-unknown" aria-label="unknown" />;
+  if (passed === null) return <CircleDashed size={16} strokeWidth={2.5} className="text-unknown" aria-label="Unknown" />;
   return passed ? (
-    <Check size={14} className="shrink-0 text-positive" aria-label="holds" />
+    <Check size={16} strokeWidth={2.5} className="text-positive" aria-label="Passes" />
   ) : (
-    <X size={14} className="shrink-0 text-negative" aria-label="fails" />
+    <X size={16} strokeWidth={2.5} className="text-negative" aria-label="Fails" />
   );
 }
 
@@ -120,44 +125,58 @@ function textOf(check: MomentumCheck): string {
 
 function CheckRow({ check }: { check: MomentumCheck }) {
   return (
-    <li className="flex items-center gap-2">
+    <li className="grid grid-cols-[20px_1fr_auto] items-center gap-3 px-4 py-2.5">
       <CheckIcon passed={check.passed} />
       <span>{textOf(check)}</span>
-      <span className="text-muted">· {check.detail}</span>
+      <span className={`text-[13px] ${check.passed === null ? 'text-unknown' : 'text-muted'}`}>{check.detail}</span>
     </li>
   );
 }
 
-/**
- * At the top of a holding's expanded row: the score, what each of the five checks found, and what the labels mean
- * (AI_ANALYSIS_TODO.md, decision 5). Computed by the API from the daily closes the last run.sh read from IB.
- */
-export function MomentumDetails({ momentum }: { momentum: Momentum | null }) {
+function LabelMeaningsHelp() {
   return (
-    <div className={PANEL_CLASS}>
-      <div className={`flex items-center gap-2 ${PANEL_TITLE_CLASS}`}>
-        Momentum
-        {momentum !== null && (
-          <>
-            <span className={`${CHIP_CLASS} ${labelClassOf(momentum.label, MOMENTUM_TONES)}`}>
-              {momentum.label ?? 'no score'} {scoreText(momentum)}
+    <HelpPopover label="What the momentum score means">
+      <p>Five checks on the daily closes; the score counts the ones that pass.</p>
+      <ul className="mt-2 grid gap-1.5">
+        {LABEL_MEANINGS.map(({ label, range, meaning }) => (
+          <li key={label} className="flex items-center gap-2">
+            <span className={`${CHIP_CLASS} ${labelClassOf(label, MOMENTUM_TONES)}`}>
+              {label} {range}
             </span>
-            <span className="text-caption font-normal text-muted">· daily closes as of {momentum.asOf}</span>
-          </>
-        )}
+            {meaning}
+          </li>
+        ))}
+      </ul>
+    </HelpPopover>
+  );
+}
+
+/**
+ * The drawer's Momentum tab (AI_ANALYSIS_TODO.md, decision 5): the label and score with the date of the closes, then
+ * what each of the five checks found. Computed by the API from the daily closes the last run.sh read from IB.
+ */
+export function MomentumPanel({ momentum }: { momentum: Momentum | null }) {
+  if (momentum === null) {
+    return (
+      <p className="py-6 text-muted">
+        No daily closes stored yet: they are read from IB on every <span className="font-mono text-code">run.sh</span>.
+      </p>
+    );
+  }
+  return (
+    <div>
+      <div className="mb-4 flex min-h-7 items-center gap-2">
+        <MomentumChip momentum={momentum} />
+        <span className="text-muted">daily closes as of {momentum.asOf}</span>
+        <span className="ml-auto">
+          <LabelMeaningsHelp />
+        </span>
       </div>
-      {momentum === null ? (
-        <p className="text-muted">No daily closes stored yet: they are read from IB on every run.sh.</p>
-      ) : (
-        <>
-          <ul className="flex flex-col gap-1">
-            {checksOf(momentum).map((check) => (
-              <CheckRow key={check.key} check={check} />
-            ))}
-          </ul>
-          <p className={HINT_TEXT_CLASS}>{LABEL_MEANINGS}</p>
-        </>
-      )}
+      <ul className="divide-y rounded-lg border">
+        {checksOf(momentum).map((check) => (
+          <CheckRow key={check.key} check={check} />
+        ))}
+      </ul>
     </div>
   );
 }

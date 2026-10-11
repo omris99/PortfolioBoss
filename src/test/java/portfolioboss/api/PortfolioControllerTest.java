@@ -15,6 +15,7 @@ import portfolioboss.ai.SourceConsensus;
 import portfolioboss.api.response.CashMovementResponse;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
+import portfolioboss.api.response.EstimatedAnalysisCostResponse;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
 import portfolioboss.api.response.InvestorResponse;
@@ -160,7 +161,7 @@ class PortfolioControllerTest {
     @Test
     void servesTheInvestorsWithTheFieldNamesTheUiExpects() throws Exception {
         PortfolioResponse withInvestors = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 40_000.0, List.of(),
-                List.of(), List.of(accountOwner(), otherInvestor()));
+                List.of(), List.of(accountOwner(), otherInvestor()), null);
         given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withInvestors));
 
         mockMvc.perform(get("/api/portfolio"))
@@ -209,8 +210,8 @@ class PortfolioControllerTest {
 
     @Test
     void keepsFiguresIbDidNotReportInTheJsonAsNull() throws Exception {
-        PortfolioResponse withoutFigures =
-                new PortfolioResponse(ACCOUNT, AS_OF, null, null, List.of(withoutCostData()), List.of(), List.of());
+        PortfolioResponse withoutFigures = new PortfolioResponse(ACCOUNT, AS_OF, null, null,
+                List.of(withoutCostData()), List.of(), List.of(), null);
         given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withoutFigures));
 
         mockMvc.perform(get("/api/portfolio"))
@@ -226,7 +227,23 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].trades").value(empty()))
                 .andExpect(jsonPath("$.holdings[0].momentum").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].analysis").value(nullValue()))
-                .andExpect(jsonPath("$.holdings[0].signal").value(nullValue()));
+                .andExpect(jsonPath("$.holdings[0].signal").value(nullValue()))
+                .andExpect(jsonPath("$.estimatedAnalysisCost").value(nullValue()));
+    }
+
+    /** What the Analyze buttons quote before a paid run: the average cost of one stock's analysis. */
+    @Test
+    void servesTheEstimatedAnalysisCostWithTheFieldNamesTheUiExpects() throws Exception {
+        EstimatedAnalysisCostResponse estimate =
+                new EstimatedAnalysisCostResponse(new BigDecimal("0.0412"), new BigDecimal("5.0000"), 7);
+        PortfolioResponse withEstimate = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(),
+                List.of(), List.of(), estimate);
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withEstimate));
+
+        mockMvc.perform(get("/api/portfolio"))
+                .andExpect(jsonPath("$.estimatedAnalysisCost.costUsdPerStock").value(closeTo(0.0412, 1e-9)))
+                .andExpect(jsonPath("$.estimatedAnalysisCost.tavilyCreditsPerStock").value(closeTo(5.0, 1e-9)))
+                .andExpect(jsonPath("$.estimatedAnalysisCost.basedOnAnalyses").value(7));
     }
 
     /**
@@ -284,7 +301,8 @@ class PortfolioControllerTest {
     @Test
     void servesClosedPositionsWithTheFieldNamesTheUiExpects() throws Exception {
         PortfolioResponse withClosedPositions = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(),
-                List.of(appleBoughtAndSold(), microsoftSoldWithNoPricesEntered(), teslaEnteredByHand()), List.of());
+                List.of(appleBoughtAndSold(), microsoftSoldWithNoPricesEntered(), teslaEnteredByHand()), List.of(),
+                null);
         given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withClosedPositions));
 
         mockMvc.perform(get("/api/portfolio"))
@@ -330,7 +348,8 @@ class PortfolioControllerTest {
     }
 
     private PortfolioResponse portfolioWith(HoldingResponse... holdings) {
-        return new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(holdings), List.of(), List.of());
+        return new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(holdings), List.of(), List.of(),
+                null);
     }
 
     /** 10 bought at 150 and sold at 180, $5 commission on each: +290, or +19.33%. */

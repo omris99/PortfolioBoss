@@ -17,6 +17,7 @@ import portfolioboss.ai.SourceConsensus;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
+import portfolioboss.api.response.EstimatedAnalysisCostResponse;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
 import portfolioboss.api.response.InvestorResponse;
@@ -421,6 +422,34 @@ class PortfolioReadServiceTest {
         assertThat(microsoft.signal()).isNull();
     }
 
+    /**
+     * The estimate the Analyze buttons quote averages the latest analysis of each holding: Apple's older, cheaper run
+     * (3 credits, $0.03 — before the four searches) doesn't count; its latest (5 credits, $0.05) and Microsoft's
+     * (5 credits, $0.04) do.
+     */
+    @Test
+    void estimatesTheAnalysisCostFromTheLatestAnalysisOfEachHolding() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0), microsoft(5, 300.0)));
+        long appleHoldingId = holdingIdOf(APPLE_CON_ID);
+        long microsoftHoldingId = holdingIdOf(MICROSOFT_CON_ID);
+        stockAnalysisRepository.save(analysisCosting(appleHoldingId, FIRST_RUN, 3, "0.030000"));
+        stockAnalysisRepository.save(analysisCosting(appleHoldingId, SECOND_RUN, 5, "0.050000"));
+        stockAnalysisRepository.save(analysisCosting(microsoftHoldingId, SECOND_RUN, 5, "0.040000"));
+
+        EstimatedAnalysisCostResponse estimate = readPortfolio().orElseThrow().estimatedAnalysisCost();
+
+        assertThat(estimate.costUsdPerStock()).isEqualByComparingTo("0.045");
+        assertThat(estimate.tavilyCreditsPerStock()).isEqualByComparingTo("5");
+        assertThat(estimate.basedOnAnalyses()).isEqualTo(2);
+    }
+
+    @Test
+    void hasNoAnalysisCostToEstimateBeforeTheFirstAnalysis() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0)));
+
+        assertThat(readPortfolio().orElseThrow().estimatedAnalysisCost()).isNull();
+    }
+
     @Test
     void servesTheLatestSyncOnly() {
         syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0)));
@@ -532,6 +561,13 @@ class PortfolioReadServiceTest {
                 null);
         return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, null, 10_500, 900, 3,
                 new BigDecimal("0.030000"));
+    }
+
+    /** An analysis that found nothing and cost {@code tavilyCredits} and {@code costUsd} — all a cost test needs. */
+    private StockAnalysisEntity analysisCosting(long holdingId, Instant analyzedAt, int tavilyCredits, String costUsd) {
+        StockAnalysisResult result = new StockAnalysisResult(List.of(), List.of(), List.of(), null, null);
+        return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, null, 10_500, 900,
+                tavilyCredits, new BigDecimal(costUsd));
     }
 
     /** 250 daily closes from {@link #FIRST_CLOSE_DATE}, growing by {@code dailyGrowth} a day. */

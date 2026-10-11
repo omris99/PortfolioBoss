@@ -29,7 +29,8 @@ export function HelpPopover({
           align={align}
           sideOffset={6}
           aria-label={label}
-          className="z-20 w-[300px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] leading-[18px] text-ink shadow-raised"
+          // Above the drawer (z-40) and a modal (z-50): a "?" can sit inside either.
+          className="z-[60] w-[300px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] leading-[18px] text-ink shadow-raised"
         >
           {children}
         </Popover.Content>

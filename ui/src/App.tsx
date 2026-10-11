@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router';
 import { AppShell, type LoadStatus } from './components/AppShell';
 import { EmptyBox } from './components/EmptyBox';
 import { InvestorsProvider } from './components/InvestorsContext';
+import { SectorOptionsList } from './components/SectorCell';
 import { usePortfolio } from './hooks/usePortfolio';
 import { formatDateTime } from './lib/format';
 import { ClosedPositionsPage } from './pages/ClosedPositionsPage';
@@ -39,6 +40,14 @@ function App() {
         hasData={snapshot !== null}
         onRetry={() => void reload()}
       >
+        {snapshot !== null && (
+          <SectorOptionsList
+            sectors={[
+              ...snapshot.holdings.map((holding) => holding.sector),
+              ...snapshot.closedPositions.map((closedPosition) => closedPosition.sector),
+            ]}
+          />
+        )}
         <Routes>
           <Route index element={pageOnceLoaded((loaded) => <OverviewPage snapshot={loaded} />)} />
           <Route

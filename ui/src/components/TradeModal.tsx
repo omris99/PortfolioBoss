@@ -1,18 +1,22 @@
-import { useState, type FormEvent } from 'react';
-import { addManualPositionTrade, addTrade, changeTrade, errorMessageOf } from '../lib/apiClient';
-import { INPUT_CLASS, isBlank, isPositiveWholeNumber, localTodayIsoDate, numberOrNull, trimmedOrNull } from '../lib/formInput';
+import { useState } from 'react';
+import { useSaveAction } from '../hooks/useSaveAction';
+import { addManualPositionTrade, addTrade, changeTrade } from '../lib/apiClient';
+import { formatMoney, formatQuantity } from '../lib/format';
 import {
-  ERROR_TEXT_CLASS,
-  FIELD_LABEL_CLASS,
-  HINT_TEXT_CLASS,
-  PANEL_TITLE_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
-  toggleButtonClass,
-} from '../lib/styles';
+  INPUT_CLASS,
+  isBlank,
+  isIsoDate,
+  isPositiveWholeNumber,
+  localTodayIsoDate,
+  numberOrNull,
+  trimmedOrNull,
+} from '../lib/formInput';
+import { NUMBER_INPUT_CLASS } from '../lib/styles';
 import type { Holding, Trade, TradeRequest, TradeSide } from '../types/portfolio';
+import { DateInput, Field, InfoBand, Toggle } from './FormFields';
 import { InvestorSelect } from './InvestorSelect';
-import { accountOwnerOf, useInvestors } from './InvestorsContext';
+import { accountOwnerOf, hasSeveralInvestors, useInvestors } from './InvestorsContext';
+import { Modal } from './Modal';
 
 /**
  * Whose trades a form or panel works on: a holding's, or a manual position's — one PortfolioBoss never saw as a
@@ -22,12 +26,13 @@ export type TradeOwner =
   | { kind: 'holding'; holding: Holding }
   | { kind: 'manualPosition'; manualPositionId: number; symbol: string; trades: Trade[] };
 
+export function symbolOf(owner: TradeOwner): string {
+  return owner.kind === 'holding' ? owner.holding.symbol : owner.symbol;
+}
+
 const NOTE_MAX_LENGTH = 500;   // the trade.note column
 
-/** The API's rule (`Utils.calculateOrderCommission`), said where the field is. */
-const COMMISSION_HINT =
-  'Leave empty for the default: 1 cent a share, at least $5 — worked out again from the quantity on every save. ' +
-  'Enter 0 for no commission.';
+const COMMISSION_HINT = 'Empty means the default: 1¢ a share, at least $5 an order. 0 is no commission.';
 
 /** What the inputs hold, as typed: number inputs give text, and an empty one means "not entered". */
 interface TradeFormValues {
@@ -57,7 +62,7 @@ function prefilledPriceText(averageCost: number): string {
  * entry is buying the whole position, so the form starts as that, leaving just the date. Never a manual position: IB
  * knows nothing about it.
  */
-function backfilledHoldingOf(owner: TradeOwner, tradeBeingEdited: Trade | null): Holding | null {
+export function backfilledHoldingOf(owner: TradeOwner, tradeBeingEdited: Trade | null): Holding | null {
   if (owner.kind !== 'holding' || tradeBeingEdited !== null) return null;
   const { holding } = owner;
   return holding.trades.length === 0 && holding.position > 0 ? holding : null;
@@ -89,22 +94,14 @@ function initialFormValues(
     };
   }
   const backfilledHolding = backfilledHoldingOf(owner, tradeBeingEdited);
-  if (backfilledHolding !== null) {
-    return {
-      tradeDate: todayIsoDate,
-      side: 'BUY',
-      quantityText: String(backfilledHolding.position),
-      priceText: backfilledHolding.averageCost === null ? '' : prefilledPriceText(backfilledHolding.averageCost),
-      commissionText: '',
-      note: '',
-      investorId: accountOwnerId,
-    };
-  }
   return {
     tradeDate: todayIsoDate,
     side: 'BUY',
-    quantityText: '',
-    priceText: '',
+    quantityText: backfilledHolding === null ? '' : String(backfilledHolding.position),
+    priceText:
+      backfilledHolding === null || backfilledHolding.averageCost === null
+        ? ''
+        : prefilledPriceText(backfilledHolding.averageCost),
     commissionText: '',
     note: '',
     investorId: accountOwnerId,
@@ -113,7 +110,7 @@ function initialFormValues(
 
 /** The same rules the API enforces, checked first so the common mistakes don't need a round trip. */
 function problemWithForm(formValues: TradeFormValues, todayIsoDate: string): string | null {
-  if (formValues.tradeDate === '') return 'Enter the trade date.';
+  if (!isIsoDate(formValues.tradeDate)) return 'Enter the trade date as yyyy-MM-dd.';
   if (formValues.tradeDate > todayIsoDate) return 'The trade date cannot be in the future.';
   if (!isPositiveWholeNumber(formValues.quantityText)) return 'Enter a whole quantity greater than 0.';
   if (!isBlank(formValues.priceText) && !(Number(formValues.priceText) >= 0)) {
@@ -137,178 +134,138 @@ function toTradeRequest(formValues: TradeFormValues): TradeRequest {
   };
 }
 
-function SideButton({
-  side,
-  selectedSide,
-  onSelect,
-}: {
-  side: TradeSide;
-  selectedSide: TradeSide;
-  onSelect: (side: TradeSide) => void;
-}) {
-  const isSelected = side === selectedSide;
+/** "No trades entered yet, so this starts as a BUY of the whole position (40) at IB's average cost, 412.30." */
+function BackfillNote({ holding }: { holding: Holding }) {
   return (
-    <button type="button" aria-pressed={isSelected} onClick={() => onSelect(side)} className={toggleButtonClass(isSelected)}>
-      {side}
-    </button>
+    <InfoBand>
+      No trades entered yet, so this starts as a BUY of the whole position (
+      <b className="font-semibold">{formatQuantity(holding.position)}</b>) at IB’s average cost,{' '}
+      <b className="font-semibold">{formatMoney(holding.averageCost)}</b>, which includes commissions. Set the date it
+      was bought, and the price if you know the execution price.
+    </InfoBand>
   );
 }
 
 /**
  * Adds a trade to `owner`, or corrects `tradeBeingEdited` when one is given. The API is the authority on what is
- * valid; its message is shown as it is. `onSaved` runs after a successful save and reloads the portfolio.
+ * valid; its message is shown as it is. `onSaved` reloads the portfolio after a successful save, then the modal closes.
  */
-export function TradeForm({
+export function TradeModal({
   owner,
   tradeBeingEdited,
   onSaved,
-  onCancelEditing,
+  onClose,
 }: {
   owner: TradeOwner;
   tradeBeingEdited: Trade | null;
   onSaved: () => Promise<void>;
-  onCancelEditing: () => void;
+  onClose: () => void;
 }) {
   const todayIsoDate = localTodayIsoDate();
-  const accountOwnerId = accountOwnerOf(useInvestors())?.id ?? null;
+  const investors = useInvestors();
   const [formValues, setFormValues] = useState(() =>
-    initialFormValues(owner, tradeBeingEdited, todayIsoDate, accountOwnerId),
+    initialFormValues(owner, tradeBeingEdited, todayIsoDate, accountOwnerOf(investors)?.id ?? null),
   );
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { isSaving, errorMessage, setErrorMessage, runSave } = useSaveAction();
 
   const isEditing = tradeBeingEdited !== null;
-  const isBackfill = backfilledHoldingOf(owner, tradeBeingEdited) !== null;
+  const backfilledHolding = backfilledHoldingOf(owner, tradeBeingEdited);
 
   const updateFormValue = <Field extends keyof TradeFormValues>(field: Field, value: TradeFormValues[Field]) =>
     setFormValues((currentValues) => ({ ...currentValues, [field]: value }));
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSubmit = async () => {
     const problem = problemWithForm(formValues, todayIsoDate);
     if (problem !== null) {
       setErrorMessage(problem);
       return;
     }
-    setIsSaving(true);
-    setErrorMessage(null);
-    try {
-      const tradeRequest = toTradeRequest(formValues);
+    const tradeRequest = toTradeRequest(formValues);
+    const isSaved = await runSave(async () => {
       if (tradeBeingEdited === null) {
         await addTradeTo(owner, tradeRequest);
       } else {
         await changeTrade(tradeBeingEdited.id, tradeRequest);
       }
       await onSaved();
-    } catch (error) {
-      setErrorMessage(errorMessageOf(error));
-    } finally {
-      setIsSaving(false);
-    }
+    });
+    if (isSaved) onClose();
   };
 
   return (
-    <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-2">
-      <div className={PANEL_TITLE_CLASS}>
-        {isEditing ? `Edit the trade of ${tradeBeingEdited.tradeDate}` : 'Add a trade'}
-      </div>
-
-      <div className="flex flex-wrap items-end gap-2">
-        <InvestorSelect
-          investorId={formValues.investorId}
-          onChange={(investorId) => updateFormValue('investorId', investorId)}
-        />
-
-        <label className={FIELD_LABEL_CLASS}>
-          Date
-          <input
-            type="date"
-            required
-            max={todayIsoDate}
+    <Modal
+      title={isEditing ? 'Edit trade' : 'Add trade'}
+      subtitle={symbolOf(owner)}
+      errorMessage={errorMessage}
+      isSaving={isSaving}
+      saveLabel={isEditing ? 'Save changes' : 'Save'}
+      onSubmit={() => void handleSubmit()}
+      onClose={onClose}
+    >
+      {backfilledHolding !== null && <BackfillNote holding={backfilledHolding} />}
+      <div className="grid grid-cols-2 gap-4">
+        {hasSeveralInvestors(investors) && (
+          <Field label="Investor" span={2}>
+            <InvestorSelect
+              investorId={formValues.investorId}
+              onChange={(investorId) => updateFormValue('investorId', investorId)}
+            />
+          </Field>
+        )}
+        <Field label="Date" hint="Not in the future.">
+          <DateInput
             value={formValues.tradeDate}
-            onChange={(event) => updateFormValue('tradeDate', event.target.value)}
-            className={INPUT_CLASS}
+            max={todayIsoDate}
+            onChange={(tradeDate) => updateFormValue('tradeDate', tradeDate)}
           />
-        </label>
-
-        <div className="flex gap-1" role="group" aria-label="Buy or sell">
-          <SideButton side="BUY" selectedSide={formValues.side} onSelect={(side) => updateFormValue('side', side)} />
-          <SideButton side="SELL" selectedSide={formValues.side} onSelect={(side) => updateFormValue('side', side)} />
-        </div>
-
-        <label className={FIELD_LABEL_CLASS}>
-          Quantity
+        </Field>
+        <Field label="Side" isGroup>
+          <Toggle
+            label="Buy or sell"
+            options={['BUY', 'SELL'] as TradeSide[]}
+            value={formValues.side}
+            onChange={(side) => updateFormValue('side', side)}
+          />
+        </Field>
+        <Field label="Quantity" hint="Whole shares, more than 0.">
           <input
-            type="number"
-            step="1"
-            min="1"
-            required
+            type="text"
+            inputMode="numeric"
             value={formValues.quantityText}
             onChange={(event) => updateFormValue('quantityText', event.target.value)}
-            className={`${INPUT_CLASS} w-28`}
+            className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} w-full`}
           />
-        </label>
-
-        <label className={FIELD_LABEL_CLASS}>
-          Price
+        </Field>
+        <Field label="Price" optional>
           <input
-            type="number"
-            step="any"
-            min="0"
-            placeholder="optional"
+            type="text"
+            inputMode="decimal"
             value={formValues.priceText}
             onChange={(event) => updateFormValue('priceText', event.target.value)}
-            className={`${INPUT_CLASS} w-28`}
+            className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} w-full`}
           />
-        </label>
-
-        <label title={COMMISSION_HINT} className={FIELD_LABEL_CLASS}>
-          Commission
+        </Field>
+        <Field label="Commission" optional span={2} hint={COMMISSION_HINT}>
           <input
-            type="number"
-            step="any"
-            min="0"
-            placeholder="default"
+            type="text"
+            inputMode="decimal"
+            placeholder="Default"
             value={formValues.commissionText}
             onChange={(event) => updateFormValue('commissionText', event.target.value)}
-            className={`${INPUT_CLASS} w-24`}
+            className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} w-full max-w-[200px]`}
           />
-        </label>
-
-        <label className={`min-w-48 flex-1 ${FIELD_LABEL_CLASS}`}>
-          Note
+        </Field>
+        <Field label="Note" optional span={2}>
           <input
             type="text"
             maxLength={NOTE_MAX_LENGTH}
             placeholder="Why? (optional)"
             value={formValues.note}
             onChange={(event) => updateFormValue('note', event.target.value)}
-            className={INPUT_CLASS}
+            className={`${INPUT_CLASS} w-full`}
           />
-        </label>
-
-        <button type="submit" disabled={isSaving} className={PRIMARY_BUTTON_CLASS}>
-          {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Add trade'}
-        </button>
-        {isEditing && (
-          <button
-            type="button"
-            onClick={onCancelEditing}
-            disabled={isSaving}
-            className={SECONDARY_BUTTON_CLASS}
-          >
-            Cancel
-          </button>
-        )}
+        </Field>
       </div>
-
-      {isBackfill && (
-        <p className={HINT_TEXT_CLASS}>
-          Prefilled from IB: the whole position at IB's average cost, which includes commissions — set the date,
-          and adjust the price if you know the execution price.
-        </p>
-      )}
-      {errorMessage && <p className={ERROR_TEXT_CLASS}>{errorMessage}</p>}
-    </form>
+    </Modal>
   );
 }

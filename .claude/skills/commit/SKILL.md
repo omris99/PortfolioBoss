@@ -35,8 +35,9 @@ write endpoints for the sector and trades, the UI that shows the positions and e
 reconciliation warnings, the closed positions — commissions, average cost, and manual positions with their own
 trades — several investors sharing the account, with their deposits, the momentum score from IB's daily closes, and the
 stock analysis — Tavily's searches (kept with each analysis), Claude's extraction, the consensus, the analysts' trend
-from price-target moves and the colored dot — behind `POST /api/analysis` and in the UI's Signal column, analysis box
-and Analyze buttons):*
+from price-target moves and the colored dot — behind `POST /api/analysis` and in the UI's Signal column, a holding
+drawer's "Analysts & news" tab and the Analyze buttons — and the UI's light redesign: four pages, a drawer per holding
+and per closed position, a Columns menu, forms in modals):*
 
 | Scope | Covers |
 |---|---|

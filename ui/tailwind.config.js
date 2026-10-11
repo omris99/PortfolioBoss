@@ -17,19 +17,25 @@ export default {
     colors: {
       transparent: 'transparent',
       current: 'currentColor',
+      // The text color as a color of its own too, for an SVG's fill or stroke (the minor warning's "!").
+      ink: role('text'),
       page: role('page'),
       surface: { DEFAULT: role('surface'), raised: role('surface-raised') },
+      scrim: { DEFAULT: role('scrim'), modal: role('scrim-modal') },
       subtle: role('subtle'),
       line: { DEFAULT: role('border'), strong: role('border-strong') },
       accent: { DEFAULT: role('accent'), soft: role('accent-soft') },
       'on-accent': role('on-accent'),
+      selected: role('selected'),
       link: role('link'),
       positive: { DEFAULT: role('positive'), soft: role('positive-soft') },
       negative: { DEFAULT: role('negative'), soft: role('negative-soft'), line: role('negative-line') },
+      'on-negative': role('on-negative'),
       inbetween: { DEFAULT: role('inbetween'), soft: role('inbetween-soft') },
       unknown: { DEFAULT: role('unknown'), soft: role('unknown-soft') },
-      'warn-minor': { DEFAULT: role('warn-minor'), icon: role('warn-minor-icon'), soft: role('warn-minor-soft') },
+      'warn-minor': { DEFAULT: role('warn-minor'), edge: role('warn-minor-edge'), soft: role('warn-minor-soft') },
       'warn-real': { DEFAULT: role('warn-real'), soft: role('warn-real-soft') },
+      'on-warn-real': role('on-warn-real'),
       signal: { green: role('signal-green'), yellow: role('signal-yellow'), red: role('signal-red'), none: role('signal-none') },
       status: { loading: role('status-loading'), ready: role('status-ready'), error: role('status-error') },
     },
@@ -74,7 +80,8 @@ export default {
       maxWidth: {
         content: '1200px',
       },
-      height: {
+      // The top bar's height, as a spacing step: `h-topbar` for the bar, `top-topbar` for the drawer that starts under it.
+      spacing: {
         topbar: '56px',
       },
     },

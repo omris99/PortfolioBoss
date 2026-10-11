@@ -11,6 +11,15 @@ export function localTodayIsoDate(): string {
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
+/** A date typed as the API takes it, 'yyyy-MM-dd', and a real day of the calendar. */
+export function isIsoDate(typedText: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(typedText)) return false;
+  const [year, month, day] = typedText.split('-').map(Number);
+  // 2026-02-30 becomes March 2nd: a day that doesn't exist comes back as another.
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
 /** A number input gives text, and an empty one means "not entered". */
 export function isBlank(typedText: string): boolean {
   return typedText.trim() === '';

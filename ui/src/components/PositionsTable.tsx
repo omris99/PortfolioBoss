@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import {
   formatDate,
@@ -8,18 +8,21 @@ import {
   formatSignedPercent,
   profitLossColorClass,
 } from '../lib/format';
-import { TABLE_CLASS, TABLE_HEAD_ROW_CLASS, TABLE_ROW_CLASS, TAG_CLASS } from '../lib/styles';
-import type { ClosedPosition, Holding, HoldingSignal } from '../types/portfolio';
-import { AnalysisDetails } from './AnalysisDetails';
-import { ExpandRowButton } from './ExpandRowButton';
+import {
+  TABLE_CELL_CLASS,
+  TABLE_CLASS,
+  TABLE_HEADER_CELL_CLASS,
+  TAG_CLASS,
+  tableRowClass,
+} from '../lib/styles';
+import type { Holding, HoldingSignal } from '../types/portfolio';
+import type { ColumnChoice } from './ColumnsMenu';
+import { HelpPopover } from './HelpPopover';
 import { HoldingPeriod } from './HoldingPeriod';
-import { HoldingWarningIcon } from './HoldingWarnings';
+import { HoldingWarningMark } from './HoldingWarnings';
 import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
-import { InvestorSplitTable } from './InvestorSplitTable';
-import { MomentumDetails } from './Momentum';
-import { SECTOR_OPTIONS_LIST_ID, SectorCell } from './SectorCell';
-import { SignalCell } from './Signal';
-import { TradesPanel } from './TradesPanel';
+import { SectorCell } from './SectorCell';
+import { SignalCell, SignalCellLegend } from './Signal';
 
 // ── sorting ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -29,10 +32,13 @@ type SortDirection = 'ascending' | 'descending';
 /** What a column sorts by: text (dates are 'yyyy-MM-dd', which sorts correctly as text) or a number. */
 type SortValue = string | number;
 
-interface SortState {
+export interface SortState {
   columnKey: string;
   direction: SortDirection;
 }
+
+/** Largest position first, like the console report. */
+export const DEFAULT_SORT: SortState = { columnKey: 'marketValue', direction: 'descending' };
 
 function compareSortValues(firstValue: SortValue, secondValue: SortValue): number {
   if (typeof firstValue === 'number' && typeof secondValue === 'number') {
@@ -57,10 +63,17 @@ function compareWithEmptyLast(
   return directionMultiplier * compareSortValues(firstValue, secondValue);
 }
 
-function sortHoldings(holdings: Holding[], sortState: SortState): Holding[] {
+function isClosed(holding: Holding): boolean {
+  return holding.status === 'CLOSED';
+}
+
+/** The rows in the table's order: open holdings first, closed ones below them, each sorted by `sortState`. */
+export function sortHoldings(holdings: Holding[], sortState: SortState): Holding[] {
   const sortColumn = columnWithKey(sortState.columnKey);
-  return [...holdings].sort((first, second) =>
-    compareWithEmptyLast(sortColumn.sortValue(first), sortColumn.sortValue(second), sortState.direction),
+  return [...holdings].sort(
+    (first, second) =>
+      Number(isClosed(first)) - Number(isClosed(second)) ||
+      compareWithEmptyLast(sortColumn.sortValue(first), sortColumn.sortValue(second), sortState.direction),
   );
 }
 
@@ -79,26 +92,24 @@ interface TableActions {
   onDataChanged: () => Promise<void>;
 }
 
-/** Everything about one column lives here: adding a column means adding one entry to {@link COLUMNS}. */
-interface ColumnDefinition {
-  key: string;
-  title: string;
+/** Everything about one column lives here: adding a column means adding one entry to {@link POSITION_COLUMNS}. */
+interface ColumnDefinition extends ColumnChoice {
   alignment: 'left' | 'right';
   /** What the column sorts by; an empty value (`null`) always sorts last. */
   sortValue: (holding: Holding) => SortValue | null;
   /** The order on the first click: A→Z for text, oldest first for dates, largest first for numbers. */
   firstSortDirection: SortDirection;
   renderValue: (holding: Holding, tableActions: TableActions) => ReactNode;
-  /** Text colour classes for the cell; the ordinary text colour when omitted. */
+  /** Text colour classes for the cell, on an open holding; a closed one's cells are all muted. */
   valueColorClass?: (holding: Holding) => string;
 }
 
 function SymbolWithStatus({ holding }: { holding: Holding }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      {holding.symbol}
-      {holding.status === 'CLOSED' && <span className={TAG_CLASS}>closed</span>}
-      <HoldingWarningIcon warnings={holding.warnings} />
+      <span className="font-semibold">{holding.symbol}</span>
+      <HoldingWarningMark warnings={holding.warnings} />
+      {isClosed(holding) && <span className={TAG_CLASS}>closed</span>}
     </span>
   );
 }
@@ -123,8 +134,19 @@ function QuantityWithSplit({ holding }: { holding: Holding }) {
     .join(' · ');
   return (
     <span title={namedSplit}>
-      {formatQuantity(holding.position)} <span className="text-muted">({split})</span>
+      {formatQuantity(holding.position)} <span className="text-faint">({split})</span>
     </span>
+  );
+}
+
+/** "18,726.00 USD", the currency small: holdings in other currencies don't add up with these. */
+function MarketValue({ holding }: { holding: Holding }) {
+  if (holding.marketValue === null) return <>{formatMoney(null)}</>;
+  return (
+    <>
+      {formatMoney(holding.marketValue)}
+      <span className="ml-1 text-[11px] text-faint">{holding.currency}</span>
+    </>
   );
 }
 
@@ -141,22 +163,26 @@ function signalSortValue(holding: Holding): number | null {
   return SIGNAL_SORT_RANKS[holding.signal] + (momentumScore ?? 0);
 }
 
-// The console report's columns in its order, with the signal and the sector after the symbol and the dates and
-// holding period, which are derived from the trades entered by hand, at the end.
-const COLUMNS: ColumnDefinition[] = [
+/**
+ * Every column, in the table's order; `isShownByDefault` are the eight shown until the Columns menu says otherwise.
+ * The dates and the holding period are derived from the trades entered by hand.
+ */
+export const POSITION_COLUMNS: ColumnDefinition[] = [
   {
     key: 'symbol',
     title: 'Symbol',
+    isShownByDefault: true,
+    isAlwaysShown: true,
     alignment: 'left',
     sortValue: (holding) => holding.symbol,
     firstSortDirection: 'ascending',
     renderValue: (holding) => <SymbolWithStatus holding={holding} />,
-    valueColorClass: () => 'font-semibold',
   },
   {
-    // The dot, the momentum, the analysts and the news in one column (AI_ANALYSIS_TODO.md, decision 15).
+    // The dot, the warning signs and the momentum score in one column (AI_ANALYSIS_TODO.md, decision 15).
     key: 'signal',
     title: 'Signal',
+    isShownByDefault: true,
     alignment: 'left',
     sortValue: signalSortValue,
     firstSortDirection: 'descending',
@@ -165,6 +191,7 @@ const COLUMNS: ColumnDefinition[] = [
   {
     key: 'sector',
     title: 'Sector',
+    isShownByDefault: true,
     alignment: 'left',
     sortValue: (holding) => holding.sector,
     firstSortDirection: 'ascending',
@@ -175,6 +202,7 @@ const COLUMNS: ColumnDefinition[] = [
   {
     key: 'position',
     title: 'Qty',
+    isShownByDefault: true,
     alignment: 'right',
     sortValue: (holding) => holding.position,
     firstSortDirection: 'descending',
@@ -183,6 +211,7 @@ const COLUMNS: ColumnDefinition[] = [
   {
     key: 'averageCost',
     title: 'Avg cost',
+    isShownByDefault: false,
     alignment: 'right',
     sortValue: (holding) => holding.averageCost,
     firstSortDirection: 'descending',
@@ -191,6 +220,7 @@ const COLUMNS: ColumnDefinition[] = [
   {
     key: 'marketPrice',
     title: 'Last',
+    isShownByDefault: false,
     alignment: 'right',
     sortValue: (holding) => holding.marketPrice,
     firstSortDirection: 'descending',
@@ -199,14 +229,16 @@ const COLUMNS: ColumnDefinition[] = [
   {
     key: 'marketValue',
     title: 'Market value',
+    isShownByDefault: true,
     alignment: 'right',
     sortValue: (holding) => holding.marketValue,
     firstSortDirection: 'descending',
-    renderValue: (holding) => formatMoney(holding.marketValue),
+    renderValue: (holding) => <MarketValue holding={holding} />,
   },
   {
     key: 'unrealizedPnl',
     title: 'Unrealized P&L',
+    isShownByDefault: true,
     alignment: 'right',
     sortValue: (holding) => holding.unrealizedPnl,
     firstSortDirection: 'descending',
@@ -216,6 +248,7 @@ const COLUMNS: ColumnDefinition[] = [
   {
     key: 'unrealizedPnlPercent',
     title: '%',
+    isShownByDefault: true,
     alignment: 'right',
     sortValue: (holding) => holding.unrealizedPnlPercent,
     firstSortDirection: 'descending',
@@ -223,8 +256,18 @@ const COLUMNS: ColumnDefinition[] = [
     valueColorClass: (holding) => profitLossColorClass(holding.unrealizedPnlPercent),
   },
   {
+    key: 'holdingDays',
+    title: 'Held',
+    isShownByDefault: true,
+    alignment: 'right',
+    sortValue: (holding) => holding.holdingDays,
+    firstSortDirection: 'descending',
+    renderValue: (holding) => <HoldingPeriod days={holding.holdingDays} />,
+  },
+  {
     key: 'firstBuyDate',
     title: 'Bought',
+    isShownByDefault: false,
     alignment: 'right',
     sortValue: (holding) => holding.firstBuyDate,
     firstSortDirection: 'ascending',
@@ -233,23 +276,16 @@ const COLUMNS: ColumnDefinition[] = [
   {
     key: 'lastSellDate',
     title: 'Last sold',
+    isShownByDefault: false,
     alignment: 'right',
     sortValue: (holding) => holding.lastSellDate,
     firstSortDirection: 'ascending',
     renderValue: (holding) => formatDate(holding.lastSellDate),
   },
-  {
-    key: 'holdingDays',
-    title: 'Held',
-    alignment: 'right',
-    sortValue: (holding) => holding.holdingDays,
-    firstSortDirection: 'descending',
-    renderValue: (holding) => <HoldingPeriod days={holding.holdingDays} />,
-  },
 ];
 
 function columnWithKey(columnKey: string): ColumnDefinition {
-  return COLUMNS.find((column) => column.key === columnKey) ?? COLUMNS[0];
+  return POSITION_COLUMNS.find((column) => column.key === columnKey) ?? POSITION_COLUMNS[0];
 }
 
 function alignmentClass(column: ColumnDefinition): string {
@@ -265,60 +301,69 @@ function SortableHeaderCell({
 }: {
   column: ColumnDefinition;
   sortState: SortState;
-  onSort: (column: ColumnDefinition) => void;
+  onSort: (sortState: SortState) => void;
 }) {
   const isSortedByThisColumn = sortState.columnKey === column.key;
-
   return (
     <th
       aria-sort={isSortedByThisColumn ? sortState.direction : 'none'}
-      className={`px-3 py-2 font-medium ${alignmentClass(column)}`}
+      className={`${TABLE_HEADER_CELL_CLASS} font-medium ${alignmentClass(column)}`}
     >
-      <button
-        type="button"
-        onClick={() => onSort(column)}
-        className={`inline-flex items-center gap-1 transition-colors hover:text-ink ${
-          isSortedByThisColumn ? 'text-ink' : ''
-        }`}
-      >
-        {column.title}
-        {isSortedByThisColumn &&
-          (sortState.direction === 'ascending' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
-      </button>
+      <span className="inline-flex items-center gap-0.5">
+        <button
+          type="button"
+          onClick={() => onSort(sortStateAfterClicking(sortState, column))}
+          className={`-mx-1 inline-flex h-7 items-center gap-1 rounded-sm px-1 transition-colors hover:text-ink ${
+            isSortedByThisColumn ? 'text-ink' : ''
+          }`}
+        >
+          {column.title}
+          {isSortedByThisColumn &&
+            (sortState.direction === 'ascending' ? (
+              <ArrowUp size={12} strokeWidth={2.5} />
+            ) : (
+              <ArrowDown size={12} strokeWidth={2.5} />
+            ))}
+        </button>
+        {column.key === 'signal' && (
+          <HelpPopover label="How to read the Signal column" align="start">
+            <SignalCellLegend />
+          </HelpPopover>
+        )}
+      </span>
     </th>
   );
 }
 
 function HoldingRow({
   holding,
-  isExpanded,
-  onToggleExpanded,
+  columns,
+  isSelected,
+  onOpen,
   tableActions,
-  rowRef,
 }: {
   holding: Holding;
-  isExpanded: boolean;
-  onToggleExpanded: () => void;
+  columns: ColumnDefinition[];
+  isSelected: boolean;
+  onOpen: () => void;
   tableActions: TableActions;
-  /** Given to the open row only, so the table can bring it into view. */
-  rowRef?: Ref<HTMLTableRowElement>;
 }) {
-  // A closed holding is shown dimmed; its trades stay editable, which is where its history gets completed.
-  const closedClass = holding.status === 'CLOSED' ? 'opacity-60' : '';
+  const openOnEnter = (event: KeyboardEvent<HTMLTableRowElement>) => {
+    if (event.key === 'Enter') onOpen();
+  };
   return (
-    <tr ref={rowRef} className={`${TABLE_ROW_CLASS} ${closedClass}`}>
-      <td className="w-8 py-1.5 pl-2">
-        <ExpandRowButton
-          isExpanded={isExpanded}
-          onToggle={onToggleExpanded}
-          subject={`the signal and trades of ${holding.symbol}`}
-          expandHint="Show the momentum, the analysts and the news, and show and enter trades"
-        />
-      </td>
-      {COLUMNS.map((column) => {
-        const colorClass = column.valueColorClass?.(holding) ?? '';
+    <tr
+      tabIndex={0}
+      aria-label={`${holding.symbol}, open details`}
+      onClick={onOpen}
+      onKeyDown={openOnEnter}
+      className={tableRowClass(isSelected)}
+    >
+      {columns.map((column) => {
+        // A closed holding: every cell muted, not faded, so it still reads well; its figures are "—" anyway.
+        const colorClass = isClosed(holding) ? 'text-muted' : (column.valueColorClass?.(holding) ?? '');
         return (
-          <td key={column.key} className={`whitespace-nowrap px-3 py-2 ${alignmentClass(column)} ${colorClass}`}>
+          <td key={column.key} className={`${TABLE_CELL_CLASS} ${alignmentClass(column)} ${colorClass}`}>
             {column.renderValue(holding, tableActions)}
           </td>
         );
@@ -327,106 +372,53 @@ function HoldingRow({
   );
 }
 
-/** Each sector once, A→Z: offered while typing a sector, so the same one isn't spelled two ways. */
-function distinctSectorsOf(holdings: Holding[]): string[] {
-  const sectors = holdings.map((holding) => holding.sector).filter((sector) => sector !== null);
-  return [...new Set(sectors)].sort((firstSector, secondSector) => firstSector.localeCompare(secondSector));
-}
-
-/** A holding's own closed positions, of every investor — what its "By investor" table splits. */
-function closedPositionsOf(holding: Holding, closedPositions: ClosedPosition[]): ClosedPosition[] {
-  return closedPositions.filter((closedPosition) => closedPosition.holdingId === holding.id);
-}
-
 /**
- * `onDataChanged` reloads the portfolio; the sector cells and the trades panel call it after every save.
- * `closedPositions` are every closed position of the portfolio: each holding's open row shows its own, split by investor.
- * One row is open at a time, `expandedHoldingId`, which the page keeps in the address; `onToggleExpanded` opens or
- * closes a row.
+ * One row per holding, in the order the page sorted them (`rows`); clicking a row, or Enter on it, opens the holding's
+ * drawer (`onOpen`), and the open one is `selectedHoldingId`. Only `visibleColumnKeys` are shown, in the table's own
+ * order. `onDataChanged` reloads the portfolio after a sector is saved.
  */
 export function PositionsTable({
-  holdings,
-  closedPositions,
-  expandedHoldingId,
-  onToggleExpanded,
+  rows,
+  visibleColumnKeys,
+  sortState,
+  onSort,
+  selectedHoldingId,
+  onOpen,
   onDataChanged,
 }: {
-  holdings: Holding[];
-  closedPositions: ClosedPosition[];
-  expandedHoldingId: number | null;
-  onToggleExpanded: (holdingId: number) => void;
+  rows: Holding[];
+  visibleColumnKeys: string[];
+  sortState: SortState;
+  onSort: (sortState: SortState) => void;
+  selectedHoldingId: number | null;
+  onOpen: (holdingId: number) => void;
   onDataChanged: () => Promise<void>;
 }) {
-  // Largest position first, like the console report.
-  const [sortState, setSortState] = useState<SortState>({ columnKey: 'marketValue', direction: 'descending' });
-  const expandedRowRef = useRef<HTMLTableRowElement>(null);
-
-  const sortedHoldings = useMemo(() => sortHoldings(holdings, sortState), [holdings, sortState]);
-  const sectorOptions = useMemo(() => distinctSectorsOf(holdings), [holdings]);
+  const columns = POSITION_COLUMNS.filter((column) => visibleColumnKeys.includes(column.key));
   const tableActions: TableActions = { onDataChanged };
-
-  // Arriving with a row already open — from a link on the Overview, say — brings it into view, once.
-  useEffect(() => {
-    expandedRowRef.current?.scrollIntoView({ block: 'start' });
-  }, []);
-
-  const handleSort = (clickedColumn: ColumnDefinition) =>
-    setSortState((currentSort) => sortStateAfterClicking(currentSort, clickedColumn));
 
   return (
     <div className="overflow-x-auto">
-      <datalist id={SECTOR_OPTIONS_LIST_ID}>
-        {sectorOptions.map((sector) => (
-          <option key={sector} value={sector} />
-        ))}
-      </datalist>
       <table className={TABLE_CLASS}>
         <thead>
-          <tr className={TABLE_HEAD_ROW_CLASS}>
-            <th className="w-8">
-              <span className="sr-only">Trades</span>
-            </th>
-            {COLUMNS.map((column) => (
-              <SortableHeaderCell
-                key={column.key}
-                column={column}
-                sortState={sortState}
-                onSort={handleSort}
-              />
+          <tr>
+            {columns.map((column) => (
+              <SortableHeaderCell key={column.key} column={column} sortState={sortState} onSort={onSort} />
             ))}
           </tr>
         </thead>
-        <tbody>
-          {/* id, not symbol: two holdings can share a symbol, and React needs a unique key per row. */}
-          {sortedHoldings.map((holding) => {
-            const isExpanded = expandedHoldingId === holding.id;
-            return (
-              <Fragment key={holding.id}>
-                <HoldingRow
-                  holding={holding}
-                  isExpanded={isExpanded}
-                  onToggleExpanded={() => onToggleExpanded(holding.id)}
-                  tableActions={tableActions}
-                  rowRef={isExpanded ? expandedRowRef : undefined}
-                />
-                {isExpanded && (
-                  <tr className="border-b">
-                    <td colSpan={COLUMNS.length + 1} className="px-3 pb-4 pt-1">
-                      <div className="flex flex-col gap-3">
-                        <MomentumDetails momentum={holding.momentum} />
-                        <AnalysisDetails holding={holding} onDataChanged={onDataChanged} />
-                        <InvestorSplitTable
-                          position={{ kind: 'holding', holding }}
-                          closedPositions={closedPositionsOf(holding, closedPositions)}
-                        />
-                        <TradesPanel owner={{ kind: 'holding', holding }} onDataChanged={onDataChanged} />
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            );
-          })}
+        {/* id, not symbol: two holdings can share a symbol, and React needs a unique key per row. */}
+        <tbody className="[&>tr:last-child>td]:border-b-0">
+          {rows.map((holding) => (
+            <HoldingRow
+              key={holding.id}
+              holding={holding}
+              columns={columns}
+              isSelected={holding.id === selectedHoldingId}
+              onOpen={() => onOpen(holding.id)}
+              tableActions={tableActions}
+            />
+          ))}
         </tbody>
       </table>
     </div>

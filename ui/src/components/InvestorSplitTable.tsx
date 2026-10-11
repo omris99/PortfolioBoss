@@ -7,7 +7,13 @@ import {
   formatSignedPercent,
   profitLossColorClass,
 } from '../lib/format';
-import { PANEL_CLASS, PANEL_TITLE_CLASS, TABLE_CLASS, TABLE_HEAD_ROW_CLASS } from '../lib/styles';
+import {
+  INNER_CELL_CLASS,
+  INNER_HEADER_CELL_CLASS,
+  INNER_TABLE_CLASS,
+  INNER_TABLE_FRAME_CLASS,
+  TAG_CLASS,
+} from '../lib/styles';
 import type { ClosedPosition, Holding, Investor, InvestorQuantity } from '../types/portfolio';
 import { accountOwnerOf, hasSeveralInvestors, useInvestors } from './InvestorsContext';
 
@@ -27,6 +33,7 @@ type HoldingFigures = Omit<InvestorQuantity, 'investorId'>;
 interface SplitRow {
   key: string;
   label: string;
+  isAccountOwner: boolean;
   /** `null` while they hold none of it, and always for a manual position. */
   part: HoldingFigures | null;
   closedPositions: ClosedPosition[];
@@ -76,6 +83,7 @@ function investorRowOf(investor: Investor, position: SplitPosition, closedPositi
   return {
     key: `investor-${investor.id}`,
     label: investor.name,
+    isAccountOwner: investor.accountOwner,
     part,
     closedPositions: closedPositions.filter((closedPosition) => closedPosition.investorId === investor.id),
   };
@@ -93,17 +101,19 @@ function totalRowOf(position: SplitPosition, closedPositions: ClosedPosition[]):
           unrealizedPnlPercent: position.holding.unrealizedPnlPercent,
         }
       : null;
-  return { key: 'total', label: 'Total', part, closedPositions };
+  return { key: 'total', label: 'Total', isAccountOwner: false, part, closedPositions };
 }
 
 // ── the table ───────────────────────────────────────────────────────────────────────────────────
 
 function HeaderCell({ alignment, children }: { alignment: 'left' | 'right'; children: ReactNode }) {
-  return <th className={`px-3 py-1.5 font-medium ${alignment === 'right' ? 'text-right' : 'text-left'}`}>{children}</th>;
+  return (
+    <th className={`${INNER_HEADER_CELL_CLASS} font-medium ${alignment === 'right' ? 'text-right' : ''}`}>{children}</th>
+  );
 }
 
 function FigureCell({ colorClass = '', children }: { colorClass?: string; children: ReactNode }) {
-  return <td className={`px-3 py-1.5 text-right ${colorClass}`}>{children}</td>;
+  return <td className={`${INNER_CELL_CLASS} text-right ${colorClass}`}>{children}</td>;
 }
 
 /** "—" when nothing of it was sold; "—" with a hint when a closed position has no realized P&L. */
@@ -146,11 +156,15 @@ function HoldingFigureCells({ part }: { part: SplitRow['part'] }) {
   );
 }
 
+/** The Total row sits on `subtle` under a stronger rule, in bold: it is IB's own figures. */
 function SplitTableRow({ row, isHolding, isTotal }: { row: SplitRow; isHolding: boolean; isTotal: boolean }) {
-  const rowClass = isTotal ? 'border-t border-strong font-semibold' : 'border-b';
+  const rowClass = isTotal ? 'bg-subtle font-semibold [&>td]:border-t [&>td]:border-t-strong' : '';
   return (
     <tr className={rowClass}>
-      <td className="px-3 py-1.5">{row.label}</td>
+      <td className={INNER_CELL_CLASS}>
+        {row.label}
+        {row.isAccountOwner && <span className={`${TAG_CLASS} ml-2`}>account owner</span>}
+      </td>
       {isHolding && <HoldingFigureCells part={row.part} />}
       <RealizedPnlCell closedPositions={row.closedPositions} />
     </tr>
@@ -158,10 +172,21 @@ function SplitTableRow({ row, isHolding, isTotal }: { row: SplitRow; isHolding: 
 }
 
 /**
+ * Whether anyone besides the account owner has a part of the position, a trade in it or a closed position of it: only
+ * then is there something to divide, and a "By investor" tab to show.
+ */
+export function isShared(position: SplitPosition, closedPositions: ClosedPosition[], investors: Investor[]): boolean {
+  const accountOwner = accountOwnerOf(investors);
+  return (
+    hasSeveralInvestors(investors) &&
+    investorsInvolvedIn(position, closedPositions, investors).some((investor) => investor.id !== accountOwner?.id)
+  );
+}
+
+/**
  * Each investor's part of a position shared with another investor, and the whole of it in a last row — the unrealized
- * P&L of a holding and the realized P&L of the shares sold (INVESTORS_TODO.md, session 4). Shown only while an investor
- * other than the account owner has something in it; with the account owner alone there is nothing to divide.
- * `closedPositions` are the position's own, of every investor.
+ * P&L of a holding and the realized P&L of the shares sold (INVESTORS_TODO.md, session 4): a drawer's "By investor" tab,
+ * shown only while `isShared`. `closedPositions` are the position's own, of every investor.
  */
 export function InvestorSplitTable({
   position,
@@ -171,41 +196,41 @@ export function InvestorSplitTable({
   closedPositions: ClosedPosition[];
 }) {
   const investors = useInvestors();
-  const accountOwner = accountOwnerOf(investors);
-  const involvedInvestors = investorsInvolvedIn(position, closedPositions, investors);
-  const isShared = involvedInvestors.some((investor) => investor.id !== accountOwner?.id);
-  if (!hasSeveralInvestors(investors) || !isShared) return null;
-
   const isHolding = position.kind === 'holding';
-  const investorRows = involvedInvestors.map((investor) => investorRowOf(investor, position, closedPositions));
+  const investorRows = investorsInvolvedIn(position, closedPositions, investors).map((investor) =>
+    investorRowOf(investor, position, closedPositions),
+  );
   return (
-    <div className={PANEL_CLASS}>
-      <div className={PANEL_TITLE_CLASS}>
-        By investor <span className="text-caption font-normal text-muted">· {currencyOf(position)}</span>
+    <div>
+      <div className={INNER_TABLE_FRAME_CLASS}>
+        <table className={INNER_TABLE_CLASS}>
+          <thead>
+            <tr>
+              <HeaderCell alignment="left">Investor</HeaderCell>
+              {isHolding && (
+                <>
+                  <HeaderCell alignment="right">Qty</HeaderCell>
+                  <HeaderCell alignment="right">Cost</HeaderCell>
+                  <HeaderCell alignment="right">Value</HeaderCell>
+                  <HeaderCell alignment="right">Unrealized P&amp;L</HeaderCell>
+                  <HeaderCell alignment="right">%</HeaderCell>
+                </>
+              )}
+              <HeaderCell alignment="right">Realized P&amp;L</HeaderCell>
+            </tr>
+          </thead>
+          <tbody>
+            {investorRows.map((row) => (
+              <SplitTableRow key={row.key} row={row} isHolding={isHolding} isTotal={false} />
+            ))}
+            <SplitTableRow row={totalRowOf(position, closedPositions)} isHolding={isHolding} isTotal />
+          </tbody>
+        </table>
       </div>
-      <table className={TABLE_CLASS}>
-        <thead>
-          <tr className={TABLE_HEAD_ROW_CLASS}>
-            <HeaderCell alignment="left">Investor</HeaderCell>
-            {isHolding && (
-              <>
-                <HeaderCell alignment="right">Qty</HeaderCell>
-                <HeaderCell alignment="right">Cost</HeaderCell>
-                <HeaderCell alignment="right">Value</HeaderCell>
-                <HeaderCell alignment="right">Unrealized P&amp;L</HeaderCell>
-                <HeaderCell alignment="right">%</HeaderCell>
-              </>
-            )}
-            <HeaderCell alignment="right">Realized P&amp;L</HeaderCell>
-          </tr>
-        </thead>
-        <tbody>
-          {investorRows.map((row) => (
-            <SplitTableRow key={row.key} row={row} isHolding={isHolding} isTotal={false} />
-          ))}
-          <SplitTableRow row={totalRowOf(position, closedPositions)} isHolding={isHolding} isTotal />
-        </tbody>
-      </table>
+      <p className="mt-2 text-caption text-faint">
+        The Total row equals {isHolding ? 'IB’s figures for the holding' : 'the position’s figures'}, in{' '}
+        {currencyOf(position)}.
+      </p>
     </div>
   );
 }

@@ -289,6 +289,18 @@ export interface StockAnalysis {
   loweredTargetCount: number;
 }
 
+/**
+ * What analyzing one stock is expected to cost, quoted before a paid run: the average over the latest analysis of every
+ * holding that has one.
+ */
+export interface EstimatedAnalysisCost {
+  /** Claude's dollars for one stock. */
+  costUsdPerStock: number;
+  tavilyCreditsPerStock: number;
+  /** How many analyses the average is over. */
+  basedOnAnalyses: number;
+}
+
 /** A stock an analysis run could not analyze, and why; it keeps its previous analysis. */
 export interface FailedAnalysis {
   symbol: string;
@@ -418,4 +430,6 @@ export interface PortfolioSnapshot {
   closedPositions: ClosedPosition[];
   /** Every investor's card, the account owner first. */
   investors: Investor[];
+  /** `null` while nothing has been analyzed. */
+  estimatedAnalysisCost: EstimatedAnalysisCost | null;
 }

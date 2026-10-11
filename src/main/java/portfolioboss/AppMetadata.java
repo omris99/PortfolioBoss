@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.19.0";
+    public static final String VERSION = "0.20.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,21 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.20.0: [Drawers and modals]
+ * HoldingDrawer added: /positions/12 opens holding 12 in a panel from the right — Summary, Momentum, Analysts & news, Trades, By investor; ‹ › step through the rows; was a row expanding in the table.
+ * Summary tab: why the dot has its colour ("Signal YELLOW: news negative"), then momentum, analysts and news side by side, each linking to its own tab.
+ * SignalCell: the dot, the warning signs in words ("Momentum weak · Analysts down") and the momentum score; was "M 4/5 A N". A "?" in the column header explains it.
+ * ColumnsMenu added: eight columns by default, Avg cost, Last, Bought and Last sold on demand, remembered in the browser; closed holdings now always sit below the open ones.
+ * GET /api/portfolio: estimatedAnalysisCost added, the average dollars and Tavily credits of each holding's latest analysis, quoted by the Analyze buttons (was a hand-written $0.04 and 5 credits).
+ * AnalyzeControls: the toolbar's Analyze first asks "Analyze 7 open holdings? About $0.29 and 35 search credits…"; "Analyze MSFT" in the drawer runs at once.
+ * Modal and ConfirmDialog added (Radix dialog): every form opens in a modal — trade, closed position, investor, deposit — and every delete asks first; the API's refusal shows as it comes.
+ * TradeModal: the date typed as yyyy-MM-dd with a calendar button; a grey note says when it starts as a BUY of the whole position at IB's average cost (was the inline TradeForm).
+ * ClosedDrawer added: a closed row opens a drawer — a holding's period shows its trades read-only with "Correct them in Positions", a manual position its details, trades and By investor.
+ * ClosedSummary: realized P&L per currency in its own card with "(n to check)" and "(n without prices)", and each investor's totals on a second line.
+ * InvestorCard: each investor as a short statement, in the same order on every card; rename and deposits open modals, the deposits listed behind "Deposits (n)".
+ * WarnMark added: a minor warning is a yellow outlined triangle, a real one a solid orange triangle — told apart by shape and lightness, not hue alone; the drawer shows the sentence in a band.
+ * Tests: PortfolioReadServiceTest averages only the latest analysis per holding (null before the first); PortfolioControllerTest pins estimatedAnalysisCost's JSON keys.
+ *
  * VERSION 0.19.0: [Light theme and pages]
  * UI theme: light, from the Claude Design system — colors by role only (CSS variables named in tailwind.config.js), IBM Plex Sans, a focus ring; was a dark slate theme with raw Tailwind colors.
  * UI pages with their own addresses (react-router): / Overview, /positions, /closed, /investors, under a top bar with the account, the last sync and the load status; was one long page.

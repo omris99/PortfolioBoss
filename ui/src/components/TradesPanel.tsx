@@ -1,57 +1,31 @@
-import { useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
-import { deleteTrade, errorMessageOf } from '../lib/apiClient';
+import { useState, type ReactNode } from 'react';
+import { ArrowRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Link } from 'react-router';
+import { deleteTrade } from '../lib/apiClient';
 import { EMPTY_VALUE, formatMoney, formatQuantity } from '../lib/format';
 import {
-  CHIP_CLASS,
   DELETE_ICON_BUTTON_CLASS,
-  ERROR_TEXT_CLASS,
+  EXPLAINED_CLASS,
   ICON_BUTTON_CLASS,
-  PANEL_CLASS,
-  TABLE_CLASS,
-  TABLE_HEAD_ROW_CLASS,
-  TABLE_ROW_CLASS,
+  INNER_CELL_CLASS,
+  INNER_HEADER_CELL_CLASS,
+  INNER_TABLE_CLASS,
+  INNER_TABLE_FRAME_CLASS,
+  SMALL_PRIMARY_BUTTON_CLASS,
+  SMALL_SECONDARY_BUTTON_CLASS,
+  sideTextClass,
 } from '../lib/styles';
-import type { Trade, TradeSide } from '../types/portfolio';
-import { HoldingWarningList } from './HoldingWarnings';
+import type { Trade } from '../types/portfolio';
+import { InfoBand } from './FormFields';
+import { HoldingWarningBands } from './HoldingWarnings';
 import { hasSeveralInvestors, investorNameOf, useInvestors } from './InvestorsContext';
-import { TradeForm, type TradeOwner } from './TradeForm';
+import { ConfirmDialog } from './Modal';
+import { backfilledHoldingOf, symbolOf, TradeModal, type TradeOwner } from './TradeModal';
 
-/** Grey for both: in the design only a profit or a loss is green or red. */
-function TradeSideBadge({ side }: { side: TradeSide }) {
-  return <span className={`${CHIP_CLASS} bg-subtle text-ink`}>{side}</span>;
-}
-
-/** What the ✏️ and 🗑 of each row do. A list without them is read-only. */
+/** What the ✏️ and 🗑 of each row do. A table without them is read-only. */
 interface TradeRowActions {
-  tradeIdBeingEdited: number | null;
-  deletingTradeId: number | null;
   onEdit: (trade: Trade) => void;
   onDelete: (trade: Trade) => void;
-}
-
-function TradeRowButtons({ trade, rowActions }: { trade: Trade; rowActions: TradeRowActions }) {
-  return (
-    <div className="inline-flex gap-1">
-      <button
-        type="button"
-        title="Edit this trade"
-        onClick={() => rowActions.onEdit(trade)}
-        className={ICON_BUTTON_CLASS}
-      >
-        <Pencil size={14} />
-      </button>
-      <button
-        type="button"
-        title="Delete this trade"
-        onClick={() => rowActions.onDelete(trade)}
-        disabled={rowActions.deletingTradeId === trade.id}
-        className={DELETE_ICON_BUTTON_CLASS}
-      >
-        <Trash2 size={14} />
-      </button>
-    </div>
-  );
 }
 
 function TradeRow({
@@ -64,21 +38,49 @@ function TradeRow({
   investorName: string | null;
   rowActions: TradeRowActions | null;
 }) {
-  const isBeingEdited = rowActions?.tradeIdBeingEdited === trade.id;
   return (
-    <tr className={`${TABLE_ROW_CLASS} ${isBeingEdited ? 'bg-accent-soft' : ''}`}>
-      {investorName !== null && <td className="px-3 py-1.5">{investorName}</td>}
-      <td className="px-3 py-1.5">{trade.tradeDate}</td>
-      <td className="px-3 py-1.5">
-        <TradeSideBadge side={trade.side} />
+    <tr>
+      <td className={INNER_CELL_CLASS}>{trade.tradeDate}</td>
+      <td className={INNER_CELL_CLASS}>
+        <span className={sideTextClass(trade.side === 'SELL')}>{trade.side}</span>
       </td>
-      <td className="px-3 py-1.5 text-right">{formatQuantity(trade.quantity)}</td>
-      <td className="px-3 py-1.5 text-right">{formatMoney(trade.price)}</td>
-      <td className="px-3 py-1.5 text-right">{formatMoney(trade.commission)}</td>
-      <td className="px-3 py-1.5 text-muted">{trade.note ?? EMPTY_VALUE}</td>
+      <td className={`${INNER_CELL_CLASS} text-right`}>{formatQuantity(trade.quantity)}</td>
+      <td className={`${INNER_CELL_CLASS} text-right`}>
+        {trade.price === null ? (
+          <span title="No price entered for this trade." className={EXPLAINED_CLASS}>
+            {EMPTY_VALUE}
+          </span>
+        ) : (
+          formatMoney(trade.price)
+        )}
+      </td>
+      <td className={`${INNER_CELL_CLASS} text-right`}>{formatMoney(trade.commission)}</td>
+      <td title={trade.note ?? undefined} className={`${INNER_CELL_CLASS} max-w-[120px] truncate`}>
+        {trade.note ?? <span className="text-faint">{EMPTY_VALUE}</span>}
+      </td>
+      {investorName !== null && <td className={INNER_CELL_CLASS}>{investorName}</td>}
       {rowActions !== null && (
-        <td className="px-3 py-1 text-right">
-          <TradeRowButtons trade={trade} rowActions={rowActions} />
+        <td className={`${INNER_CELL_CLASS} w-14 text-right`}>
+          <span className="inline-flex">
+            <button
+              type="button"
+              aria-label="Edit trade"
+              title="Edit this trade"
+              onClick={() => rowActions.onEdit(trade)}
+              className={ICON_BUTTON_CLASS}
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              aria-label="Delete trade"
+              title="Delete this trade"
+              onClick={() => rowActions.onDelete(trade)}
+              className={DELETE_ICON_BUTTON_CLASS}
+            >
+              <Trash2 size={14} />
+            </button>
+          </span>
         </td>
       )}
     </tr>
@@ -86,41 +88,53 @@ function TradeRow({
 }
 
 /**
- * The trades as a table, by date. With `rowActions` every row can be corrected and deleted; without, it is read-only.
- * Whose each trade is shows in a first column once there is more than one investor.
+ * The trades as a compact table, by date. With `rowActions` every row can be corrected and deleted; without, it is
+ * read-only. Whose each trade is shows in a column once there is more than one investor.
  */
-export function TradeList({ trades, rowActions = null }: { trades: Trade[]; rowActions?: TradeRowActions | null }) {
+function TradeTable({ trades, rowActions = null }: { trades: Trade[]; rowActions?: TradeRowActions | null }) {
   const investors = useInvestors();
   const showsInvestor = hasSeveralInvestors(investors);
+  const headers: { title: string; isFigure?: boolean }[] = [
+    { title: 'Date' },
+    { title: 'Side' },
+    { title: 'Qty', isFigure: true },
+    { title: 'Price', isFigure: true },
+    { title: 'Commission', isFigure: true },
+    { title: 'Note' },
+    ...(showsInvestor ? [{ title: 'Investor' }] : []),
+  ];
   return (
-    <table className={TABLE_CLASS}>
-      <thead>
-        <tr className={TABLE_HEAD_ROW_CLASS}>
-          {showsInvestor && <th className="px-3 py-1.5 text-left font-medium">Investor</th>}
-          <th className="px-3 py-1.5 text-left font-medium">Date</th>
-          <th className="px-3 py-1.5 text-left font-medium">Side</th>
-          <th className="px-3 py-1.5 text-right font-medium">Qty</th>
-          <th className="px-3 py-1.5 text-right font-medium">Price</th>
-          <th className="px-3 py-1.5 text-right font-medium">Commission</th>
-          <th className="px-3 py-1.5 text-left font-medium">Note</th>
-          {rowActions !== null && (
-            <th className="px-3 py-1.5">
-              <span className="sr-only">Actions</span>
-            </th>
-          )}
-        </tr>
-      </thead>
-      <tbody>
-        {trades.map((trade) => (
-          <TradeRow
-            key={trade.id}
-            trade={trade}
-            investorName={showsInvestor ? investorNameOf(investors, trade.investorId) : null}
-            rowActions={rowActions}
-          />
-        ))}
-      </tbody>
-    </table>
+    <div className={INNER_TABLE_FRAME_CLASS}>
+      <table className={INNER_TABLE_CLASS}>
+        <thead>
+          <tr>
+            {headers.map((header) => (
+              <th
+                key={header.title}
+                className={`${INNER_HEADER_CELL_CLASS} font-medium ${header.isFigure ? 'text-right' : ''}`}
+              >
+                {header.title}
+              </th>
+            ))}
+            {rowActions !== null && (
+              <th className={INNER_HEADER_CELL_CLASS}>
+                <span className="sr-only">Actions</span>
+              </th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {trades.map((trade) => (
+            <TradeRow
+              key={trade.id}
+              trade={trade}
+              investorName={showsInvestor ? investorNameOf(investors, trade.investorId) : null}
+              rowActions={rowActions}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -128,79 +142,132 @@ function tradesOf(owner: TradeOwner): Trade[] {
   return owner.kind === 'holding' ? owner.holding.trades : owner.trades;
 }
 
-function symbolOf(owner: TradeOwner): string {
-  return owner.kind === 'holding' ? owner.holding.symbol : owner.symbol;
+/** "2026-08-14 · SELL 10 AMZN at 205.00 · Me": the trade being deleted, in one line. */
+function tradeLineOf(trade: Trade, symbol: string, investorName: string | null): string {
+  const price = trade.price === null ? '' : ` at ${formatMoney(trade.price)}`;
+  const investor = investorName === null ? '' : ` · ${investorName}`;
+  return `${trade.tradeDate} · ${trade.side} ${formatQuantity(trade.quantity)} ${symbol}${price}${investor}`;
 }
 
-function confirmDeletion(trade: Trade): boolean {
-  return window.confirm(`Delete the ${trade.side} of ${formatQuantity(trade.quantity)} on ${trade.tradeDate}?`);
+/** No trades yet: for a holding being backfilled, what the form will start as. */
+function NoTradesYet({ owner, addButton }: { owner: TradeOwner; addButton: ReactNode }) {
+  const backfilledHolding = backfilledHoldingOf(owner, null);
+  return (
+    <div className="py-6 text-muted">
+      <p className="mb-3 text-ink">No trades entered yet.</p>
+      {backfilledHolding !== null && (
+        <p className="mb-3">
+          The form starts filled in as a BUY of the whole position ({formatQuantity(backfilledHolding.position)}) at
+          IB’s average cost, {formatMoney(backfilledHolding.averageCost)}.
+        </p>
+      )}
+      {addButton}
+    </div>
+  );
+}
+
+/** The trade being added or corrected in the modal, or none. */
+type TradeModalState = { tradeBeingEdited: Trade | null } | null;
+
+/**
+ * A drawer's Trades tab: the holding's warning again, its trades — or a manual position's — with ✏️ and 🗑, and Add
+ * trade. Adding and correcting open the trade modal; deleting asks first. Every change reloads the whole portfolio,
+ * since the dates, holding period and closed positions are derived from these trades on the server.
+ */
+export function TradesPanel({ owner, onDataChanged }: { owner: TradeOwner; onDataChanged: () => Promise<void> }) {
+  const investors = useInvestors();
+  const [tradeModal, setTradeModal] = useState<TradeModalState>(null);
+  const [tradeToDelete, setTradeToDelete] = useState<Trade | null>(null);
+  const trades = tradesOf(owner);
+
+  const rowActions: TradeRowActions = {
+    onEdit: (trade) => setTradeModal({ tradeBeingEdited: trade }),
+    onDelete: setTradeToDelete,
+  };
+  const addButton = (
+    <button
+      type="button"
+      onClick={() => setTradeModal({ tradeBeingEdited: null })}
+      className={trades.length === 0 ? SMALL_PRIMARY_BUTTON_CLASS : SMALL_SECONDARY_BUTTON_CLASS}
+    >
+      <Plus size={14} />
+      Add trade
+    </button>
+  );
+  const deleteTradeAndReload = async (trade: Trade) => {
+    await deleteTrade(trade.id);
+    await onDataChanged();
+  };
+
+  return (
+    <div>
+      {owner.kind === 'holding' && owner.holding.warnings.length > 0 && (
+        <div className="mb-4">
+          <HoldingWarningBands warnings={owner.holding.warnings} />
+        </div>
+      )}
+      {trades.length === 0 ? (
+        <NoTradesYet owner={owner} addButton={addButton} />
+      ) : (
+        <>
+          <div className="mb-4 flex min-h-7 items-center gap-2">
+            <span className="text-muted">{trades.length === 1 ? '1 trade' : `${trades.length} trades`}</span>
+            <span className="ml-auto">{addButton}</span>
+          </div>
+          <TradeTable trades={trades} rowActions={rowActions} />
+        </>
+      )}
+
+      {tradeModal !== null && (
+        <TradeModal
+          owner={owner}
+          tradeBeingEdited={tradeModal.tradeBeingEdited}
+          onSaved={onDataChanged}
+          onClose={() => setTradeModal(null)}
+        />
+      )}
+      {tradeToDelete !== null && (
+        <ConfirmDialog
+          title="Delete this trade?"
+          item={tradeLineOf(
+            tradeToDelete,
+            symbolOf(owner),
+            hasSeveralInvestors(investors) ? investorNameOf(investors, tradeToDelete.investorId) : null,
+          )}
+          onConfirm={() => deleteTradeAndReload(tradeToDelete)}
+          onClose={() => setTradeToDelete(null)}
+        />
+      )}
+    </div>
+  );
 }
 
 /**
- * The trades entered for one owner — a holding, or a manual position — and the form under them. The form adds a
- * trade, or corrects the one whose pencil was clicked. Every change reloads the whole portfolio, since the dates,
- * holding period and closed positions are derived from these trades on the server.
+ * A holding's trades of one sold period, on the Closed page: read-only, since they belong to the holding — the link opens
+ * its drawer in Positions, where they are corrected.
  */
-export function TradesPanel({ owner, onDataChanged }: { owner: TradeOwner; onDataChanged: () => Promise<void> }) {
-  const [tradeBeingEdited, setTradeBeingEdited] = useState<Trade | null>(null);
-  // A new key remounts the form, so it starts again from fresh values after each save.
-  const [formGeneration, setFormGeneration] = useState(0);
-  const [deletingTradeId, setDeletingTradeId] = useState<number | null>(null);
-  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
-
-  const trades = tradesOf(owner);
-
-  const resetForm = () => {
-    setTradeBeingEdited(null);
-    setFormGeneration((generation) => generation + 1);
-  };
-
-  const handleSaved = async () => {
-    await onDataChanged();
-    resetForm();
-  };
-
-  /** A manual position's last sell is refused (409), and its reason shown here. */
-  const handleDelete = async (trade: Trade) => {
-    if (!confirmDeletion(trade)) return;
-    setDeletingTradeId(trade.id);
-    setDeleteErrorMessage(null);
-    try {
-      await deleteTrade(trade.id);
-      await onDataChanged();
-      if (tradeBeingEdited?.id === trade.id) resetForm();
-    } catch (error) {
-      setDeleteErrorMessage(errorMessageOf(error));
-    } finally {
-      setDeletingTradeId(null);
-    }
-  };
-
-  const rowActions: TradeRowActions = {
-    tradeIdBeingEdited: tradeBeingEdited?.id ?? null,
-    deletingTradeId,
-    onEdit: setTradeBeingEdited,
-    onDelete: (trade) => void handleDelete(trade),
-  };
-  const formKey = tradeBeingEdited === null ? `new-${formGeneration}` : `edit-${tradeBeingEdited.id}`;
-
+export function ReadOnlyTradesPanel({
+  trades,
+  symbol,
+  holdingId,
+}: {
+  trades: Trade[];
+  symbol: string;
+  holdingId: number;
+}) {
   return (
-    <div className={PANEL_CLASS}>
-      {owner.kind === 'holding' && <HoldingWarningList warnings={owner.holding.warnings} />}
-      {trades.length === 0 ? (
-        <p className="text-muted">No trades entered yet for {symbolOf(owner)}.</p>
-      ) : (
-        <TradeList trades={trades} rowActions={rowActions} />
-      )}
-      {deleteErrorMessage && <p className={ERROR_TEXT_CLASS}>{deleteErrorMessage}</p>}
-
-      <TradeForm
-        key={formKey}
-        owner={owner}
-        tradeBeingEdited={tradeBeingEdited}
-        onSaved={handleSaved}
-        onCancelEditing={resetForm}
-      />
+    <div>
+      <InfoBand>
+        Read-only here: these are the trades of <b className="font-semibold">{symbol}</b>’s holding for this period.{' '}
+        <Link
+          to={`/positions/${holdingId}`}
+          className="inline-flex items-center gap-[3px] rounded-sm font-medium text-accent underline underline-offset-2"
+        >
+          Correct them in Positions
+          <ArrowRight size={12} />
+        </Link>
+      </InfoBand>
+      <TradeTable trades={trades} />
     </div>
   );
 }

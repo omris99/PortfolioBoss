@@ -35,16 +35,20 @@ analysis of analyst ratings and news — the server searches Tavily, Claude (Son
 the code picks the consensus source, the analysts' trend and a colored signal — run only from a button. Its sessions 0
 (the experiment that settled the model and the searches), 1 (momentum: a 0–5 score from IB's daily closes, in
 `/api/portfolio`) and 2 (the analysis backend: `POST /api/analysis`, the `stock_analysis` table, the analysis and the dot
-in `/api/portfolio`) are done; session 3 (the UI: the Signal column, the analysis box in a holding's expanded row, the
-Analyze buttons) is built, and its runs from the browser brought decisions 18–22: the analysts' trend worked out by the
+in `/api/portfolio`) are done; session 3 (the UI: the Signal column, the analysis box — since the redesign a holding
+drawer's "Analysts & news" tab —, the Analyze buttons) is built, and its runs from the browser brought decisions 18–22: the analysts' trend worked out by the
 code from price-target moves, four searches (news articles for the analysts' actions, since forecast pages lag weeks in
 the search engine's copy), each source's copy date in the UI, and the search results Claude read kept with every
 analysis — what is left of its check is in the plan. Its API keys go in the git-ignored `config/local.env`, which
 Claude never reads or prints. The UI's redesign (begun 2026-10-11) is designed screen by screen in Claude Design from
 [DESIGN_BRIEF.md](DESIGN_BRIEF.md) — every screen's content, the color meanings to keep, made-up sample data (never the
-real portfolio) — and built from that design system's tokens and component specs, not its preview code: the light
-theme, the four pages with their addresses and the Overview are in; the Positions page's own design (a drawer for a
-holding's details, a Columns menu, forms in modals) is next.
+real portfolio) — and built from that design system's tokens and component specs, not its preview code. All of it is in
+and browser-checked (2026-10-11): the light theme, the four pages with their addresses, the Overview, a drawer for a
+holding's details (`/positions/:holdingId`) and for a closed position, a Columns menu, the Signal cell in words, a
+confirm before a paid Analyze run quoting the real average cost, every form and confirm-delete in a modal, and the two
+warning triangles. The Radix primitives (`@radix-ui/react-dialog`, `-popover`, `-dropdown-menu`) bring the focus and
+keyboard handling; the date fields use the browser's own picker behind a calendar button, and the first load is still a
+"Loading…" box rather than the design's skeletons.
 
 ## Hard invariant: read-only
 
@@ -202,15 +206,15 @@ AnalysisController ──> AnalysisService ──per stock, all at once──> T
 HoldingWriteController ──writes── HoldingWriteService ──writes── Postgres  (sector and trade rows only;
         ▲  (api/request/*Request, @Valid;                                 never IB, never a holding row
         │   ApiErrorHandler → ProblemDetail JSON)                         created or deleted)
-        └──JSON── ui/'s sector cell and trade form (ui/src/lib/apiClient.ts), then a reload of /api/portfolio
+        └──JSON── ui/'s sector cell and trade modal (ui/src/lib/apiClient.ts), then a reload of /api/portfolio
 
 ManualPositionWriteController ──writes── ManualPositionWriteService ──writes── Postgres  (manual_position rows and
         ▲                                                                          their trades; never a holding)
-        └──JSON── ui/'s Closed page (new manual position, its details and trades)
+        └──JSON── ui/'s Closed page (the new-position modal; a manual position's drawer: details and trades)
 
 InvestorWriteController ──writes── InvestorWriteService ──writes── Postgres  (investor and investor_cash_movement
         ▲                                                                    rows; never the account owner's cash)
-        └──JSON── ui/'s Investors page: the cards (add, rename) and deposits panel
+        └──JSON── ui/'s Investors page: the cards, their modals (add, rename) and each one's deposits
 ```
 
 The sync-at-connection lifecycle, which is the part worth knowing:
@@ -515,7 +519,7 @@ dates, `holdingDays`, `quantity` — the shares **sold** —, the average prices
 manual position's), `remainingQuantity`, `trades` — the period's own `TradeResponse`s, picked by `tradeIds` — and
 `investorId`) — from open holdings as well as closed ones, since a holding still open today may have been sold in full
 or in part before. The UI sums the realized P&L per currency — in all, per investor, and per position for its "By
-investor" table (no endpoint does it). `PortfolioResponse.investors` (added last) is one
+investor" table (no endpoint does it). `PortfolioResponse.investors` (added after it) is one
 `InvestorResponse` per investor, the account owner first: `id`, `name`, `accountOwner`, the `InvestorSummary` figures
 and its derived ones, `realizedPnlByCurrency` (a `{"HKD": 950, "USD": 500}` map), `cashMovements`
 (`CashMovementResponse`s) and `warnings` (`model.InvestorWarning`, as it is). `HoldingResponse.investorQuantities`
@@ -531,7 +535,11 @@ and `signal` (appended after it) are the latest analysis and the dot: a `StockAn
 `loweredTargetCount` (appended), and the rest of `StockAnalysisResult` as it is (each action with its
 `sourcePublishedDate`) — or `null` while the holding has never been analyzed, and the
 `HoldingSignal`, `null` without an analysis; `PortfolioReadService` loads the latest analysis of every holding in one
-query. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
+query. `PortfolioResponse.estimatedAnalysisCost` (appended last, at the top level) is what the Analyze buttons quote
+before a paid run, in place of a figure written by hand: an `EstimatedAnalysisCostResponse(costUsdPerStock,
+tavilyCreditsPerStock, basedOnAnalyses)` — the average over those same latest analyses (`StockAnalysisEntity.costUsd()` /
+`tavilyCredits()`), so the older, cheaper runs of fewer searches don't count; `BigDecimal`s to 4 places — or `null`
+before the first analysis. `asOf` is an ISO-8601 string. `portfolioboss.utils.Utils.finiteOrNull` turns IB's `NaN` / infinity into
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
 in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.
@@ -573,7 +581,7 @@ Things that are easy to break:
 - `spring-boot-starter-validation` must stay in `pom.xml`: without it `@Valid` is silently ignored — no
   startup error, invalid input just reaches the database.
 - IB's average cost spreads the commissions over every share, so it has more decimal places than the 6
-  `@Digits` allows (`188.2990476`, found in the live check): the UI's `TradeForm` rounds it to 4 places when it
+  `@Digits` allows (`188.2990476`, found in the live check): the UI's `TradeModal` rounds it to 4 places when it
   prefills a price. Anything else that sends an IB figure as a trade amount has to round it too.
 - `consumes = APPLICATION_JSON_VALUE` states the JSON-only rule, but it is not the only guard: a
   `@RequestBody` record can only be read from JSON, so another `Content-Type` gets 415 even without it (tried).
@@ -616,8 +624,10 @@ Things that are easy to break:
   and small functions/components with a single job instead of long inline expressions.
 - The UI's colors are the design system's roles only: `ui/tailwind.config.js` defines no raw Tailwind color
   (`slate-500` simply doesn't exist), the values are CSS variables in `ui/src/index.css`, and the recurring pieces —
-  buttons, fields, panels, tables, tags — are shared classes in `ui/src/lib/styles.ts`. Green and red are for profit
-  and loss and the signal's tones only (BUY/SELL are grey).
+  buttons, fields, tables, tags, chips — are shared classes in `ui/src/lib/styles.ts`. Green and red are for profit
+  and loss and the signal's tones only (BUY/SELL are grey); the two warning levels are told apart by shape and lightness
+  (`WarnMark`: a yellow outlined triangle for minor, a solid orange one for real), and the only red fill is the confirm
+  dialog's Delete.
 - One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` owns the TWS
   host/port/client id and the single `IbGateway`. Don't add a second entry point or a second place
   that connects to TWS.

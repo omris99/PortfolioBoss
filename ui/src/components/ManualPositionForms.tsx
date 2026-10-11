@@ -1,25 +1,24 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
-import { addManualPosition, changeManualPosition, errorMessageOf } from '../lib/apiClient';
+import { useState } from 'react';
+import { Trash2 } from 'lucide-react';
+import { useSaveAction } from '../hooks/useSaveAction';
+import { addManualPosition, changeManualPosition, deleteManualPosition } from '../lib/apiClient';
 import {
   INPUT_CLASS,
   isBlank,
+  isIsoDate,
   isPositiveWholeNumber,
   localTodayIsoDate,
   numberOrNull,
   trimmedOrNull,
 } from '../lib/formInput';
-import {
-  ERROR_TEXT_CLASS,
-  FIELD_LABEL_CLASS,
-  HINT_TEXT_CLASS,
-  PANEL_CLASS,
-  PANEL_TITLE_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
-} from '../lib/styles';
+import { NUMBER_INPUT_CLASS, PRIMARY_BUTTON_CLASS, QUIET_DANGER_BUTTON_CLASS } from '../lib/styles';
 import type { ClosedPosition, ManualPositionRequest, NewManualPositionRequest } from '../types/portfolio';
+import { ClosedPositionTags, missingRealizedPnlReason } from './ClosedPositionsTable';
+import { CurrencyFigure } from './CurrencyFigure';
+import { DateInput, Field, FormError } from './FormFields';
 import { InvestorSelect } from './InvestorSelect';
-import { accountOwnerOf, useInvestors } from './InvestorsContext';
+import { accountOwnerOf, hasSeveralInvestors, useInvestors } from './InvestorsContext';
+import { ConfirmDialog, Modal } from './Modal';
 import { SECTOR_OPTIONS_LIST_ID } from './SectorCell';
 
 // The lengths of the manual_position columns.
@@ -31,8 +30,7 @@ const NOTE_MAX_LENGTH = 500;
 /** Every holding so far is in dollars, so a new manual position starts in them too. */
 const DEFAULT_CURRENCY = 'USD';
 
-/** The API's rule (`Utils.calculateOrderCommission`), said where the field is. */
-const COMMISSION_HINT = 'Leave empty for the default: 1 cent a share, at least $5. Enter 0 for no commission.';
+const COMMISSION_HINT = 'Empty means the default: 1¢ a share, at least $5 an order. 0 is no commission.';
 
 // ── what is typed ───────────────────────────────────────────────────────────────────────────────
 
@@ -79,6 +77,11 @@ function detailsValuesOf(closedPosition: ClosedPosition): DetailsValues {
   };
 }
 
+function haveDetailsChanged(values: DetailsValues, closedPosition: ClosedPosition): boolean {
+  const storedValues = detailsValuesOf(closedPosition);
+  return (Object.keys(values) as (keyof DetailsValues)[]).some((field) => values[field] !== storedValues[field]);
+}
+
 // ── checks, before a round trip to the API ──────────────────────────────────────────────────────
 
 function problemWithDetails(values: DetailsValues): string | null {
@@ -104,7 +107,9 @@ function problemWithNewPosition(values: NewPositionValues, todayIsoDate: string)
   const detailsProblem = problemWithDetails(values);
   if (detailsProblem !== null) return detailsProblem;
   if (!isPositiveWholeNumber(values.quantityText)) return 'Enter a whole quantity greater than 0.';
-  if (values.buyDate === '' || values.sellDate === '') return 'Enter the buy date and the sell date.';
+  if (!isIsoDate(values.buyDate) || !isIsoDate(values.sellDate)) {
+    return 'Enter the buy date and the sell date as yyyy-MM-dd.';
+  }
   if (values.sellDate > todayIsoDate) return 'The sell date cannot be in the future.';
   if (values.sellDate < values.buyDate) return 'The sell date cannot be before the buy date.';
   if (!isZeroOrMore(values.buyPriceText) || !isZeroOrMore(values.sellPriceText)) {
@@ -145,278 +150,334 @@ function toNewManualPositionRequest(values: NewPositionValues, investorId: numbe
 
 // ── fields ──────────────────────────────────────────────────────────────────────────────────────
 
-function FormField({
-  label,
-  title,
-  className = '',
-  children,
-}: {
-  label: string;
-  title?: string;
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <label title={title} className={`${FIELD_LABEL_CLASS} ${className}`}>
-      {label}
-      {children}
-    </label>
-  );
-}
-
-/** Symbol, Currency, Sector and Note: the same four fields when adding a manual position and when correcting it. */
-function DetailsFields({
-  values,
+function TextInput({
+  value,
+  maxLength,
+  placeholder,
+  isUppercase = false,
   onChange,
 }: {
-  values: DetailsValues;
-  onChange: (field: keyof DetailsValues, typedText: string) => void;
+  value: string;
+  maxLength: number;
+  placeholder?: string;
+  isUppercase?: boolean;
+  onChange: (typedText: string) => void;
 }) {
   return (
-    <>
-      <FormField label="Symbol">
-        <input
-          type="text"
-          required
-          maxLength={SYMBOL_MAX_LENGTH}
-          value={values.symbol}
-          onChange={(event) => onChange('symbol', event.target.value)}
-          className={`${INPUT_CLASS} w-24 uppercase`}
-        />
-      </FormField>
-      <FormField label="Currency">
-        <input
-          type="text"
-          required
-          maxLength={CURRENCY_MAX_LENGTH}
-          value={values.currency}
-          onChange={(event) => onChange('currency', event.target.value)}
-          className={`${INPUT_CLASS} w-16 uppercase`}
-        />
-      </FormField>
-      <FormField label="Sector">
-        {/* The sectors already entered, from the datalist the positions table renders. */}
-        <input
-          type="text"
-          list={SECTOR_OPTIONS_LIST_ID}
-          maxLength={SECTOR_MAX_LENGTH}
-          placeholder="optional"
-          value={values.sector}
-          onChange={(event) => onChange('sector', event.target.value)}
-          className={`${INPUT_CLASS} w-40`}
-        />
-      </FormField>
-      <FormField label="Note" className="min-w-48 flex-1">
-        <input
-          type="text"
-          maxLength={NOTE_MAX_LENGTH}
-          placeholder="Why? (optional)"
-          value={values.note}
-          onChange={(event) => onChange('note', event.target.value)}
-          className={INPUT_CLASS}
-        />
-      </FormField>
-    </>
+    <input
+      type="text"
+      maxLength={maxLength}
+      placeholder={placeholder}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`${INPUT_CLASS} w-full ${isUppercase ? 'uppercase' : ''}`}
+    />
   );
 }
 
-/** A number input for a price, a quantity or a commission. A quantity is a whole number of shares: `isWholeNumber`. */
+/** A figure: a price, a quantity or a commission, right-aligned. */
 function AmountInput({
   value,
-  required = false,
-  isWholeNumber = false,
   placeholder,
   onChange,
 }: {
   value: string;
-  required?: boolean;
-  isWholeNumber?: boolean;
   placeholder?: string;
   onChange: (typedText: string) => void;
 }) {
   return (
     <input
-      type="number"
-      step={isWholeNumber ? '1' : 'any'}
-      min={isWholeNumber ? '1' : '0'}
-      required={required}
+      type="text"
+      inputMode="decimal"
       placeholder={placeholder}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className={`${INPUT_CLASS} w-28`}
+      className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} w-full`}
     />
+  );
+}
+
+/** The sector, offered from the sectors already entered (the positions table's datalist, rendered by the app). */
+function SectorInput({ value, onChange }: { value: string; onChange: (typedText: string) => void }) {
+  return (
+    <input
+      type="text"
+      list={SECTOR_OPTIONS_LIST_ID}
+      maxLength={SECTOR_MAX_LENGTH}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`${INPUT_CLASS} w-full`}
+    />
+  );
+}
+
+/** The Buy or the Sell of a new closed position: its date, price and commission, in a bordered group. */
+function TradeLegFields({
+  legend,
+  date,
+  priceText,
+  commissionText,
+  minDate,
+  maxDate,
+  onDateChange,
+  onPriceChange,
+  onCommissionChange,
+}: {
+  legend: string;
+  date: string;
+  priceText: string;
+  commissionText: string;
+  minDate?: string;
+  maxDate: string;
+  onDateChange: (date: string) => void;
+  onPriceChange: (typedText: string) => void;
+  onCommissionChange: (typedText: string) => void;
+}) {
+  return (
+    <fieldset className="m-0 grid min-w-0 grid-cols-[1.3fr_1fr_1fr] gap-3 rounded-lg border px-4 pb-4 pt-3">
+      <legend className="-ml-1.5 px-1.5 text-[13px] font-semibold text-ink">{legend}</legend>
+      <Field label="Date">
+        <DateInput value={date} min={minDate} max={maxDate} onChange={onDateChange} />
+      </Field>
+      <Field label="Price">
+        <AmountInput value={priceText} onChange={onPriceChange} />
+      </Field>
+      <Field label="Commission" optional>
+        <span title={COMMISSION_HINT}>
+          <AmountInput value={commissionText} placeholder="Default" onChange={onCommissionChange} />
+        </span>
+      </Field>
+    </fieldset>
   );
 }
 
 // ── the forms ───────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Adds a manual position — one PortfolioBoss never saw as a holding, sold before the first sync — with its first buy
- * and sell of the same quantity. More buys and sells are added in its row afterwards. The API is the authority on what
- * is valid; its message is shown as it is. `onSaved` runs after a successful save and reloads the portfolio.
+ * "New closed position": one PortfolioBoss never saw as a holding, sold before the first sync — its details, quantity,
+ * and its first buy and sell of that quantity. More buys and sells are added in its drawer afterwards. The API is the
+ * authority on what is valid; its message is shown as it is. `onSaved` reloads the portfolio, then the modal closes.
  */
-export function NewManualPositionForm({ onSaved, onCancel }: { onSaved: () => Promise<void>; onCancel: () => void }) {
+export function ClosedPositionModal({ onSaved, onClose }: { onSaved: () => Promise<void>; onClose: () => void }) {
   const todayIsoDate = localTodayIsoDate();
+  const investors = useInvestors();
   const [formValues, setFormValues] = useState(EMPTY_NEW_POSITION);
-  const accountOwnerId = accountOwnerOf(useInvestors())?.id ?? null;
-  const [investorId, setInvestorId] = useState(accountOwnerId);
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [investorId, setInvestorId] = useState(accountOwnerOf(investors)?.id ?? null);
+  const { isSaving, errorMessage, setErrorMessage, runSave } = useSaveAction();
+  const showsInvestor = hasSeveralInvestors(investors);
 
-  const updateFormValue = (field: keyof NewPositionValues, typedText: string) =>
+  const updateFormValue = (field: keyof NewPositionValues) => (typedText: string) =>
     setFormValues((currentValues) => ({ ...currentValues, [field]: typedText }));
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSubmit = async () => {
     const problem = problemWithNewPosition(formValues, todayIsoDate);
     if (problem !== null) {
       setErrorMessage(problem);
       return;
     }
-    setIsSaving(true);
-    setErrorMessage(null);
-    try {
+    const isSaved = await runSave(async () => {
       await addManualPosition(toNewManualPositionRequest(formValues, investorId));
       await onSaved();
-    } catch (error) {
-      setErrorMessage(errorMessageOf(error));
-    } finally {
-      setIsSaving(false);
-    }
+    });
+    if (isSaved) onClose();
   };
 
   return (
-    <form
-      onSubmit={(event) => void handleSubmit(event)}
-      className={PANEL_CLASS}
+    <Modal
+      title="New closed position"
+      subtitle="A position sold before PortfolioBoss existed. It is entered by hand and marked “manual”."
+      size="wide"
+      errorMessage={errorMessage}
+      isSaving={isSaving}
+      onSubmit={() => void handleSubmit()}
+      onClose={onClose}
     >
-      <div className={PANEL_TITLE_CLASS}>Add a closed position</div>
-      <p className={HINT_TEXT_CLASS}>
-        A position bought and sold before PortfolioBoss saw it. Start with one buy and one sell; more buys and sells are
-        added in its row. A holding PortfolioBoss knows is completed through its trades, in Positions.
-      </p>
-
-      <div className="flex flex-wrap items-end gap-2">
-        <DetailsFields values={formValues} onChange={updateFormValue} />
+      <div className="grid grid-cols-4 gap-4">
+        <Field label="Symbol">
+          <TextInput
+            value={formValues.symbol}
+            maxLength={SYMBOL_MAX_LENGTH}
+            placeholder="TSLA"
+            isUppercase
+            onChange={updateFormValue('symbol')}
+          />
+        </Field>
+        <Field label="Currency">
+          <TextInput
+            value={formValues.currency}
+            maxLength={CURRENCY_MAX_LENGTH}
+            isUppercase
+            onChange={updateFormValue('currency')}
+          />
+        </Field>
+        <Field label="Sector" optional span={2}>
+          <SectorInput value={formValues.sector} onChange={updateFormValue('sector')} />
+        </Field>
+        <Field label="Quantity" hint="Shares bought and sold.">
+          <AmountInput value={formValues.quantityText} onChange={updateFormValue('quantityText')} />
+        </Field>
+        {showsInvestor && (
+          <Field label="Investor">
+            <InvestorSelect investorId={investorId} onChange={setInvestorId} />
+          </Field>
+        )}
+        <Field label="Note" optional span={showsInvestor ? 2 : 3}>
+          <TextInput
+            value={formValues.note}
+            maxLength={NOTE_MAX_LENGTH}
+            placeholder="Why? (optional)"
+            onChange={updateFormValue('note')}
+          />
+        </Field>
       </div>
-
-      <div className="flex flex-wrap items-end gap-2">
-        <InvestorSelect investorId={investorId} onChange={setInvestorId} />
-        <FormField label="Quantity">
-          <AmountInput
-            required
-            isWholeNumber
-            value={formValues.quantityText}
-            onChange={(text) => updateFormValue('quantityText', text)}
-          />
-        </FormField>
-        <FormField label="Buy date">
-          <input
-            type="date"
-            required
-            max={formValues.sellDate || todayIsoDate}
-            value={formValues.buyDate}
-            onChange={(event) => updateFormValue('buyDate', event.target.value)}
-            className={INPUT_CLASS}
-          />
-        </FormField>
-        <FormField label="Buy price">
-          <AmountInput required value={formValues.buyPriceText} onChange={(text) => updateFormValue('buyPriceText', text)} />
-        </FormField>
-        <FormField label="Buy commission" title={COMMISSION_HINT}>
-          <AmountInput
-            placeholder="default"
-            value={formValues.buyCommissionText}
-            onChange={(text) => updateFormValue('buyCommissionText', text)}
-          />
-        </FormField>
+      <div className="mt-4 grid gap-3">
+        <TradeLegFields
+          legend="Buy"
+          date={formValues.buyDate}
+          priceText={formValues.buyPriceText}
+          commissionText={formValues.buyCommissionText}
+          maxDate={formValues.sellDate || todayIsoDate}
+          onDateChange={updateFormValue('buyDate')}
+          onPriceChange={updateFormValue('buyPriceText')}
+          onCommissionChange={updateFormValue('buyCommissionText')}
+        />
+        <TradeLegFields
+          legend="Sell"
+          date={formValues.sellDate}
+          priceText={formValues.sellPriceText}
+          commissionText={formValues.sellCommissionText}
+          minDate={formValues.buyDate || undefined}
+          maxDate={todayIsoDate}
+          onDateChange={updateFormValue('sellDate')}
+          onPriceChange={updateFormValue('sellPriceText')}
+          onCommissionChange={updateFormValue('sellCommissionText')}
+        />
       </div>
-
-      <div className="flex flex-wrap items-end gap-2">
-        <FormField label="Sell date">
-          <input
-            type="date"
-            required
-            min={formValues.buyDate || undefined}
-            max={todayIsoDate}
-            value={formValues.sellDate}
-            onChange={(event) => updateFormValue('sellDate', event.target.value)}
-            className={INPUT_CLASS}
-          />
-        </FormField>
-        <FormField label="Sell price">
-          <AmountInput required value={formValues.sellPriceText} onChange={(text) => updateFormValue('sellPriceText', text)} />
-        </FormField>
-        <FormField label="Sell commission" title={COMMISSION_HINT}>
-          <AmountInput
-            placeholder="default"
-            value={formValues.sellCommissionText}
-            onChange={(text) => updateFormValue('sellCommissionText', text)}
-          />
-        </FormField>
-        <button type="submit" disabled={isSaving} className={PRIMARY_BUTTON_CLASS}>
-          {isSaving ? 'Saving…' : 'Add closed position'}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={isSaving}
-          className={SECONDARY_BUTTON_CLASS}
-        >
-          Cancel
-        </button>
-      </div>
-
-      {errorMessage && <p className={ERROR_TEXT_CLASS}>{errorMessage}</p>}
-    </form>
+      <p className="mt-2 text-caption text-faint">The sell date can’t be before the buy date.</p>
+    </Modal>
   );
 }
 
-/** Corrects a manual position's Symbol, Currency, Sector and Note; its trades are corrected in the list under it. */
-export function ManualPositionDetailsForm({
+/** "TSLA · manual · sold 2026-06-18 · +2,640.00 USD": the position being deleted, in one line. */
+function ManualPositionLine({ closedPosition }: { closedPosition: ClosedPosition }) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <b className="font-semibold">{closedPosition.symbol}</b>
+      <ClosedPositionTags closedPosition={closedPosition} />· sold {closedPosition.closeDate} ·
+      {closedPosition.realizedPnl === null ? (
+        <span title={missingRealizedPnlReason(closedPosition)}>no P&amp;L</span>
+      ) : (
+        <CurrencyFigure value={closedPosition.realizedPnl} currency={closedPosition.currency} />
+      )}
+    </span>
+  );
+}
+
+/**
+ * A manual position's Details tab: its symbol, currency, sector and note, editable — Save changes once something
+ * changed — and under them a block that deletes the whole position, its trades with it, after asking.
+ */
+export function ManualPositionDetails({
   manualPositionId,
   closedPosition,
-  onSaved,
+  onDataChanged,
 }: {
   manualPositionId: number;
   closedPosition: ClosedPosition;
-  onSaved: () => Promise<void>;
+  onDataChanged: () => Promise<void>;
 }) {
   const [formValues, setFormValues] = useState(() => detailsValuesOf(closedPosition));
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const { isSaving, errorMessage, setErrorMessage, runSave } = useSaveAction();
+  const tradeCount = closedPosition.trades.length;
+  const tradesText = `${tradeCount} ${tradeCount === 1 ? 'trade' : 'trades'}`;
 
-  const updateFormValue = (field: keyof DetailsValues, typedText: string) =>
+  const updateFormValue = (field: keyof DetailsValues) => (typedText: string) =>
     setFormValues((currentValues) => ({ ...currentValues, [field]: typedText }));
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSave = async () => {
     const problem = problemWithDetails(formValues);
     if (problem !== null) {
       setErrorMessage(problem);
       return;
     }
-    setIsSaving(true);
-    setErrorMessage(null);
-    try {
+    await runSave(async () => {
       await changeManualPosition(manualPositionId, toManualPositionRequest(formValues));
-      await onSaved();
-    } catch (error) {
-      setErrorMessage(errorMessageOf(error));
-    } finally {
-      setIsSaving(false);
-    }
+      await onDataChanged();
+    });
+  };
+
+  const deletePositionAndReload = async () => {
+    await deleteManualPosition(manualPositionId);
+    await onDataChanged();   // the position, and its drawer with it, goes away
   };
 
   return (
-    <form onSubmit={(event) => void handleSubmit(event)} className="flex min-w-0 flex-1 flex-col gap-2">
-      <div className="flex flex-wrap items-end gap-2">
-        <DetailsFields values={formValues} onChange={updateFormValue} />
-        <button type="submit" disabled={isSaving} className={PRIMARY_BUTTON_CLASS}>
-          {isSaving ? 'Saving…' : 'Save details'}
+    <div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSave();
+        }}
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Symbol">
+            <TextInput value={formValues.symbol} maxLength={SYMBOL_MAX_LENGTH} isUppercase onChange={updateFormValue('symbol')} />
+          </Field>
+          <Field label="Currency">
+            <TextInput
+              value={formValues.currency}
+              maxLength={CURRENCY_MAX_LENGTH}
+              isUppercase
+              onChange={updateFormValue('currency')}
+            />
+          </Field>
+          <Field label="Sector" optional span={2}>
+            <SectorInput value={formValues.sector} onChange={updateFormValue('sector')} />
+          </Field>
+          <Field label="Note" optional span={2}>
+            <textarea
+              rows={3}
+              maxLength={NOTE_MAX_LENGTH}
+              value={formValues.note}
+              onChange={(event) => updateFormValue('note')(event.target.value)}
+              className={`${INPUT_CLASS} h-auto w-full resize-y py-1.5 leading-5`}
+            />
+          </Field>
+        </div>
+        {errorMessage && <FormError>{errorMessage}</FormError>}
+        <div className="mt-3 flex justify-end">
+          <button
+            type="submit"
+            disabled={isSaving || !haveDetailsChanged(formValues, closedPosition)}
+            className={PRIMARY_BUTTON_CLASS}
+          >
+            {isSaving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+
+      <div className="mt-6 flex items-center justify-between gap-4 rounded-lg border border-negative-line px-4 py-3">
+        <div>
+          <b className="font-semibold">Delete position</b>
+          <p className="mt-0.5 text-[13px] text-muted">
+            Removes {closedPosition.symbol} and its {tradesText} from Closed. This can’t be undone.
+          </p>
+        </div>
+        <button type="button" onClick={() => setIsConfirmingDelete(true)} className={QUIET_DANGER_BUTTON_CLASS}>
+          <Trash2 size={16} />
+          Delete position
         </button>
       </div>
-      {errorMessage && <p className={ERROR_TEXT_CLASS}>{errorMessage}</p>}
-    </form>
+
+      {isConfirmingDelete && (
+        <ConfirmDialog
+          title={`Delete this position and its ${tradesText}?`}
+          item={<ManualPositionLine closedPosition={closedPosition} />}
+          onConfirm={deletePositionAndReload}
+          onClose={() => setIsConfirmingDelete(false)}
+        />
+      )}
+    </div>
   );
 }

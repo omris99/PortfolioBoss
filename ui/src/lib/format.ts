@@ -35,6 +35,22 @@ export function formatQuantity(shares: number): string {
   return Number.isInteger(shares) ? shares.toLocaleString('en-US') : shares.toFixed(4);
 }
 
+/** The account's currency: every figure but a realized P&L is in it. */
+export const ACCOUNT_CURRENCY = 'USD';
+
+/**
+ * Totals per currency, the account's first and then A→Z — "+1,757.89 USD · +950.00 HKD". Currencies are never added
+ * together.
+ */
+export function currencyTotalsInOrder(totalsByCurrency: Record<string, number> | Map<string, number>): [string, number][] {
+  const entries = totalsByCurrency instanceof Map ? [...totalsByCurrency] : Object.entries(totalsByCurrency);
+  return entries.sort(([firstCurrency], [secondCurrency]) => {
+    if (firstCurrency === ACCOUNT_CURRENCY) return -1;
+    if (secondCurrency === ACCOUNT_CURRENCY) return 1;
+    return firstCurrency.localeCompare(secondCurrency);
+  });
+}
+
 /** Green for a gain, red for a loss; the ordinary text color when flat or unknown. */
 export function profitLossColorClass(profitLoss: number | null): string {
   if (profitLoss === null || profitLoss === 0) return 'text-ink';

@@ -21,6 +21,14 @@ const LABEL_CLASSES: Record<SignalTone, string> = {
   plain: 'bg-unknown-soft text-unknown',
 };
 
+/** The same tones as text alone: the momentum score in the Signal column. */
+const TEXT_CLASSES: Record<SignalTone, string> = {
+  good: 'text-positive',
+  inBetween: 'text-inbetween',
+  warning: 'text-negative',
+  plain: 'text-unknown',
+};
+
 /** The dot: filled in its colour, an empty ring while there is none. */
 const DOT_CLASSES: Record<SignalTone, string> = {
   good: 'bg-signal-green',
@@ -74,6 +82,11 @@ export const SIGNAL_TONES: Record<HoldingSignal, SignalTone> = {
 /** The label classes for a value, e.g. `labelClassOf(momentum.label, MOMENTUM_TONES)`; grey when it is unknown. */
 export function labelClassOf<Value extends string>(value: Value | null, tones: Record<Value, SignalTone>): string {
   return LABEL_CLASSES[value === null ? 'plain' : tones[value]];
+}
+
+/** The text colour alone for a value, e.g. `textClassOf(momentum.label, MOMENTUM_TONES)`; grey when it is unknown. */
+export function textClassOf<Value extends string>(value: Value | null, tones: Record<Value, SignalTone>): string {
+  return TEXT_CLASSES[value === null ? 'plain' : tones[value]];
 }
 
 export function dotClassOf(signal: HoldingSignal | null): string {

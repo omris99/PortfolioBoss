@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.api.response.ClosedPositionResponse;
+import portfolioboss.api.response.EstimatedAnalysisCostResponse;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
 import portfolioboss.api.response.InvestorResponse;
@@ -40,8 +41,11 @@ import portfolioboss.model.HoldingSignal;
 import portfolioboss.model.MomentumLabel;
 import portfolioboss.utils.Utils;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -108,7 +112,8 @@ public class PortfolioReadService {
                                 momentumOf(holding, dailyClosesByConId), latestAnalysisByHoldingId.get(holding.id())))
                         .toList(),
                 closedPositionsOf(storedHoldings, manualPositions),
-                investorsOf(accountState, storedHoldings, manualPositions, investors, accountOwnerId));
+                investorsOf(accountState, storedHoldings, manualPositions, investors, accountOwnerId),
+                estimatedAnalysisCostOf(latestAnalysisByHoldingId.values()));
     }
 
     /** The stored closes of every holding and of SPY, by contract id — one query for all of them. */
@@ -125,6 +130,29 @@ public class PortfolioReadService {
     private Map<Long, StockAnalysisEntity> latestAnalysisByHoldingId() {
         return stockAnalysisRepository.findLatestOfEveryHolding().stream()
                 .collect(Collectors.toMap(StockAnalysisEntity::holdingId, analysis -> analysis));
+    }
+
+    /**
+     * What one stock's analysis is expected to cost: the average of {@code latestAnalyses}, one per holding — the runs
+     * of today's searches and prices. {@code null} while nothing has been analyzed.
+     */
+    private EstimatedAnalysisCostResponse estimatedAnalysisCostOf(Collection<StockAnalysisEntity> latestAnalyses) {
+        if (latestAnalyses.isEmpty()) {
+            return null;
+        }
+        BigDecimal analysisCount = BigDecimal.valueOf(latestAnalyses.size());
+        BigDecimal totalCostUsd = latestAnalyses.stream()
+                .map(StockAnalysisEntity::costUsd)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalTavilyCredits = BigDecimal.valueOf(latestAnalyses.stream()
+                .mapToLong(StockAnalysisEntity::tavilyCredits)
+                .sum());
+        // Dividing a BigDecimal needs to be told how many decimal places to keep (0.10 / 3 never ends): 4 here, $0.0412
+        // and 5.0000 credits; the UI rounds them for display.
+        return new EstimatedAnalysisCostResponse(
+                totalCostUsd.divide(analysisCount, 4, RoundingMode.HALF_UP),
+                totalTavilyCredits.divide(analysisCount, 4, RoundingMode.HALF_UP),
+                latestAnalyses.size());
     }
 
     private InvestorEntity accountOwnerOf(List<InvestorEntity> investors) {

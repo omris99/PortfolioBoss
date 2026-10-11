@@ -1,10 +1,11 @@
-import { ChevronRight, CircleCheckBig, TriangleAlert } from 'lucide-react';
+import { ChevronRight, CircleCheckBig } from 'lucide-react';
 import { Link } from 'react-router';
 import { CARD_CLASS, TAG_CLASS } from '../lib/styles';
 import type { Holding } from '../types/portfolio';
 import { CardHeading } from './CardHeading';
 import { firstRealWarningOf, hasOnlyMinorWarnings } from './HoldingWarnings';
-import { SignalDot } from './Signal';
+import { SignalDot, warningSignsOf } from './Signal';
+import { WarnMark } from './WarnMark';
 
 /** Why a holding is on the list, the most pressing first: a real warning, a RED dot, no analysis yet. */
 type AttentionReason =
@@ -19,15 +20,6 @@ interface AttentionItem {
 
 const REASON_ORDER: Record<AttentionReason['kind'], number> = { warning: 0, red: 1, notAnalyzed: 2 };
 
-/** The warning signs a RED dot is made of, in plain words. */
-function warningSignsOf(holding: Holding): string[] {
-  const warningSigns: string[] = [];
-  if (holding.momentum?.label === 'WEAK') warningSigns.push('weak momentum');
-  if (holding.analysis?.analystTrend === 'DETERIORATING') warningSigns.push('analysts deteriorating');
-  if (holding.analysis?.sentiment === 'NEGATIVE') warningSigns.push('negative news');
-  return warningSigns;
-}
-
 /**
  * Its first reason, or `null`: a real warning counts on any holding — "closed without a sell" is only ever on a closed
  * one — while a RED dot and a missing analysis count on open holdings only, the ones the analysis runs on.
@@ -36,7 +28,9 @@ function reasonOf(holding: Holding): AttentionReason | null {
   const realWarning = firstRealWarningOf(holding);
   if (realWarning !== null) return { kind: 'warning', message: realWarning.message };
   if (holding.status !== 'OPEN') return null;
-  if (holding.signal === 'RED') return { kind: 'red', warningSigns: warningSignsOf(holding) };
+  if (holding.signal === 'RED') {
+    return { kind: 'red', warningSigns: warningSignsOf(holding).map((warningSign) => warningSign.toLowerCase()) };
+  }
   if (holding.analysis === null) return { kind: 'notAnalyzed' };
   return null;
 }
@@ -60,7 +54,9 @@ function ReasonText({ reason }: { reason: AttentionReason }) {
     case 'warning':
       return (
         <span className="flex min-w-0 items-start gap-2 text-warn-real">
-          <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+          <span className="mt-0.5 flex">
+            <WarnMark level="real" />
+          </span>
           <span className="min-w-0">{reason.message}</span>
         </span>
       );
@@ -102,8 +98,8 @@ function MinorWarningsStrip({ count }: { count: number }) {
   if (count === 0) return null;
   const text = count === 1 ? '1 holding has no trades entered yet' : `${count} holdings have no trades entered yet`;
   return (
-    <div className="mt-auto flex items-center gap-2 rounded-b-lg border-t bg-warn-minor-soft px-5 py-3 text-warn-minor">
-      <TriangleAlert size={16} className="shrink-0 text-warn-minor-icon" />
+    <div className="mt-auto flex items-center gap-2 rounded-b-lg border-t bg-warn-minor-soft px-5 py-3 text-ink">
+      <WarnMark level="minor" />
       <span>{text}</span>
       <Link to="/positions" className="ml-auto font-medium underline underline-offset-2">
         Positions

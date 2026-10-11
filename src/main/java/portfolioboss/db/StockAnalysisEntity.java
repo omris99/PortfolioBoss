@@ -93,4 +93,12 @@ public class StockAnalysisEntity {
     public StockSearches searchResults() {
         return searchResults;
     }
+
+    public int tavilyCredits() {
+        return tavilyCredits;
+    }
+
+    public BigDecimal costUsd() {
+        return costUsd;
+    }
 }
