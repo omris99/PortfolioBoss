@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { formatMoney, formatPercent } from '../../lib/format';
 import type { OpenOnTab } from '../HoldingDrawer';
+import type { InvestmentsAndCash } from './investmentsAndCash';
 import { heaviestWeightsOf, type CashWeight, type HoldingWeight, type Weight } from './portfolioWeights';
 import { CASH_COLOR_CLASS, STOCKS_COLOR_CLASS, WeightsCard, hintOf, stocksShareText } from './WeightsCard';
 
@@ -15,27 +16,37 @@ interface AccountPartBar {
   amount: number;
   /** Of the whole account; `null` while it is unknown. Below zero for cash borrowed against the stocks. */
   percentOfAccount: number | null;
-  /** Where a click on the row goes — a holding's drawer opens on its Weight tab; `null` for the cash, which has no page. */
+  /**
+   * Where a click on the row goes — a holding's drawer opens on its Weight tab, on the same investor's weights; `null` for
+   * the cash, which has no page.
+   */
   link: { to: string; state?: OpenOnTab } | null;
   /** What hovering the row adds to it. */
   hint: string;
   barColorClass: string;
 }
 
-function holdingBarOf(holdingWeight: HoldingWeight): AccountPartBar {
+function holdingBarOf(holdingWeight: HoldingWeight, tab: InvestmentsAndCash): AccountPartBar {
   const { holding } = holdingWeight;
   return {
     key: `holding:${holding.id}`,
     name: holding.symbol,
     amount: holdingWeight.marketValue,
     percentOfAccount: holdingWeight.percentOfAccount,
-    link: { to: `/positions/${holding.id}`, state: { openOnTab: 'weight' } },
-    hint: stocksShareText(holdingWeight),
+    link: {
+      to: `/positions/${holding.id}`,
+      state: { openOnTab: 'weight', weightsInvestorId: tab.investorId },
+    },
+    hint: stocksShareText(holdingWeight, tab.stocksName),
     barColorClass: STOCKS_COLOR_CLASS,
   };
 }
 
-function lightestHoldingsBarOf(lightestHoldingWeights: HoldingWeight[], total: Weight): AccountPartBar {
+function lightestHoldingsBarOf(
+  lightestHoldingWeights: HoldingWeight[],
+  total: Weight,
+  tab: InvestmentsAndCash,
+): AccountPartBar {
   const symbols = lightestHoldingWeights.map((holdingWeight) => holdingWeight.holding.symbol);
   return {
     key: 'lightest-holdings',
@@ -43,28 +54,28 @@ function lightestHoldingsBarOf(lightestHoldingWeights: HoldingWeight[], total: W
     amount: total.marketValue,
     percentOfAccount: total.percentOfAccount,
     link: { to: '/positions' },
-    hint: hintOf([symbols.join(', '), stocksShareText(total)]),
+    hint: hintOf([symbols.join(', '), stocksShareText(total, tab.stocksName)]),
     barColorClass: 'bg-chart-rest',
   };
 }
 
-function cashBarOf(cashWeight: CashWeight): AccountPartBar {
+function cashBarOf(cashWeight: CashWeight, tab: InvestmentsAndCash): AccountPartBar {
   return {
     key: 'cash',
     name: 'Cash',
     amount: cashWeight.amount,
     percentOfAccount: cashWeight.percentOfAccount,
     link: null,
-    hint: 'The cash in the account, as IB reported it',
+    hint: tab.cashHint,
     barColorClass: CASH_COLOR_CLASS,
   };
 }
 
 /** The heaviest holdings, then the lightest ones together. */
-function holdingBarsOf(holdingWeights: HoldingWeight[]): AccountPartBar[] {
+function holdingBarsOf(holdingWeights: HoldingWeight[], tab: InvestmentsAndCash): AccountPartBar[] {
   const { heaviest, rest } = heaviestWeightsOf(holdingWeights, MOST_LISTED_HOLDINGS);
-  const bars = heaviest.map(holdingBarOf);
-  if (rest !== null) bars.push(lightestHoldingsBarOf(rest.weights, rest.total));
+  const bars = heaviest.map((holdingWeight) => holdingBarOf(holdingWeight, tab));
+  if (rest !== null) bars.push(lightestHoldingsBarOf(rest.weights, rest.total, tab));
   return bars;
 }
 
@@ -116,23 +127,26 @@ function AccountPartRow({ bar, longestDrawnPercent }: { bar: AccountPartBar; lon
 }
 
 /**
- * The whole account by part: a bar for each holding, heaviest first and each opening its drawer on the Weight tab, then
- * one for the cash under a hairline. Together they add up to 100%.
+ * The whole account by part — the tab's: all of an investor's money on their tab —: a bar for each holding, heaviest
+ * first and each opening its drawer on the Weight tab, then one for the cash under a hairline. Together they add up to
+ * 100%.
  */
 export function HoldingWeightsCard({
+  tab,
   holdingWeights,
   cashWeight,
 }: {
+  tab: InvestmentsAndCash;
   holdingWeights: HoldingWeight[];
   cashWeight: CashWeight | null;
 }) {
-  const holdingBars = holdingBarsOf(holdingWeights);
-  const cashBar = cashWeight === null ? null : cashBarOf(cashWeight);
+  const holdingBars = holdingBarsOf(holdingWeights, tab);
+  const cashBar = cashWeight === null ? null : cashBarOf(cashWeight, tab);
   const allBars = cashBar === null ? holdingBars : [...holdingBars, cashBar];
   const longestDrawnPercent = Math.max(...allBars.map(drawnPercentOf));
 
   return (
-    <WeightsCard title="By holding" caption="Share of the whole account">
+    <WeightsCard title="By holding" caption={`Share of ${tab.wholeName}`}>
       <ul className="pb-3">
         {holdingBars.map((bar) => (
           <li key={bar.key}>

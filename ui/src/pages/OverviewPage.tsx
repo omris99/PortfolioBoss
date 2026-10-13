@@ -1,6 +1,7 @@
 import { openHoldingsOf } from '../lib/holdings';
 import type { PortfolioSnapshot } from '../types/portfolio';
 import { AccountSummary } from '../components/AccountSummary';
+import { weightsTabsOf } from '../components/graphs/investmentsAndCash';
 import { WeightGraphs } from '../components/graphs/WeightGraphs';
 import { InvestorsStrip } from '../components/InvestorsStrip';
 import { NeedsAttention } from '../components/NeedsAttention';
@@ -9,7 +10,8 @@ import { SignalGlance } from '../components/SignalGlance';
 
 /**
  * The Overview (/): the account's four figures with the stocks' and the cash's parts, what needs a look beside how the
- * signals stand, the weight of each sector and each holding, and each investor's total when there are several. Only
+ * signals stand, the weight of each sector and each holding — of the whole account and of each investor's own money —,
+ * and each investor's total when there are several. Only
  * figures the API already sends, and what is worked out from them.
  */
 export function OverviewPage({ snapshot }: { snapshot: PortfolioSnapshot }) {
@@ -24,7 +26,7 @@ export function OverviewPage({ snapshot }: { snapshot: PortfolioSnapshot }) {
           <NeedsAttention holdings={snapshot.holdings} />
           <SignalGlance openHoldings={openHoldings} />
         </div>
-        <WeightGraphs openHoldings={openHoldings} cash={snapshot.totalCashValue} />
+        <WeightGraphs tabs={weightsTabsOf(openHoldings, snapshot.totalCashValue, snapshot.investors)} />
         <InvestorsStrip investors={snapshot.investors} />
       </div>
     </>

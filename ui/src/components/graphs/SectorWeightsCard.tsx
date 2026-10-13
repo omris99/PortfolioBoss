@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatMoney, formatPercent } from '../../lib/format';
 import { DonutChart, type DonutSlice } from './DonutChart';
+import type { InvestmentsAndCash } from './investmentsAndCash';
 import { heaviestWeightsOf, type NoSectorWeight, type SectorWeight, type Weight } from './portfolioWeights';
 import { WeightsCard, accountShareText, countText, hintOf } from './WeightsCard';
 
@@ -37,45 +38,55 @@ interface SectorSlice {
   paint: SlicePaint;
 }
 
-function coloredSectorSlicesOf(sectorWeights: SectorWeight[]): SectorSlice[] {
+function coloredSectorSlicesOf(sectorWeights: SectorWeight[], wholeName: string): SectorSlice[] {
   return sectorWeights.map((sectorWeight, index) => ({
     key: `sector:${sectorWeight.sector}`,
     name: sectorWeight.sector,
     weight: sectorWeight,
-    hint: hintOf([countText(sectorWeight.holdingCount, 'holding'), accountShareText(sectorWeight)]),
+    hint: hintOf([countText(sectorWeight.holdingCount, 'holding'), accountShareText(sectorWeight, wholeName)]),
     paint: SECTOR_PAINTS[index],
   }));
 }
 
-function otherSectorsSliceOf(otherSectorWeights: SectorWeight[], total: Weight): SectorSlice {
+function otherSectorsSliceOf(otherSectorWeights: SectorWeight[], total: Weight, wholeName: string): SectorSlice {
   return {
     key: 'other-sectors',
     name: `Other (${countText(otherSectorWeights.length, 'sector')})`,
     weight: total,
-    hint: hintOf([otherSectorWeights.map((sectorWeight) => sectorWeight.sector).join(', '), accountShareText(total)]),
+    hint: hintOf([
+      otherSectorWeights.map((sectorWeight) => sectorWeight.sector).join(', '),
+      accountShareText(total, wholeName),
+    ]),
     paint: OTHER_SECTORS_PAINT,
   };
 }
 
-function noSectorSliceOf(noSectorWeight: NoSectorWeight): SectorSlice {
+function noSectorSliceOf(noSectorWeight: NoSectorWeight, wholeName: string): SectorSlice {
   return {
     key: 'no-sector',
     name: 'No sector',
     weight: noSectorWeight,
     hint: hintOf([
       `${countText(noSectorWeight.holdingCount, 'holding')} without a sector yet: add it in Positions`,
-      accountShareText(noSectorWeight),
+      accountShareText(noSectorWeight, wholeName),
     ]),
     paint: NO_SECTOR_PAINT,
   };
 }
 
-/** The heaviest sectors in their colors, then the others together, then the holdings with no sector. */
-function sectorSlicesOf(sectorWeights: SectorWeight[], noSectorWeight: NoSectorWeight | null): SectorSlice[] {
+/**
+ * The heaviest sectors in their colors, then the others together, then the holdings with no sector. `wholeName` names
+ * the tab's whole account in the hints: "the whole account", "all of Shay's money".
+ */
+function sectorSlicesOf(
+  sectorWeights: SectorWeight[],
+  noSectorWeight: NoSectorWeight | null,
+  wholeName: string,
+): SectorSlice[] {
   const { heaviest, rest } = heaviestWeightsOf(sectorWeights, SECTOR_PAINTS.length);
-  const slices = coloredSectorSlicesOf(heaviest);
-  if (rest !== null) slices.push(otherSectorsSliceOf(rest.weights, rest.total));
-  if (noSectorWeight !== null) slices.push(noSectorSliceOf(noSectorWeight));
+  const slices = coloredSectorSlicesOf(heaviest, wholeName);
+  if (rest !== null) slices.push(otherSectorsSliceOf(rest.weights, rest.total, wholeName));
+  if (noSectorWeight !== null) slices.push(noSectorSliceOf(noSectorWeight, wholeName));
   return slices;
 }
 
@@ -128,22 +139,24 @@ function LegendRow({
 }
 
 /**
- * The money in stocks by sector: a ring, and beside it a legend naming every slice with its percent and value. Pointing
- * at a slice or at its row highlights both.
+ * The money in stocks by sector — the tab's: an investor's own on their tab —: a ring, and beside it a legend naming every
+ * slice with its percent and value. Pointing at a slice or at its row highlights both.
  */
 export function SectorWeightsCard({
+  tab,
   sectorWeights,
   noSectorWeight,
 }: {
+  tab: InvestmentsAndCash;
   sectorWeights: SectorWeight[];
   noSectorWeight: NoSectorWeight | null;
 }) {
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
-  const slices = sectorSlicesOf(sectorWeights, noSectorWeight);
+  const slices = sectorSlicesOf(sectorWeights, noSectorWeight, tab.wholeName);
   const highlightedSlice = slices.find((slice) => slice.key === highlightedKey) ?? null;
 
   return (
-    <WeightsCard title="By sector" caption="Share of the money in stocks">
+    <WeightsCard title="By sector" caption={`Share of ${tab.stocksName}`}>
       <div className="flex flex-1 items-center gap-6 px-5 pb-5">
         <DonutChart slices={slices.map(donutSliceOf)} highlightedKey={highlightedKey} onHighlight={setHighlightedKey}>
           <RingCenter highlightedSlice={highlightedSlice} sectorCount={sectorWeights.length} />

@@ -165,7 +165,7 @@ class ManualPositionWriteControllerTest {
                 .willThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "No manual position with id 3"));
 
         mockMvc.perform(post("/api/manual-positions/3/trades").contentType(MediaType.APPLICATION_JSON).content("""
-                        {"tradeDate": "2021-08-19", "side": "BUY", "quantity": 100}"""))
+                        {"tradeDate": "2021-08-19", "side": "BUY", "quantity": 100, "price": 162.1}"""))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.detail").value("No manual position with id 3"));
     }

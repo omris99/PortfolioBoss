@@ -31,6 +31,11 @@ export function isPositiveWholeNumber(typedText: string): boolean {
   return !isBlank(typedText) && Number.isInteger(typedNumber) && typedNumber > 0;
 }
 
+/** A price: required, and 0 or more. "" and "-1" are not. */
+export function isZeroOrMore(typedText: string): boolean {
+  return !isBlank(typedText) && Number(typedText) >= 0;
+}
+
 /** The number typed, or `null` when the input was left empty. */
 export function numberOrNull(typedText: string): number | null {
   return isBlank(typedText) ? null : Number(typedText);

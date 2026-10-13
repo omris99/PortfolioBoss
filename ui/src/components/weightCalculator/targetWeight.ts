@@ -1,24 +1,27 @@
 import { ACCOUNT_CURRENCY } from '../../lib/format';
 import { defaultCommissionFor } from '../../lib/orderCommission';
 import type { Holding } from '../../types/portfolio';
-import type { WholeAccount } from '../graphs/portfolioWeights';
+import { investmentIn, type InvestmentsAndCash } from '../graphs/investmentsAndCash';
+import { wholeAccountOf, type WholeAccount } from '../graphs/portfolioWeights';
 
 /**
  * The weight calculator's arithmetic: how many whole shares of one holding to sell or buy so that it weighs a target
- * percent of the whole account — the stocks plus the cash, as in the Overview's graphs. A sale turns shares into cash
- * and a purchase turns cash into shares, so the whole account keeps its size; the commission does come off it, but is
- * too small to change the share count, so the weights leave it out.
+ * percent of the whole account — the stocks plus the cash, as in the Overview's graphs — or, on an investor's tab, of all
+ * of that investor's money, with their shares and their cash. A sale turns shares into cash and a purchase turns cash
+ * into shares, so the whole account keeps its size; the commission does come off it, but is too small to change the
+ * share count, so the weights leave it out.
  */
 
 /** Below this, a share count counts as whole: 30.0000000001 shares is 30, not 31, after the division's rounding. */
 const ROUNDING_TOLERANCE = 1e-9;
 
-/** The holding and the account, every figure the calculator needs known. */
+/** The holding and the account, every figure the calculator needs known — on an investor's tab, their part of both. */
 export interface HoldingInAccount {
+  /** 0 on the tab of an investor who holds none: only buying is worked out then. */
   quantity: number;
   /** IB's last price, as of the last sync. */
   price: number;
-  /** IB's average cost a share, commissions included; `null` when IB reported none. */
+  /** A share, commissions included — IB's, or the investor's own; `null` when unknown. */
   averageCost: number | null;
   wholeAccount: WholeAccount;
 }
@@ -29,17 +32,31 @@ export interface CannotCalculate {
 }
 
 /**
- * The figures the calculator needs, or why it can't work on this holding. Another currency can't be weighed against a
- * dollar account without IB's exchange rate, which the API doesn't send yet.
+ * A short position on Portfolio; on an investor's tab, the account owner's part when the other investors' trades add up
+ * to more shares than IB reports.
  */
-export function holdingInAccountOf(holding: Holding, wholeAccount: WholeAccount | null): HoldingInAccount | CannotCalculate {
+function belowZeroReasonOf(tab: InvestmentsAndCash): string {
+  return tab.investorId === null
+    ? 'This is not a long position.'
+    : `${tab.name}’s part of this holding is below zero: check its trades.`;
+}
+
+/**
+ * The figures the calculator needs for `holding` on `tab`, or why it can't work on it. Another currency can't be
+ * weighed against a dollar account without IB's exchange rate, which the API doesn't send yet.
+ */
+export function holdingInAccountOf(holding: Holding, tab: InvestmentsAndCash): HoldingInAccount | CannotCalculate {
   if (holding.currency !== ACCOUNT_CURRENCY) {
     return { reason: `This holding is in ${holding.currency}: the calculator works in ${ACCOUNT_CURRENCY} only for now.` };
   }
   if (holding.marketPrice === null || holding.marketPrice <= 0) return { reason: 'IB reported no price for this holding.' };
-  if (holding.position <= 0) return { reason: 'This is not a long position.' };
-  if (wholeAccount === null) return { reason: 'The whole account’s value is unknown: IB reported no cash.' };
-  return { quantity: holding.position, price: holding.marketPrice, averageCost: holding.averageCost, wholeAccount };
+  const investment = investmentIn(tab, holding);
+  if (investment.quantity < 0) return { reason: belowZeroReasonOf(tab) };
+  const wholeAccount = wholeAccountOf(tab);
+  if (wholeAccount === null) {
+    return { reason: `No weight can be worked out: ${tab.wholeName} is unknown (IB reported no cash) or not above zero.` };
+  }
+  return { quantity: investment.quantity, price: holding.marketPrice, averageCost: investment.averageCost, wholeAccount };
 }
 
 /** The holding's part of the whole account, 0–100. */

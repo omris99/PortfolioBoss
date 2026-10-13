@@ -25,15 +25,18 @@ export function countText(count: number, noun: string): string {
   return `${count} ${count === 1 ? noun : `${noun}s`}`;
 }
 
-/** "21.3% of the whole account", or `null` while the account's value is unknown. */
-export function accountShareText(weight: Weight): string | null {
+/**
+ * "21.3% of the whole account" — `wholeName` is the tab's: "all of Shay's money" on Shay's — or `null` while its value is
+ * unknown.
+ */
+export function accountShareText(weight: Weight, wholeName: string): string | null {
   if (weight.percentOfAccount === null) return null;
-  return `${formatPercent(weight.percentOfAccount)} of the whole account`;
+  return `${formatPercent(weight.percentOfAccount)} of ${wholeName}`;
 }
 
-/** "26.9% of the money in stocks". */
-export function stocksShareText(weight: Weight): string {
-  return `${formatPercent(weight.percentOfStocks)} of the money in stocks`;
+/** "26.9% of the money in stocks" — `stocksName` is the tab's: "Shay's money in stocks" on Shay's. */
+export function stocksShareText(weight: Weight, stocksName: string): string {
+  return `${formatPercent(weight.percentOfStocks)} of ${stocksName}`;
 }
 
 /** What hovering a row adds to it, from the parts that are known: "3 holdings · 21.3% of the whole account". */

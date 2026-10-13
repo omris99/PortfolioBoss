@@ -34,11 +34,7 @@ function sublineOf(closedPosition: ClosedPosition, investorName: string | null):
 
 /** The line under the realized P&L: its percent and currency, or why there is none. */
 function RealizedPnlExtra({ closedPosition }: { closedPosition: ClosedPosition }) {
-  if (closedPosition.realizedPnl === null) {
-    return (
-      <KeyFigureExtra>{closedPosition.warning !== null ? 'sold more than bought' : 'a price is missing'}</KeyFigureExtra>
-    );
-  }
+  if (closedPosition.realizedPnl === null) return <KeyFigureExtra>sold more than bought</KeyFigureExtra>;
   return (
     <KeyFigureExtra colorClass={profitLossColorClass(closedPosition.realizedPnlPercent)}>
       {formatSignedPercent(closedPosition.realizedPnlPercent)} · {closedPosition.currency}

@@ -11,8 +11,8 @@ import java.util.Map;
  * The figures on one investor's summary card: what they have in the IB account and what they made on it, as
  * {@link InvestorSummaryCalculator} works it out. Never stored — derived on every read. It keeps only the raw totals;
  * the profit figures are derived here, like {@link ClosedPosition}'s. Everything is in USD except the realized P&amp;L,
- * which is by currency. A figure that needs something unknown — a trade without a price, a figure IB did not report —
- * is {@code null}, and so is everything derived from it.
+ * which is by currency. A figure that needs something IB did not report is {@code null}, and so is everything derived
+ * from it.
  *
  * <p>Example (INVESTORS_TODO.md): deposited 30,000 and bought 24 NVDA at 120, which is now at 180. Cash 27,120, shares
  * worth 4,320, total value 31,440, shares cost 2,880: an unrealized +1,440 (+50%).

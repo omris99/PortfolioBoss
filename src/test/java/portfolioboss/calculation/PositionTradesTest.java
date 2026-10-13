@@ -100,20 +100,6 @@ class PositionTradesTest {
     }
 
     @Test
-    void aBuyWithoutAPriceLeavesItsCostUnknownAndTheAccountOwnersToo() {
-        PositionTrades nvidia = nvidia(39, buy(ACCOUNT_OWNER_ID, "15"), buyAt(AVI_ID, "24", null));
-
-        Map<Long, InvestorPart> parts = nvidia.partsByInvestor(ACCOUNT_OWNER_ID);
-
-        assertThat(parts.get(AVI_ID).sharesValue()).isEqualByComparingTo("4320");   // the quantity is known, and IB's price
-        assertThat(parts.get(AVI_ID).sharesCost()).isNull();
-        assertThat(parts.get(AVI_ID).unrealizedPnl()).isNull();
-        assertThat(parts.get(AVI_ID).unrealizedPnlPercent()).isNull();
-        assertThat(parts.get(ACCOUNT_OWNER_ID).sharesValue()).isEqualByComparingTo("2700");
-        assertThat(parts.get(ACCOUNT_OWNER_ID).sharesCost()).isNull();
-    }
-
-    @Test
     void aManualPositionHasNoSharesAtIb() {
         PositionTrades manualPosition = new PositionTrades("AAPL", "USD", null, List.of());
 
@@ -156,8 +142,7 @@ class PositionTradesTest {
     /** Dated by the order a test creates them: a sell after the buy before it. No commission. */
     private TradeFact trade(long investorId, TradeSide side, String quantity, String price) {
         long tradeId = nextTradeId++;
-        BigDecimal priceOrNull = price == null ? null : new BigDecimal(price);
         return new TradeFact(tradeId, investorId, LocalDate.of(2026, 1, 1).plusDays(tradeId), side,
-                new BigDecimal(quantity), priceOrNull, BigDecimal.ZERO);
+                new BigDecimal(quantity), new BigDecimal(price), BigDecimal.ZERO);
     }
 }

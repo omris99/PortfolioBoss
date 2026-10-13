@@ -74,7 +74,7 @@ class HoldingWriteControllerTest {
     @Test
     void rejectsANegativeCommission() throws Exception {
         postTrade("""
-                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10, "commission": -1}""")
+                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10, "price": 150, "commission": -1}""")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("commission: must be greater than or equal to 0"));
         verifyNoInteractions(holdingWriteService);
@@ -84,7 +84,7 @@ class HoldingWriteControllerTest {
     void rejectsATradeDatedInTheFuture() throws Exception {
         String tomorrow = LocalDate.now().plusDays(1).toString();
 
-        postTrade("{\"tradeDate\": \"" + tomorrow + "\", \"side\": \"BUY\", \"quantity\": 10}")
+        postTrade("{\"tradeDate\": \"" + tomorrow + "\", \"side\": \"BUY\", \"quantity\": 10, \"price\": 150}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("tradeDate: must be a date in the past or in the present"));
         verifyNoInteractions(holdingWriteService);
@@ -93,7 +93,7 @@ class HoldingWriteControllerTest {
     @Test
     void rejectsAZeroQuantityAndNamesTheField() throws Exception {
         postTrade("""
-                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 0}""")
+                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 0, "price": 150}""")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("quantity: must be greater than 0"));
         verifyNoInteractions(holdingWriteService);
@@ -103,14 +103,23 @@ class HoldingWriteControllerTest {
     void listsEveryMissingRequiredFieldInOneMessage() throws Exception {
         postTrade("{}")
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail")
-                        .value("quantity: must not be null, side: must not be null, tradeDate: must not be null"));
+                .andExpect(jsonPath("$.detail").value("price: must not be null, quantity: must not be null, "
+                        + "side: must not be null, tradeDate: must not be null"));
+    }
+
+    @Test
+    void rejectsATradeWithoutAPrice() throws Exception {
+        postTrade("""
+                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10}""")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("price: must not be null"));
+        verifyNoInteractions(holdingWriteService);
     }
 
     @Test
     void rejectsAQuantityThatIsNotAWholeNumber() throws Exception {
         postTrade("""
-                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 2.5}""")
+                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 2.5, "price": 150}""")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("quantity: must be a whole number (at most 14 digits)"));
         verifyNoInteractions(holdingWriteService);
@@ -130,7 +139,7 @@ class HoldingWriteControllerTest {
     @Test
     void rejectsAnUnknownSide() throws Exception {
         postTrade("""
-                {"tradeDate": "2025-01-15", "side": "HOLD", "quantity": 10}""")
+                {"tradeDate": "2025-01-15", "side": "HOLD", "quantity": 10, "price": 150}""")
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(holdingWriteService);
     }
@@ -141,7 +150,7 @@ class HoldingWriteControllerTest {
                 .willThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "No holding with id 7"));
 
         postTrade("""
-                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10}""")
+                {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10, "price": 150}""")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.detail").value("No holding with id 7"));
     }
@@ -152,7 +161,7 @@ class HoldingWriteControllerTest {
     void refusesACrossSiteTextPostWith415() throws Exception {
         mockMvc.perform(post("/api/holdings/7/trades").header("Origin", OTHER_SITE)
                         .contentType(MediaType.TEXT_PLAIN).content("""
-                        {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10}"""))
+                        {"tradeDate": "2025-01-15", "side": "BUY", "quantity": 10, "price": 150}"""))
                 .andExpect(status().isUnsupportedMediaType());
         verifyNoInteractions(holdingWriteService);
     }
@@ -193,12 +202,13 @@ class HoldingWriteControllerTest {
     @Test
     void changesATradeAndAnswers200WithIt() throws Exception {
         TradeRequest expectedRequest = new TradeRequest(LocalDate.of(2025, 2, 1), TradeSide.SELL,
-                new BigDecimal("4"), null, null, null, null);
+                new BigDecimal("4"), new BigDecimal("180"), null, null, null);
         given(holdingWriteService.changeTrade(TRADE_ID, expectedRequest)).willReturn(new TradeResponse(TRADE_ID,
-                LocalDate.of(2025, 2, 1), TradeSide.SELL, new BigDecimal("4"), null, null, new BigDecimal("5"), 1));
+                LocalDate.of(2025, 2, 1), TradeSide.SELL, new BigDecimal("4"), new BigDecimal("180"), null,
+                new BigDecimal("5"), 1));
 
         mockMvc.perform(put("/api/trades/42").contentType(MediaType.APPLICATION_JSON).content("""
-                        {"tradeDate": "2025-02-01", "side": "SELL", "quantity": 4}"""))
+                        {"tradeDate": "2025-02-01", "side": "SELL", "quantity": 4, "price": 180}"""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(TRADE_ID))
                 .andExpect(jsonPath("$.side").value("SELL"));

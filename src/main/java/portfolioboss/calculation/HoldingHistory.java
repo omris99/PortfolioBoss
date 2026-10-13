@@ -31,7 +31,7 @@ import java.util.List;
  *                        brought back to zero, and the current one too if it has had a sell — at average cost
  * @param heldCost        what the shares still held in the current position period cost, at average cost and with the
  *                        part of the buy commissions that stays with them — as IB's average cost counts it. 0 when
- *                        nothing is held; {@code null} if a buy still held has no price entered
+ *                        nothing is held
  */
 public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, BigDecimal netQuantity,
                              List<ClosedPosition> closedPositions, BigDecimal heldCost) {
@@ -230,7 +230,6 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
     private static final class AverageCostCalculator {
 
         private BigDecimal heldQuantity = BigDecimal.ZERO;
-        /** {@code null} once a buy without a price is held: the average is unknown from then on. */
         private BigDecimal heldCost = BigDecimal.ZERO;
         private BigDecimal heldBuyCommissions = BigDecimal.ZERO;
 
@@ -242,7 +241,7 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
 
         private void addBuy(TradeFact buy) {
             heldQuantity = heldQuantity.add(buy.quantity());
-            heldCost = sumOrNull(heldCost, buy.amount());
+            heldCost = heldCost.add(buy.amount());
             heldBuyCommissions = heldBuyCommissions.add(buy.commission());
             boughtQuantity = boughtQuantity.add(buy.quantity());
         }
@@ -251,21 +250,18 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
         private void addSell(TradeFact sell) {
             BigDecimal costLeaving = partLeaving(heldCost, sell.quantity());
             BigDecimal buyCommissionsLeaving = partLeaving(heldBuyCommissions, sell.quantity());
-            heldCost = heldCost == null ? null : heldCost.subtract(costLeaving);
+            heldCost = heldCost.subtract(costLeaving);
             heldBuyCommissions = heldBuyCommissions.subtract(buyCommissionsLeaving);
             heldQuantity = heldQuantity.subtract(sell.quantity());
 
             soldQuantity = soldQuantity.add(sell.quantity());
-            soldCost = sumOrNull(soldCost, costLeaving);
-            sellProceeds = sumOrNull(sellProceeds, sell.amount());
+            soldCost = soldCost.add(costLeaving);
+            sellProceeds = sellProceeds.add(sell.amount());
             commissions = commissions.add(sell.commission()).add(buyCommissionsLeaving);
         }
 
         /** The part of a held total that leaves with {@code quantitySold} shares: all of it when nothing stays held. */
         private BigDecimal partLeaving(BigDecimal heldTotal, BigDecimal quantitySold) {
-            if (heldTotal == null) {
-                return null;
-            }
             boolean sellsEverything = heldQuantity.subtract(quantitySold).compareTo(ZERO_TOLERANCE) <= 0;
             if (sellsEverything) {
                 return heldTotal;
@@ -278,11 +274,7 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
          * above, after the first sell: 500 for the 5 left, plus half of the first buy's commission.
          */
         private BigDecimal heldCostWithBuyCommissions() {
-            return heldCost == null ? null : heldCost.add(heldBuyCommissions);
-        }
-
-        private BigDecimal sumOrNull(BigDecimal runningTotal, BigDecimal amount) {
-            return runningTotal == null || amount == null ? null : runningTotal.add(amount);
+            return heldCost.add(heldBuyCommissions);
         }
 
         private ClosedPosition toClosedPosition(LocalDate openDate, LocalDate closeDate, boolean isClosed,

@@ -13,7 +13,8 @@ import java.util.List;
  * The shares sold in one position period as the UI receives it: a stretch of owning a stock that a sell brought back to
  * zero, or one still held that has had a sell already ({@code remainingQuantity} above 0), at average cost — of a
  * holding or of a manual position ({@code source}). The component names are the JSON keys and must stay stable
- * ({@code ui/src/types/portfolio.ts} mirrors them). A figure that needs a price nobody entered is {@code null}.
+ * ({@code ui/src/types/portfolio.ts} mirrors them). The realized P&amp;L and its percent are {@code null} when more was
+ * sold than bought.
  * {@code warning}, {@code commissions}, {@code source}, {@code manualPositionId}, {@code note},
  * {@code remainingQuantity}, {@code trades} and {@code investorId} were added after the others, and like them are never
  * renamed or removed. Each investor's trades make closed positions of their own, so one holding can have a closed

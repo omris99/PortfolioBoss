@@ -7,8 +7,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * One trade as the UI receives it. {@code price} and {@code note} are {@code null} when not entered; {@code commission}
- * never is (the default was stored instead). {@code commission} and {@code investorId} were added after the others.
+ * One trade as the UI receives it. {@code note} is {@code null} when not entered; {@code price} never is (it is
+ * required), and neither is {@code commission} (the default was stored instead). {@code commission} and
+ * {@code investorId} were added after the others.
  *
  * @param investorId whose trade it is — one of {@code PortfolioResponse.investors}
  */

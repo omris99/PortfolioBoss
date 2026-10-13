@@ -54,6 +54,7 @@ public class TradeEntity {
 
     /** BigDecimal, not double: typed in by the user, and the sum of trades must be exact. */
     private BigDecimal quantity;
+    /** Never {@code null}: the API refuses a trade without one, and so does the table (V8). */
     private BigDecimal price;
     private String note;
 
@@ -64,7 +65,7 @@ public class TradeEntity {
     protected TradeEntity() {
     }
 
-    /** A trade the user entered for {@code holding}. {@code price} and {@code note} may be {@code null}. */
+    /** A trade the user entered for {@code holding}. {@code note} may be {@code null}. */
     public TradeEntity(HoldingEntity holding, InvestorEntity investor, LocalDate tradeDate, TradeSide side,
                        BigDecimal quantity, BigDecimal price, String note, BigDecimal commission) {
         this.holding = holding;
@@ -72,7 +73,7 @@ public class TradeEntity {
         changeDetails(tradeDate, side, quantity, price, note, commission);
     }
 
-    /** A trade the user entered for {@code manualPosition}. {@code price} and {@code note} may be {@code null}. */
+    /** A trade the user entered for {@code manualPosition}. {@code note} may be {@code null}. */
     public TradeEntity(ManualPositionEntity manualPosition, InvestorEntity investor, LocalDate tradeDate,
                        TradeSide side, BigDecimal quantity, BigDecimal price, String note, BigDecimal commission) {
         this.manualPosition = manualPosition;

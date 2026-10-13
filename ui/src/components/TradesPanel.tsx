@@ -5,7 +5,6 @@ import { deleteTrade } from '../lib/apiClient';
 import { EMPTY_VALUE, formatMoney, formatQuantity } from '../lib/format';
 import {
   DELETE_ICON_BUTTON_CLASS,
-  EXPLAINED_CLASS,
   ICON_BUTTON_CLASS,
   INNER_CELL_CLASS,
   INNER_HEADER_CELL_CLASS,
@@ -45,15 +44,7 @@ function TradeRow({
         <span className={sideTextClass(trade.side === 'SELL')}>{trade.side}</span>
       </td>
       <td className={`${INNER_CELL_CLASS} text-right`}>{formatQuantity(trade.quantity)}</td>
-      <td className={`${INNER_CELL_CLASS} text-right`}>
-        {trade.price === null ? (
-          <span title="No price entered for this trade." className={EXPLAINED_CLASS}>
-            {EMPTY_VALUE}
-          </span>
-        ) : (
-          formatMoney(trade.price)
-        )}
-      </td>
+      <td className={`${INNER_CELL_CLASS} text-right`}>{formatMoney(trade.price)}</td>
       <td className={`${INNER_CELL_CLASS} text-right`}>{formatMoney(trade.commission)}</td>
       <td title={trade.note ?? undefined} className={`${INNER_CELL_CLASS} max-w-[120px] truncate`}>
         {trade.note ?? <span className="text-faint">{EMPTY_VALUE}</span>}
@@ -144,9 +135,8 @@ function tradesOf(owner: TradeOwner): Trade[] {
 
 /** "2026-08-14 · SELL 10 AMZN at 205.00 · Me": the trade being deleted, in one line. */
 function tradeLineOf(trade: Trade, symbol: string, investorName: string | null): string {
-  const price = trade.price === null ? '' : ` at ${formatMoney(trade.price)}`;
   const investor = investorName === null ? '' : ` · ${investorName}`;
-  return `${trade.tradeDate} · ${trade.side} ${formatQuantity(trade.quantity)} ${symbol}${price}${investor}`;
+  return `${trade.tradeDate} · ${trade.side} ${formatQuantity(trade.quantity)} ${symbol} at ${formatMoney(trade.price)}${investor}`;
 }
 
 /** No trades yet: for a holding being backfilled, what the form will start as. */

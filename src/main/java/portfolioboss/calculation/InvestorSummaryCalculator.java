@@ -63,12 +63,12 @@ public record InvestorSummaryCalculator(long accountOwnerId, List<Long> investor
 
     /**
      * What they put in, less what their buys in USD took out, plus what their sells brought in, commissions included
-     * (INVESTORS_TODO.md, decision 4). {@code null} if one of those trades has no price.
+     * (INVESTORS_TODO.md, decision 4).
      */
     private BigDecimal cashOf(long investorId, BigDecimal depositsMinusWithdrawals) {
         BigDecimal cash = depositsMinusWithdrawals;
         for (TradeFact trade : accountCurrencyTradesOf(investorId)) {
-            cash = sumOrNull(cash, trade.cashFlow());
+            cash = cash.add(trade.cashFlow());
         }
         return cash;
     }
@@ -96,23 +96,11 @@ public record InvestorSummaryCalculator(long accountOwnerId, List<Long> investor
 
     private List<InvestorWarning> otherInvestorWarnings(long investorId, BigDecimal cash) {
         List<InvestorWarning> warnings = new ArrayList<>();
-        tradesWithoutPriceWarning(investorId).ifPresent(warnings::add);
         tradesNotInUsdWarning(investorId).ifPresent(warnings::add);
         negativeCashWarning(cash).ifPresent(warnings::add);
         warnings.addAll(moreSharesThanIbWarnings(investorId));
         closedPositionsNotCountedWarning(investorId).ifPresent(warnings::add);
         return warnings;
-    }
-
-    private Optional<InvestorWarning> tradesWithoutPriceWarning(long investorId) {
-        long tradesWithoutPrice = accountCurrencyTradesOf(investorId).stream()
-                .filter(trade -> trade.price() == null)
-                .count();
-        if (tradesWithoutPrice == 0) {
-            return Optional.empty();
-        }
-        return Optional.of(new InvestorWarning(InvestorWarningType.TRADES_WITHOUT_PRICE,
-                "No price on %s, so the cash is unknown.".formatted(countOf(tradesWithoutPrice, "trade"))));
     }
 
     private Optional<InvestorWarning> tradesNotInUsdWarning(long investorId) {
@@ -137,7 +125,7 @@ public record InvestorSummaryCalculator(long accountOwnerId, List<Long> investor
     }
 
     private Optional<InvestorWarning> negativeCashWarning(BigDecimal cash) {
-        if (cash == null || cash.signum() >= 0) {
+        if (cash.signum() >= 0) {
             return Optional.empty();
         }
         // Locale.ROOT: "-2,880.00" on every machine, whatever its language settings
@@ -233,7 +221,7 @@ public record InvestorSummaryCalculator(long accountOwnerId, List<Long> investor
             return Optional.empty();
         }
         return Optional.of(new InvestorWarning(InvestorWarningType.CLOSED_POSITIONS_NOT_COUNTED,
-                "Left out of the realized P&L: %s without one (a price is missing, or more was sold than bought)."
+                "Left out of the realized P&L: %s without one (more was sold than bought)."
                         .formatted(countOf(closedPositionsNotCounted, "closed position"))));
     }
 

@@ -144,29 +144,6 @@ class InvestorSummaryCalculatorTest {
     }
 
     @Test
-    void aTradeWithoutAPriceLeavesTheirCashAndCostUnknownAndTheAccountOwnersToo() {
-        Map<Long, InvestorSummary> summaries = summariesOf(
-                List.of(nvidia(39, buy(AVI_ID, "24", null)), microsoft()),
-                List.of(deposit(AVI_ID, "30000")));
-
-        InvestorSummary avi = summaries.get(AVI_ID);
-        assertThat(avi.cash()).isNull();
-        assertThat(avi.totalValue()).isNull();
-        assertThat(avi.sharesValue()).isEqualByComparingTo("4320");   // the quantity is known, and IB's price
-        assertThat(avi.sharesCost()).isNull();
-        assertThat(avi.unrealizedPnl()).isNull();
-        assertThat(avi.totalPnl()).isNull();
-        assertThat(avi.warnings()).containsExactly(new InvestorWarning(InvestorWarningType.TRADES_WITHOUT_PRICE,
-                "No price on 1 trade, so the cash is unknown."));
-
-        InvestorSummary accountOwner = summaries.get(ACCOUNT_OWNER_ID);
-        assertThat(accountOwner.cash()).isNull();
-        assertThat(accountOwner.totalValue()).isNull();
-        assertThat(accountOwner.sharesCost()).isNull();
-        assertThat(accountOwner.sharesValue()).isEqualByComparingTo("55680");
-    }
-
-    @Test
     void cashBelowZeroIsAWarning() {
         Map<Long, InvestorSummary> summaries = summariesOf(
                 List.of(nvidia(39, buy(AVI_ID, "24", "120")), microsoft()),
@@ -221,8 +198,8 @@ class InvestorSummaryCalculatorTest {
     void aClosedPositionWithoutARealizedPnlIsLeftOutWithAWarning() {
         Map<Long, InvestorSummary> summaries = summariesOf(
                 List.of(microsoft(),
-                        manualPosition("AAPL", "USD", buy(ACCOUNT_OWNER_ID, "10", null),
-                                sell(ACCOUNT_OWNER_ID, "10", "150")),
+                        manualPosition("AAPL", "USD", buy(ACCOUNT_OWNER_ID, "10", "140"),
+                                sell(ACCOUNT_OWNER_ID, "12", "150")),   // more sold than bought
                         manualPosition("CRM", "USD", buy(ACCOUNT_OWNER_ID, "10", "100"),
                                 sell(ACCOUNT_OWNER_ID, "10", "120"))),
                 List.of());
@@ -231,7 +208,7 @@ class InvestorSummaryCalculatorTest {
         assertThat(accountOwner.realizedPnlByCurrency().get("USD")).isEqualByComparingTo("200");
         assertThat(accountOwner.warnings()).containsExactly(new InvestorWarning(
                 InvestorWarningType.CLOSED_POSITIONS_NOT_COUNTED, "Left out of the realized P&L: 1 closed position "
-                + "without one (a price is missing, or more was sold than bought)."));
+                + "without one (more was sold than bought)."));
     }
 
     @Test
@@ -304,9 +281,8 @@ class InvestorSummaryCalculatorTest {
     /** Dated by the order a test creates them: a sell after the buy before it. */
     private TradeFact trade(long investorId, TradeSide side, String quantity, String price, String commission) {
         long tradeId = nextTradeId++;
-        BigDecimal priceOrNull = price == null ? null : new BigDecimal(price);
         return new TradeFact(tradeId, investorId, LocalDate.of(2026, 1, 1).plusDays(tradeId), side,
-                new BigDecimal(quantity), priceOrNull, new BigDecimal(commission));
+                new BigDecimal(quantity), new BigDecimal(price), new BigDecimal(commission));
     }
 
     private CashMovementFact deposit(long investorId, String amount) {

@@ -7,6 +7,7 @@ import {
   isBlank,
   isIsoDate,
   isPositiveWholeNumber,
+  isZeroOrMore,
   localTodayIsoDate,
   numberOrNull,
   trimmedOrNull,
@@ -86,7 +87,7 @@ function initialFormValues(
       tradeDate: tradeBeingEdited.tradeDate,
       side: tradeBeingEdited.side,
       quantityText: String(tradeBeingEdited.quantity),
-      priceText: tradeBeingEdited.price === null ? '' : String(tradeBeingEdited.price),
+      priceText: String(tradeBeingEdited.price),
       // The commission stored — the default, if none was entered. Emptying it works the default out again.
       commissionText: String(tradeBeingEdited.commission),
       note: tradeBeingEdited.note ?? '',
@@ -113,9 +114,7 @@ function problemWithForm(formValues: TradeFormValues, todayIsoDate: string): str
   if (!isIsoDate(formValues.tradeDate)) return 'Enter the trade date as yyyy-MM-dd.';
   if (formValues.tradeDate > todayIsoDate) return 'The trade date cannot be in the future.';
   if (!isPositiveWholeNumber(formValues.quantityText)) return 'Enter a whole quantity greater than 0.';
-  if (!isBlank(formValues.priceText) && !(Number(formValues.priceText) >= 0)) {
-    return 'The price cannot be negative.';
-  }
+  if (!isZeroOrMore(formValues.priceText)) return 'Enter the price the trade was executed at (0 or more).';
   if (!isBlank(formValues.commissionText) && !(Number(formValues.commissionText) >= 0)) {
     return 'The commission cannot be negative.';
   }
@@ -127,7 +126,7 @@ function toTradeRequest(formValues: TradeFormValues): TradeRequest {
     tradeDate: formValues.tradeDate,
     side: formValues.side,
     quantity: Number(formValues.quantityText),
-    price: numberOrNull(formValues.priceText),
+    price: Number(formValues.priceText),
     note: trimmedOrNull(formValues.note),
     commission: numberOrNull(formValues.commissionText),
     investorId: formValues.investorId,
@@ -141,7 +140,7 @@ function BackfillNote({ holding }: { holding: Holding }) {
       No trades entered yet, so this starts as a BUY of the whole position (
       <b className="font-semibold">{formatQuantity(holding.position)}</b>) at IB’s average cost,{' '}
       <b className="font-semibold">{formatMoney(holding.averageCost)}</b>, which includes commissions. Set the date it
-      was bought, and the price if you know the execution price.
+      was bought, and change the price to the execution price if you know it.
     </InfoBand>
   );
 }
@@ -236,7 +235,7 @@ export function TradeModal({
             className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} w-full`}
           />
         </Field>
-        <Field label="Price" optional>
+        <Field label="Price">
           <input
             type="text"
             inputMode="decimal"

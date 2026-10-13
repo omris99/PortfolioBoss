@@ -301,7 +301,7 @@ class PortfolioControllerTest {
     @Test
     void servesClosedPositionsWithTheFieldNamesTheUiExpects() throws Exception {
         PortfolioResponse withClosedPositions = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(),
-                List.of(appleBoughtAndSold(), microsoftSoldWithNoPricesEntered(), teslaEnteredByHand()), List.of(),
+                List.of(appleBoughtAndSold(), microsoftSoldMoreThanBought(), teslaEnteredByHand()), List.of(),
                 null);
         given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withClosedPositions));
 
@@ -330,7 +330,7 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.closedPositions[0].investorId").value(ACCOUNT_OWNER_ID))
                 .andExpect(jsonPath("$.closedPositions[1].warning").value(SOLD_TOO_MANY))
                 .andExpect(jsonPath("$.closedPositions[1].sector").value(nullValue()))
-                .andExpect(jsonPath("$.closedPositions[1].averageBuyPrice").value(nullValue()))
+                .andExpect(jsonPath("$.closedPositions[1].averageBuyPrice").value(400.0))
                 .andExpect(jsonPath("$.closedPositions[1].realizedPnl").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[1].realizedPnlPercent").value(nullValue()))
                 .andExpect(jsonPath("$.closedPositions[2].source").value("MANUAL"))
@@ -364,10 +364,11 @@ class PortfolioControllerTest {
                 ClosedPositionSource.TRADES, null, null, BigDecimal.ZERO, List.of(buy, sell), ACCOUNT_OWNER_ID);
     }
 
-    /** Bought and sold with no price entered for either, no sector, and more sold than bought. */
-    private ClosedPositionResponse microsoftSoldWithNoPricesEntered() {
+    /** 5 bought at 400 and 7 sold at 420, with no sector: more sold than bought, so no realized P&amp;L. */
+    private ClosedPositionResponse microsoftSoldMoreThanBought() {
         return new ClosedPositionResponse(8L, "MSFT", "USD", null, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 2, 1),
-                31, new BigDecimal("7"), null, null, null, null, SOLD_TOO_MANY, new BigDecimal("10"),
+                31, new BigDecimal("7"), new BigDecimal("400"), new BigDecimal("420"), null, null, SOLD_TOO_MANY,
+                new BigDecimal("10"),
                 ClosedPositionSource.TRADES, null, null, BigDecimal.ZERO, List.of(), ACCOUNT_OWNER_ID);
     }
 

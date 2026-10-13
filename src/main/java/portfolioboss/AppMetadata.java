@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.21.0";
+    public static final String VERSION = "0.22.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,15 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.22.0: [Weights per investor, trades need a price]
+ * WeightsTabs added: the Overview's weight graphs and the drawer's Weight tab get tabs — Portfolio, then each investor, the owner first; hidden with one investor.
+ * investmentsAndCash added: an investor's tab weighs their own shares of each holding and their own cash, by their card's rule, so their weights add up to 100% of their money.
+ * HoldingWeightsCard: a bar on an investor's tab opens the drawer on Weight with that investor's tab; captions and hints name the tab's money ("all of Shay's money").
+ * WeightCalculatorPanel: on an investor's tab it uses their quantity, cash and own average cost; for an investor holding none of the stock it works out the shares to buy.
+ * TradeRequest: the price is now required (400 "price: must not be null"), and the trade form's Price field is no longer optional — every calculation on the trades needs it.
+ * V8__trade_price_required: trade.price is NOT NULL, so the database refuses a trade without a price too; every trade stored already had one.
+ * Trades without a price are gone from the calculations: an investor's cash is always known, TRADES_WITHOUT_PRICE and "(n without prices)" are removed; only an over-sell has no realized P&L.
+ *
  * VERSION 0.21.0: [Portfolio weights]
  * SectorWeightsCard added: the Overview shows the money in stocks by sector as a ring, a legend beside it with each sector's percent and value; the four heaviest in color, the rest as "Other".
  * HoldingWeightsCard added: each holding's share of the whole account as a bar, heaviest first, then the cash, adding up to 100%; a bar opens that holding's drawer on its Weight tab.

@@ -4,7 +4,8 @@ import { INPUT_CLASS } from '../../lib/formInput';
 import { NUMBER_INPUT_CLASS } from '../../lib/styles';
 import type { Holding } from '../../types/portfolio';
 import { Field, FormError } from '../FormFields';
-import type { WholeAccount } from '../graphs/portfolioWeights';
+import { weightsTabOf, type InvestmentsAndCash } from '../graphs/investmentsAndCash';
+import { WeightsTabs } from '../graphs/WeightsTabs';
 import { WarnMark } from '../WarnMark';
 import {
   holdingInAccountOf,
@@ -15,15 +16,15 @@ import {
   type WeightPlan,
 } from './targetWeight';
 
-/** "Now 21.5% of the whole account · 21,520.00 of 100,000.00". */
-function CurrentWeight({ holdingInAccount }: { holdingInAccount: HoldingInAccount }) {
+/** "Now 21.5% of the whole account · 21,520.00 of 100,000.00" — of all of Shay's money, on Shay's tab. */
+function CurrentWeight({ holdingInAccount, tab }: { holdingInAccount: HoldingInAccount; tab: InvestmentsAndCash }) {
   const { quantity, price, wholeAccount } = holdingInAccount;
   return (
     <p className="mb-4 flex items-baseline gap-2">
       <span className="text-label text-muted">Now</span>
       <span className="text-figure">{formatPercent(percentOfAccountOf(holdingInAccount))}</span>
       <span className="text-muted">
-        of the whole account · {formatMoney(quantity * price)} of {formatMoney(wholeAccount.value)}
+        of {tab.wholeName} · {formatMoney(quantity * price)} of {formatMoney(wholeAccount.value)}
       </span>
     </p>
   );
@@ -51,7 +52,15 @@ function CashCoverage({ cash, isCoveredByCash }: { cash: number; isCoveredByCash
 }
 
 /** "Sell 31 shares ≈ 6,671.20", then what the account looks like after it. */
-function TradePlan({ plan, cash }: { plan: Exclude<WeightPlan, { action: 'none' }>; cash: number }) {
+function TradePlan({
+  plan,
+  cash,
+  tab,
+}: {
+  plan: Exclude<WeightPlan, { action: 'none' }>;
+  cash: number;
+  tab: InvestmentsAndCash;
+}) {
   const isSale = plan.action === 'sell';
   return (
     <div className="mt-4 rounded-lg border px-4 py-3">
@@ -62,13 +71,13 @@ function TradePlan({ plan, cash }: { plan: Exclude<WeightPlan, { action: 'none' 
         <span className="ml-auto text-figure">≈ {formatMoney(plan.amount)}</span>
       </div>
       <PlanRow label={isSale ? 'After the sale' : 'After the purchase'}>
-        {formatQuantity(plan.quantityAfter)} shares · {formatPercent(plan.percentAfter)} of the whole account
+        {formatQuantity(plan.quantityAfter)} shares · {formatPercent(plan.percentAfter)} of {tab.wholeName}
       </PlanRow>
       <PlanRow label="Commission">≈ {formatMoney(plan.commission)}</PlanRow>
       {plan.action === 'sell' && (
         <PlanRow label="Realized P&L">
           <span className={profitLossColorClass(plan.realizedPnl)}>≈ {formatSignedMoney(plan.realizedPnl)}</span>
-          <span className="text-muted"> at IB’s average cost, the commission off</span>
+          <span className="text-muted"> at {tab.averageCostName}, the commission off</span>
         </PlanRow>
       )}
       {plan.action === 'buy' && (
@@ -81,7 +90,15 @@ function TradePlan({ plan, cash }: { plan: Exclude<WeightPlan, { action: 'none' 
 }
 
 /** What the target typed in comes to — or what to type, or why it can't be used. */
-function PlanResult({ holdingInAccount, targetText }: { holdingInAccount: HoldingInAccount; targetText: string }) {
+function PlanResult({
+  holdingInAccount,
+  targetText,
+  tab,
+}: {
+  holdingInAccount: HoldingInAccount;
+  targetText: string;
+  tab: InvestmentsAndCash;
+}) {
   const target = targetPercentOf(targetText);
   if (target === null) {
     return (
@@ -100,47 +117,87 @@ function PlanResult({ holdingInAccount, targetText }: { holdingInAccount: Holdin
       </p>
     );
   }
-  return <TradePlan plan={plan} cash={holdingInAccount.wholeAccount.cash} />;
+  return <TradePlan plan={plan} cash={holdingInAccount.wholeAccount.cash} tab={tab} />;
 }
 
-/**
- * The drawer's Weight tab: how many shares to sell or buy for the holding to weigh a target percent of the whole account
- * (the stocks plus the cash, as in the Overview's graphs). A calculation only: nothing reaches IB and nothing is saved.
- * `syncedAt` is the last sync's time, which the price is from.
- */
-export function WeightCalculatorPanel({
-  holding,
-  wholeAccount,
-  syncedAt,
+/** The calculator on one tab: the weight now, the target field, and what the target comes to. */
+function WeightCalculator({
+  holdingInAccount,
+  tab,
+  targetText,
+  onTargetTextChange,
 }: {
-  holding: Holding;
-  wholeAccount: WholeAccount | null;
-  syncedAt: string;
+  holdingInAccount: HoldingInAccount;
+  tab: InvestmentsAndCash;
+  targetText: string;
+  onTargetTextChange: (typedText: string) => void;
 }) {
-  const [targetText, setTargetText] = useState('');
-  const holdingInAccount = holdingInAccountOf(holding, wholeAccount);
-  if ('reason' in holdingInAccount) return <p className="py-6 text-muted">{holdingInAccount.reason}</p>;
-
   return (
-    <div>
-      <CurrentWeight holdingInAccount={holdingInAccount} />
-      <Field label="Target weight" hint="Of the whole account: the stocks plus the cash.">
+    <>
+      <CurrentWeight holdingInAccount={holdingInAccount} tab={tab} />
+      <Field label="Target weight" hint={`Of ${tab.wholeName}: ${tab.wholeParts}.`}>
         <span className="flex items-center gap-2">
           <input
             type="text"
             inputMode="decimal"
             value={targetText}
-            onChange={(event) => setTargetText(event.target.value)}
+            onChange={(event) => onTargetTextChange(event.target.value)}
             className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} w-24`}
           />
           <span className="text-muted">%</span>
         </span>
       </Field>
-      <PlanResult holdingInAccount={holdingInAccount} targetText={targetText} />
-      <p className="mt-4 text-caption text-muted">
-        At IB’s last price, {formatMoney(holdingInAccount.price)}, from the sync of {formatDateTime(syncedAt)}. A
-        calculation only: nothing is sold or bought.
-      </p>
+      <PlanResult holdingInAccount={holdingInAccount} targetText={targetText} tab={tab} />
+    </>
+  );
+}
+
+/**
+ * The drawer's Weight tab: how many shares to sell or buy for the holding to weigh a target percent of the whole account
+ * (the stocks plus the cash, as in the Overview's graphs) — or, on an investor's tab, of all of that investor's money.
+ * `tabs` are Portfolio and then every investor, and it opens on `initialInvestorId`'s (`null`: Portfolio); the target
+ * typed in stays when the tab changes, to compare. A calculation only: nothing reaches IB and nothing is saved.
+ * `syncedAt` is the last sync's time, which the price is from.
+ */
+export function WeightCalculatorPanel({
+  holding,
+  tabs,
+  initialInvestorId,
+  syncedAt,
+}: {
+  holding: Holding;
+  tabs: InvestmentsAndCash[];
+  initialInvestorId: number | null;
+  syncedAt: string;
+}) {
+  const [selectedInvestorId, setSelectedInvestorId] = useState(initialInvestorId);
+  const [targetText, setTargetText] = useState('');
+  const tab = weightsTabOf(tabs, selectedInvestorId);
+  const holdingInAccount = holdingInAccountOf(holding, tab);
+
+  return (
+    <div>
+      {tabs.length > 1 && (
+        <div className="mb-4">
+          <WeightsTabs tabs={tabs} selectedInvestorId={tab.investorId} onSelect={setSelectedInvestorId} />
+        </div>
+      )}
+      {'reason' in holdingInAccount ? (
+        <p className="py-6 text-muted">{holdingInAccount.reason}</p>
+      ) : (
+        <>
+          <WeightCalculator
+            holdingInAccount={holdingInAccount}
+            tab={tab}
+            targetText={targetText}
+            onTargetTextChange={setTargetText}
+          />
+          <p className="mt-4 text-caption text-muted">
+            At IB’s last price, {formatMoney(holdingInAccount.price)}, from the sync of {formatDateTime(syncedAt)}. A
+            calculation only: nothing is sold or bought.
+          </p>
+        </>
+      )}
     </div>
   );
 }

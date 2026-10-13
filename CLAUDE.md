@@ -52,7 +52,9 @@ keyboard handling; the date fields use the browser's own picker behind a calenda
 "Loading…" box rather than the design's skeletons. Since 2026-10-13 the Overview also shows the money by sector (a ring)
 and by holding with the cash (bars), with the stocks against the cash under the account's figures, and a holding's
 drawer has a Weight tab that works out the shares to sell or buy for a target weight — built in the UI from figures
-`/api/portfolio` already sends, without Claude Design (see the architecture below).
+`/api/portfolio` already sends, without Claude Design (see the architecture below); both have a tab per investor
+(Portfolio · Omri · Shay …) that weighs that investor's own shares and cash. Every trade has a price since then too:
+the API, the form and the table (V8) all refuse one without.
 
 ## Hard invariant: read-only
 
@@ -314,7 +316,9 @@ migration), the tokens, Tavily's credits and `cost_usd`; every run is kept, the 
 `V7__stock_analysis_search_results.sql` added `stock_analysis.search_results` (`JSONB`, `NULL` before 2026-10-10): the
 `ai.StockSearches` Claude read for that analysis — the four searches' results that name the stock, and the addresses of
 those that didn't — so that a fact missing from an analysis can be traced to the search or to Claude (decision 22); the
-API doesn't serve it, it is there for a look in SQL. `HoldingRepository`
+API doesn't serve it, it is there for a look in SQL. `V8__trade_price_required.sql` (2026-10-13) made `trade.price`
+`NOT NULL`: every trade has a price, which every calculation on the trades needs (all 40 stored then had one).
+`HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
 default method `accountOwner()`), `InvestorCashMovementRepository`, `AccountStateRepository`, `DailyCloseRepository`
@@ -323,7 +327,7 @@ because a derived `deleteBy…` loads every row and deletes them one at a time) 
 (`findLatestOfEveryHolding` — PostgreSQL's own `DISTINCT ON (holding_id)` in a `nativeQuery`) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V8__….sql`.
+  checksum): a schema change is a new `V9__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -344,8 +348,9 @@ Things that are easy to break:
   `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
-  database and compared table by table first). One that only adds a table or a column (V5, V6, V7) still gets the
-  backup first, checked for the same row counts as the database. A live check that writes test data (a made-up investor) runs against a
+  database and compared table by table first). One that only adds a table or a column (V5, V6, V7) or a constraint
+  (V8, after counting the rows it would refuse: none) still gets the backup first, checked for the same row counts as
+  the database. A live check that writes test data (a made-up investor) runs against a
   scratch copy too, pointed at with `SPRING_DATASOURCE_URL`: there is no way to delete an investor.
 
 `portfolioboss.calculation` holds only the computation — split on 2026-10-09 at the user's request, since most of its
@@ -372,10 +377,9 @@ moment and takes the same share of the buy commissions with it, and the sell bac
 a closed period adds up exactly. `ClosedPosition` keeps raw totals — dates, `boughtQuantity`, `soldQuantity`,
 `soldCost`, `sellProceeds`, `commissions` (every sell's, plus the buys' part that left with the shares sold),
 `remainingQuantity` (0 once closed) and `tradeIds` — from which it derives the average prices (buy over the shares
-sold, sell over the shares sold) and `realizedPnl` with its percent of `soldCost`; `null` as soon as a sell, or a
-buy before one, has no price, never a guess. A period that sold more than it bought (an over-sell) has no realized
-P&L either — the extra shares' proceeds would count as pure profit — and `ClosedPosition.warning()` says so in
-English. A sell entered while already flat is treated as a data-entry mistake and silently ignored, never rejected. `holdingDays` counts to `lastSellDate` when `CLOSED`, or to the last sync's date (`account_state.as_of`,
+sold, sell over the shares sold) and `realizedPnl` with its percent of `soldCost`. Every trade has a price (V8), so the
+only period with no realized P&L is one that sold more than it bought (an over-sell) — the extra shares' proceeds
+would count as pure profit — and `ClosedPosition.warning()` says so in English. A sell entered while already flat is treated as a data-entry mistake and silently ignored, never rejected. `holdingDays` counts to `lastSellDate` when `CLOSED`, or to the last sync's date (`account_state.as_of`,
 not the system clock, so the number doesn't drift between page loads) when `OPEN` — and is never negative: a
 buy dated after that sync (entered today while serving an older sync, e.g. with TWS off) counts as 0 days. `HoldingRepository
 .findByAccountOrderById`'s `@EntityGraph(attributePaths = "trades")` loads a holding's trades in the same
@@ -401,10 +405,11 @@ Profit is from the shares only, the same for everyone: unrealized = value − co
 **per currency** (`realizedPnlByCurrency`); everything else is USD only. `InvestorSummaryCalculator` (its inputs as
 record components: the owner's id, the investor ids, every `PositionTrades`, the cash movements, IB's cash and NAV)
 returns an `InvestorSummary` per investor (`depositsMinusWithdrawals` — `null` for the owner —, `cash`, `sharesValue`,
-`totalValue`, `sharesCost`, `realizedPnlByCurrency`, `warnings`; derived `unrealizedPnl`, its percent and `totalPnl`). A
-missing price makes what depends on it `null`, never a guess. `InvestorWarning(type, message)` — several at once, shown,
-never blocking: `TRADES_WITHOUT_PRICE`, `TRADES_NOT_IN_USD` (left out of the cash), `NEGATIVE_CASH`,
-`MORE_SHARES_THAN_IB`, `CLOSED_POSITIONS_NOT_COUNTED` (no realized P&L to add). Dividends, interest and IB's own fees
+`totalValue`, `sharesCost`, `realizedPnlByCurrency`, `warnings`; derived `unrealizedPnl`, its percent and `totalPnl`).
+Another investor's cash is always known, since every trade has a price; a figure IB did not report (a market price, the
+cash) makes what depends on it `null`, never a guess. `InvestorWarning(type, message)` — several at once, shown, never
+blocking: `TRADES_NOT_IN_USD` (left out of the cash), `NEGATIVE_CASH`, `MORE_SHARES_THAN_IB`,
+`CLOSED_POSITIONS_NOT_COUNTED` (an over-sell: no realized P&L to add). `TRADES_WITHOUT_PRICE` was removed with V8. Dividends, interest and IB's own fees
 are in IB's cash, so they land on the owner; they count toward no one's profit.
 
 `HoldingHistory.warnings(status, ibPosition)` checks the trades entered against IB, which stays the source of truth
@@ -554,18 +559,28 @@ Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types
 in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.
 
 The Overview's weight graphs and the holding drawer's Weight tab (2026-10-13) are worked out in the UI from what
-`/api/portfolio` already sends — no endpoint, nothing stored. `ui/src/components/graphs/portfolioWeights.ts` weighs the
-open holdings (`portfolioWeightsOf`): each sector's and each holding's share of the money in stocks and of "the whole
-account" — the stocks weighed plus IB's `totalCashValue` (`wholeAccountOf`), **not** `netLiquidation` (a hair more: it
-also counts accrued interest and dividends), so the holdings and the cash add up to exactly 100% and agree with the
-Account summary's stocks-and-cash bar. A holding in another currency (the API has no exchange rate yet), with no market
-value, or worth 0 or less is left out and named under the graphs. The sector ring (`DonutChart`, hand-drawn SVG — no
-chart library) is "of the money in stocks" and colors the four heaviest sectors, the rest folded into "Other"; "By
-holding" is "of the whole account": the ten heaviest holdings, the rest as "n more", then the cash, and a holding's bar
-opens its drawer on the Weight tab (the link's state, `HoldingDrawer.OpenOnTab`). The tab's arithmetic is
-`ui/src/components/weightCalculator/targetWeight.ts`: the whole shares to sell (rounded up, so it lands at the target or
-just under) or buy (rounded down), the weight after, the default commission and, for a sale, the realized P&L at IB's
-average cost — on the same whole account, which a sale or a purchase doesn't change (cash and shares trade places).
+`/api/portfolio` already sends — no endpoint, nothing stored. Both show a row of tabs (`graphs/WeightsTabs.tsx`, hidden
+with a single investor): **Portfolio**, then each investor, the account owner first. A tab is an `InvestmentsAndCash`
+(`ui/src/components/graphs/investmentsAndCash.ts`, `weightsTabsOf`): its `Investment`s — a holding as the tab weighs it:
+all of it on Portfolio (IB's quantity, market value, average cost), one investor's `investorQuantities` part on their
+tab (their quantity, `sharesValue`, `sharesCost` ÷ quantity), only the holdings they hold some of — its cash (IB's
+`totalCashValue`, or the investor's card's `cash`), and its wording ("the whole account" / "all of Shay's money", "the
+money in stocks" / "Shay's money in stocks", the cash's hint, "IB's average cost" / "the average cost of Shay's shares").
+The parts follow the investors' cards' rule, so the investors' tabs add up to Portfolio's.
+`ui/src/components/graphs/portfolioWeights.ts` weighs one tab (`portfolioWeightsOf`): each sector's and each holding's
+share of the money in stocks and of "the whole account" — the stocks weighed plus the tab's cash (`wholeAccountOf`),
+**not** `netLiquidation` (a hair more: it also counts accrued interest and dividends), so the holdings and the cash add up
+to exactly 100% and, on Portfolio, agree with the Account summary's stocks-and-cash bar (which stays the account's). A
+holding in another currency (the API has no exchange rate yet), with no market value, or worth 0 or less is left out and
+named under the graphs. The sector ring (`DonutChart`, hand-drawn SVG — no chart library) is "of the money in stocks"
+and colors the four heaviest sectors, the rest folded into "Other"; "By holding" is "of the whole account": the ten
+heaviest holdings, the rest as "n more", then the cash, and a holding's bar opens its drawer on the Weight tab of the
+same investor (the link's state, `HoldingDrawer.OpenOnTab` with `weightsInvestorId`). The tab's arithmetic is
+`ui/src/components/weightCalculator/targetWeight.ts` (`holdingInAccountOf(holding, tab)`): the whole shares to sell
+(rounded up, so it lands at the target or just under) or buy (rounded down), the weight after, the default commission
+and, for a sale, the realized P&L at the tab's average cost — on the same whole account, which a sale or a purchase
+doesn't change (cash and shares trade places). On the tab of an investor who holds none of the holding it starts from 0
+shares, so only buying is worked out (`investmentIn`).
 Things that are easy to break:
 - `ui/src/lib/orderCommission.ts` copies `calculation.OrderCommission`'s rule (1¢ a share, at least $5) by hand: change
   both together.
@@ -598,8 +613,10 @@ write the UI reloads all of `/api/portfolio`, so the endpoints stay small. The b
 limits that mirror the columns (`@Digits(integer = 14, fraction = 6)` for a price or commission in `NUMERIC(20,6)`,
 with its own readable message; a quantity is a **whole number** of shares, `@Digits(integer = 14, fraction = 0)` —
 "must be a whole number (at most 14 digits)", which also rejects a raw `10.0` since it counts the decimals as
-written; `@Size` for the `VARCHAR`s, `@PastOrPresent` dates). A commission left empty stores the default
-(`OrderCommission.orDefault`); 0 is a commission too. The sector and the note are trimmed, and blank becomes `null`.
+written; `@Size` for the `VARCHAR`s, `@PastOrPresent` dates). A trade's price is required (`@NotNull`, since
+2026-10-13 — "price: must not be null"; the table refuses it too, V8), and 0 is a price. A commission left empty stores
+the default (`OrderCommission.orDefault`); 0 is a commission too. The sector and the note are trimmed, and blank becomes
+`null`.
 An unknown id is a `ResponseStatusException` with 404. `ApiErrorHandler` (`@RestControllerAdvice extends
 ResponseEntityExceptionHandler`) makes every error a `ProblemDetail` JSON body (`status`, `title`, `detail`)
 and overrides only the validation case, so that `detail` names the fields — `"quantity: must be greater than
@@ -699,7 +716,8 @@ Things that are easy to break:
   the UI to show and enter them, the reconciliation warnings, the closed positions (commissions, average cost,
   manual positions) and the investors sharing the account are in, and so are the momentum score and the analysis of
   AI_ANALYSIS_TODO.md, backend and UI; the API reads only from the database. From Milestone 3, the weight of each holding
-  and sector (TODO.md's principle 3) and a target-weight calculator are in, in the UI only.
+  and sector (TODO.md's principle 3) and a target-weight calculator are in — of the whole account and of each investor's
+  own money —, in the UI only.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

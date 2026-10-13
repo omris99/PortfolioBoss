@@ -6,8 +6,8 @@ import type { Holding, PortfolioSnapshot } from '../types/portfolio';
 import { AnalyzeEveryHoldingControl } from '../components/AnalyzeControls';
 import { ColumnsMenu, useVisibleColumnKeys } from '../components/ColumnsMenu';
 import { EmptyBox } from '../components/EmptyBox';
-import { wholeAccountOf } from '../components/graphs/portfolioWeights';
-import { HoldingDrawer, tabToOpenOn } from '../components/HoldingDrawer';
+import { weightsTabsOf } from '../components/graphs/investmentsAndCash';
+import { HoldingDrawer, tabToOpenOn, weightsInvestorIdToOpenOn } from '../components/HoldingDrawer';
 import { needsAttention } from '../components/HoldingWarnings';
 import { PageHeader } from '../components/PageHeader';
 import { DEFAULT_SORT, POSITION_COLUMNS, PositionsTable, sortHoldings, type SortState } from '../components/PositionsTable';
@@ -154,7 +154,8 @@ export function PositionsPage({
           holding={openHolding}
           closedPositions={snapshot.closedPositions.filter((closedPosition) => closedPosition.holdingId === openHolding.id)}
           estimatedAnalysisCost={snapshot.estimatedAnalysisCost}
-          wholeAccount={wholeAccountOf(openHoldings, snapshot.totalCashValue)}
+          weightsTabs={weightsTabsOf(openHoldings, snapshot.totalCashValue, snapshot.investors)}
+          initialWeightsInvestorId={weightsInvestorIdToOpenOn(location.state)}
           syncedAt={snapshot.asOf}
           initialTab={tabToOpenOn(location.state)}
           previousLabel={neighbourOf(rows, openHolding.id, -1).symbol}

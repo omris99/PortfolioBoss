@@ -94,15 +94,12 @@ class HoldingWriteServiceTest {
     }
 
     @Test
-    void aTradeWithoutPriceOrNoteIsStoredWithBothNull() {
+    void aBlankNoteIsStoredAsNull() {
         writeService.addTrade(appleHoldingId,
-                new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal("10"), null, "   ", null,
-                        null));
+                new TradeRequest(LocalDate.of(2024, 3, 14), TradeSide.BUY, new BigDecimal("10"), new BigDecimal("150"),
+                        "   ", null, null));
 
-        TradeResponse storedTrade = readApple().trades().get(0);
-
-        assertThat(storedTrade.price()).isNull();
-        assertThat(storedTrade.note()).isNull();
+        assertThat(readApple().trades().get(0).note()).isNull();
     }
 
     @Test

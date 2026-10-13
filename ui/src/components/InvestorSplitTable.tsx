@@ -18,7 +18,7 @@ import type { ClosedPosition, Holding, Investor, InvestorQuantity } from '../typ
 import { accountOwnerOf, hasSeveralInvestors, useInvestors } from './InvestorsContext';
 
 const WITHOUT_REALIZED_PNL_HINT =
-  'One of the closed positions here has no realized P&L: a price is missing, or more was sold than bought.';
+  'One of the closed positions here has no realized P&L: more was sold than bought.';
 
 /**
  * The position whose profit is divided: a holding, with IB's figures and each investor's part of them, or a manual

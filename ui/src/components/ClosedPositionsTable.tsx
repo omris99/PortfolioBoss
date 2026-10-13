@@ -47,12 +47,8 @@ export function newestSaleFirst(closedPositions: ClosedPosition[]): ClosedPositi
 
 // ── pieces shared with the drawer ───────────────────────────────────────────────────────────────
 
-/** Why a closed position has no realized P&L, on hover of its "—". */
-export function missingRealizedPnlReason(closedPosition: ClosedPosition): string {
-  return closedPosition.warning !== null
-    ? 'Sold more than it bought in this period, so there is no P&L: check its trades.'
-    : 'A trade in this period has no price, so there is no P&L yet.';
-}
+/** Why a closed position has no realized P&L, on hover of its "—": the only reason there can be, since every trade has a price. */
+export const NO_REALIZED_PNL_REASON = 'Sold more than it bought in this period, so there is no P&L: check its trades.';
 
 /** "manual" on a manual position; "partial · still holding 35" while part of the stretch is still held. */
 export function ClosedPositionTags({ closedPosition }: { closedPosition: ClosedPosition }) {
@@ -70,7 +66,7 @@ export function ClosedPositionTags({ closedPosition }: { closedPosition: ClosedP
 function RealizedPnl({ closedPosition }: { closedPosition: ClosedPosition }) {
   if (closedPosition.realizedPnl === null) {
     return (
-      <span title={missingRealizedPnlReason(closedPosition)} className={EXPLAINED_CLASS}>
+      <span title={NO_REALIZED_PNL_REASON} className={EXPLAINED_CLASS}>
         {EMPTY_VALUE}
       </span>
     );
@@ -364,15 +360,12 @@ function RealizedPnlByInvestor({ closedPositions }: { closedPositions: ClosedPos
 
 /**
  * The Closed page's summary: the realized P&L of every closed position, per currency — never added across currencies —,
- * how many it leaves out (a warning under the row, a missing price), and with several investors each one's total.
+ * how many it leaves out (each with a warning under its row), and with several investors each one's total.
  */
 export function ClosedSummary({ closedPositions }: { closedPositions: ClosedPosition[] }) {
   const investors = useInvestors();
   const totals = currencyTotalsInOrder(realizedPnlByCurrency(closedPositions));
   const withWarningCount = closedPositions.filter((closedPosition) => closedPosition.warning !== null).length;
-  const withoutPricesCount = closedPositions.filter(
-    (closedPosition) => closedPosition.realizedPnl === null && closedPosition.warning === null,
-  ).length;
 
   return (
     <section aria-label="Realized P&L" className={`${CARD_CLASS} px-6 py-4`}>
@@ -391,14 +384,6 @@ export function ClosedSummary({ closedPositions }: { closedPositions: ClosedPosi
         {withWarningCount > 0 && (
           <span className="inline-flex items-center gap-1.5 self-center font-medium text-warn-real">
             <WarnMark level="real" />({withWarningCount} to check)
-          </span>
-        )}
-        {withoutPricesCount > 0 && (
-          <span
-            title="Some trades have no price, so their periods are left out of these totals."
-            className={`self-center font-medium text-muted ${EXPLAINED_CLASS}`}
-          >
-            ({withoutPricesCount} without prices)
           </span>
         )}
       </div>

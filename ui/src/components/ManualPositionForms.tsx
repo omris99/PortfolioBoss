@@ -7,13 +7,14 @@ import {
   isBlank,
   isIsoDate,
   isPositiveWholeNumber,
+  isZeroOrMore,
   localTodayIsoDate,
   numberOrNull,
   trimmedOrNull,
 } from '../lib/formInput';
 import { NUMBER_INPUT_CLASS, PRIMARY_BUTTON_CLASS, QUIET_DANGER_BUTTON_CLASS } from '../lib/styles';
 import type { ClosedPosition, ManualPositionRequest, NewManualPositionRequest } from '../types/portfolio';
-import { ClosedPositionTags, missingRealizedPnlReason } from './ClosedPositionsTable';
+import { ClosedPositionTags, NO_REALIZED_PNL_REASON } from './ClosedPositionsTable';
 import { CurrencyFigure } from './CurrencyFigure';
 import { DateInput, Field, FormError } from './FormFields';
 import { InvestorSelect } from './InvestorSelect';
@@ -88,10 +89,6 @@ function problemWithDetails(values: DetailsValues): string | null {
   if (isBlank(values.symbol)) return 'Enter the symbol.';
   if (isBlank(values.currency)) return 'Enter the currency.';
   return null;
-}
-
-function isZeroOrMore(typedText: string): boolean {
-  return !isBlank(typedText) && Number(typedText) >= 0;
 }
 
 /** An empty commission is fine (the default); a typed one must not be negative. */
@@ -365,7 +362,7 @@ function ManualPositionLine({ closedPosition }: { closedPosition: ClosedPosition
       <b className="font-semibold">{closedPosition.symbol}</b>
       <ClosedPositionTags closedPosition={closedPosition} />· sold {closedPosition.closeDate} ·
       {closedPosition.realizedPnl === null ? (
-        <span title={missingRealizedPnlReason(closedPosition)}>no P&amp;L</span>
+        <span title={NO_REALIZED_PNL_REASON}>no P&amp;L</span>
       ) : (
         <CurrencyFigure value={closedPosition.realizedPnl} currency={closedPosition.currency} />
       )}

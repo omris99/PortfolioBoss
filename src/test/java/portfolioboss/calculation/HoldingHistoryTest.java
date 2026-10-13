@@ -350,33 +350,6 @@ class HoldingHistoryTest {
     }
 
     @Test
-    void aTradeWithNoPriceLeavesOnlyItsOwnSidesTotalUnknown() {
-        HoldingHistory history = HoldingHistory.of(List.of(
-                buy("2024-01-01", 10, "100"),
-                buy("2024-02-01", 10),           // no price entered
-                sell("2024-03-01", 20, "120")));
-
-        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
-            assertThat(closedPosition.soldCost()).isNull();
-            assertThat(closedPosition.sellProceeds()).isEqualByComparingTo("2400");
-        });
-    }
-
-    /** The shares sold left before the buy with no price came in, so what they cost is still known. */
-    @Test
-    void aBuyWithNoPriceAfterAPartialSellLeavesWhatWasSoldKnown() {
-        HoldingHistory history = HoldingHistory.of(List.of(
-                buy("2024-01-01", 10, "100"),
-                sell("2024-02-01", 5, "150"),
-                buy("2024-03-01", 5)));          // no price entered
-
-        assertThat(history.closedPositions()).singleElement().satisfies(closedPosition -> {
-            assertThat(closedPosition.soldCost()).isEqualByComparingTo("500");
-            assertThat(closedPosition.remainingQuantity()).isEqualByComparingTo("10");
-        });
-    }
-
-    @Test
     void sellingMoreThanWasBoughtStillClosesThePositionPeriod() {
         HoldingHistory history = HoldingHistory.of(List.of(
                 buy("2024-01-01", 10, "100"),
@@ -498,26 +471,20 @@ class HoldingHistoryTest {
         assertThat(history.heldCost()).isEqualByComparingTo("0");
     }
 
-    @Test
-    void aBuyStillHeldWithNoPriceLeavesTheCostUnknown() {
-        HoldingHistory history = HoldingHistory.of(List.of(
-                buy("2026-01-01", 10, "100"),
-                buy("2026-02-01", 10)));
-
-        assertThat(history.heldCost()).isNull();
-    }
-
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
     /** Each trade gets the next id, in the order a test creates them; JUnit makes a new instance for every test. */
     private long nextTradeId = 1;
+
+    /** For the tests of dates, quantities and warnings, where what the trades cost makes no difference. */
+    private static final String ANY_PRICE = "100";
 
     private TradeFact buy(String date, long quantity) {
         return buy(date, String.valueOf(quantity));
     }
 
     private TradeFact buy(String date, String quantity) {
-        return trade(date, TradeSide.BUY, quantity, null);
+        return trade(date, TradeSide.BUY, quantity, ANY_PRICE);
     }
 
     private TradeFact buy(String date, long quantity, String price) {
@@ -529,7 +496,7 @@ class HoldingHistoryTest {
     }
 
     private TradeFact sell(String date, String quantity) {
-        return trade(date, TradeSide.SELL, quantity, null);
+        return trade(date, TradeSide.SELL, quantity, ANY_PRICE);
     }
 
     private TradeFact sell(String date, long quantity, String price) {
@@ -543,8 +510,7 @@ class HoldingHistoryTest {
 
     /** Every trade here is one investor's: which investor makes no difference to the history itself. */
     private TradeFact trade(String date, TradeSide side, String quantity, String price, String commission) {
-        BigDecimal priceOrNull = price == null ? null : new BigDecimal(price);
         return new TradeFact(nextTradeId++, INVESTOR_ID, LocalDate.parse(date), side, new BigDecimal(quantity),
-                priceOrNull, new BigDecimal(commission));
+                new BigDecimal(price), new BigDecimal(commission));
     }
 }

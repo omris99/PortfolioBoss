@@ -20,9 +20,8 @@ import java.util.List;
  * @param boughtQuantity    every share bought in the period
  * @param soldQuantity      every share sold in it: no more than were bought, unless a sell was entered too large — a
  *                          data-entry mistake that leaves the realized P&amp;L unknown ({@link #soldMoreThanBought})
- * @param soldCost          what the shares sold cost, each at the average cost of the moment it was sold; {@code null}
- *                          if a buy before one of the sells has no price entered
- * @param sellProceeds      quantity × price over every sell, or {@code null} if a sell has no price entered
+ * @param soldCost          what the shares sold cost, each at the average cost of the moment it was sold
+ * @param sellProceeds      quantity × price over every sell
  * @param commissions       of every sell, and of the buys the part that went with the shares sold
  * @param remainingQuantity still held: 0 once the period is closed
  * @param tradeIds          the trades of the period, in date order
@@ -63,12 +62,11 @@ public record ClosedPosition(LocalDate openDate, LocalDate closeDate, BigDecimal
     }
 
     /**
-     * What the sells brought in, less what the shares sold cost and the commissions. {@code null} unless every sell and
-     * every buy before it has a price and no more was sold than bought: a missing price is never guessed, and neither
-     * is which of the shares sold were really bought.
+     * What the sells brought in, less what the shares sold cost and the commissions. {@code null} when more was sold
+     * than bought: which of the shares sold were really bought is never guessed.
      */
     public BigDecimal realizedPnl() {
-        if (soldCost == null || sellProceeds == null || soldMoreThanBought()) {
+        if (soldMoreThanBought()) {
             return null;
         }
         return sellProceeds.subtract(soldCost).subtract(commissions);
@@ -92,7 +90,8 @@ public record ClosedPosition(LocalDate openDate, LocalDate closeDate, BigDecimal
                 .formatted(HoldingHistory.plainNumber(soldQuantity), HoldingHistory.plainNumber(boughtQuantity));
     }
 
+    /** A period starts with a buy and becomes a closed position with its first sell, so {@code shares} is never 0. */
     private BigDecimal perShare(BigDecimal total, BigDecimal shares) {
-        return total == null ? null : total.divide(shares, DIVISION_PRECISION);
+        return total.divide(shares, DIVISION_PRECISION);
     }
 }

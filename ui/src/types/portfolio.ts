@@ -11,7 +11,6 @@ export type HoldingWarningType = 'NO_TRADES_LOGGED' | 'CLOSED_WITHOUT_SELL' | 'Q
 export type ClosedPositionSource = 'TRADES' | 'MANUAL';
 export type CashMovementType = 'DEPOSIT' | 'WITHDRAWAL';
 export type InvestorWarningType =
-  | 'TRADES_WITHOUT_PRICE'
   | 'TRADES_NOT_IN_USD'
   | 'NEGATIVE_CASH'
   | 'MORE_SHARES_THAN_IB'
@@ -31,7 +30,7 @@ export interface Trade {
   tradeDate: string;
   side: TradeSide;
   quantity: number;
-  price: number | null;
+  price: number;
   note: string | null;
   /** Never `null`: a trade entered without one was stored with the default (1 cent a share, at least $5). */
   commission: number;
@@ -46,7 +45,8 @@ export interface TradeRequest {
   side: TradeSide;
   /** Greater than 0. */
   quantity: number;
-  price: number | null;
+  /** Required, 0 or more. */
+  price: number;
   note: string | null;
   /** `null` stores the default for this many shares; 0 is a commission too. */
   commission: number | null;
@@ -84,7 +84,8 @@ export interface NewManualPositionRequest extends ManualPositionRequest {
 
 /**
  * An investor's part of a holding: the other investors' trades, and the account owner the rest of IB's figures — so the
- * parts always add up to the holding. In the holding's currency; a figure that needs a price nobody entered is `null`.
+ * parts always add up to the holding. In the holding's currency; a figure that needs IB's price is `null` while IB
+ * reported none.
  */
 export interface InvestorQuantity {
   investorId: number;
@@ -323,7 +324,7 @@ export interface AnalysisRun {
 /**
  * The shares sold in one stretch of owning a stock, at average cost: a stretch a sell brought back to zero, or one still
  * held that has had a sell already (`remainingQuantity` above 0). Derived by the API from the trades of a holding or of
- * a manual position (`source`). A figure that needs a price nobody entered is `null`.
+ * a manual position (`source`).
  */
 export interface ClosedPosition {
   /** The holding whose trades it was derived from; `null` for a manual position. */
@@ -339,8 +340,9 @@ export interface ClosedPosition {
   /** The shares sold so far. */
   quantity: number;
   /** What the shares sold cost on average. */
-  averageBuyPrice: number | null;
-  averageSellPrice: number | null;
+  averageBuyPrice: number;
+  averageSellPrice: number;
+  /** `null` when more was sold than bought: `warning` says so. */
   realizedPnl: number | null;
   /** Of the buy cost. */
   realizedPnlPercent: number | null;
@@ -392,7 +394,7 @@ export interface InvestorWarning {
 /**
  * One investor's summary card. The account owner's figures are IB's less the other investors', so all of them always
  * add up to IB's own. Everything is in USD except the realized P&L, which is by currency. A figure that needs something
- * unknown — a trade without a price — is `null`.
+ * IB did not report is `null`.
  */
 export interface Investor {
   id: number;

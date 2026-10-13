@@ -20,7 +20,7 @@ import { MomentumChip, MomentumPanel, passedCheckCount } from './Momentum';
 import { SectorCell } from './SectorCell';
 import { SignalDot, warningSignsOf } from './Signal';
 import { TradesPanel } from './TradesPanel';
-import type { WholeAccount } from './graphs/portfolioWeights';
+import type { InvestmentsAndCash } from './graphs/investmentsAndCash';
 import { WeightCalculatorPanel } from './weightCalculator/WeightCalculatorPanel';
 
 export type HoldingTab = 'summary' | 'momentum' | 'analysis' | 'trades' | 'weight' | 'byInvestor';
@@ -28,13 +28,24 @@ export type HoldingTab = 'summary' | 'momentum' | 'analysis' | 'trades' | 'weigh
 /** A link's state that opens the drawer on a tab other than Summary: the Overview's weight bars open it on Weight. */
 export interface OpenOnTab {
   openOnTab: HoldingTab;
+  /** On Weight, whose weights to show first: the investor whose bar was clicked; `null` or missing for Portfolio. */
+  weightsInvestorId?: number | null;
+}
+
+function openOnTabOf(state: unknown): Partial<OpenOnTab> {
+  return typeof state === 'object' && state !== null ? (state as Partial<OpenOnTab>) : {};
 }
 
 /** The tab a link asked the drawer to open on, if any; the drawer checks that the holding has it. */
 export function tabToOpenOn(state: unknown): HoldingTab | null {
-  if (typeof state !== 'object' || state === null) return null;
-  const { openOnTab } = state as Partial<OpenOnTab>;
+  const { openOnTab } = openOnTabOf(state);
   return typeof openOnTab === 'string' ? openOnTab : null;
+}
+
+/** The investor whose weights a link asked the Weight tab to show first; `null` for Portfolio. */
+export function weightsInvestorIdToOpenOn(state: unknown): number | null {
+  const { weightsInvestorId } = openOnTabOf(state);
+  return typeof weightsInvestorId === 'number' ? weightsInvestorId : null;
 }
 
 // ── the header's figures ────────────────────────────────────────────────────────────────────────
@@ -170,13 +181,15 @@ function SignalSummary({ holding, onTabChange }: { holding: Holding; onTabChange
  * then Summary · Momentum · Analysts & news · Trades · Weight · By investor — Weight only on an open holding, By
  * investor only when another investor is involved. It opens on `initialTab` when the holding has that tab, else on
  * Summary; the page gives it a new `key` per holding, so ‹ › start each holding there again. `closedPositions` are the
- * holding's own, of every investor; `wholeAccount` and `syncedAt` are for the weight calculator.
+ * holding's own, of every investor; `weightsTabs`, `initialWeightsInvestorId` and `syncedAt` are for the weight
+ * calculator.
  */
 export function HoldingDrawer({
   holding,
   closedPositions,
   estimatedAnalysisCost,
-  wholeAccount,
+  weightsTabs,
+  initialWeightsInvestorId,
   syncedAt,
   initialTab,
   previousLabel,
@@ -189,7 +202,8 @@ export function HoldingDrawer({
   holding: Holding;
   closedPositions: ClosedPosition[];
   estimatedAnalysisCost: EstimatedAnalysisCost | null;
-  wholeAccount: WholeAccount | null;
+  weightsTabs: InvestmentsAndCash[];
+  initialWeightsInvestorId: number | null;
   syncedAt: string;
   initialTab: HoldingTab | null;
   previousLabel: string;
@@ -227,7 +241,14 @@ export function HoldingDrawer({
       case 'trades':
         return <TradesPanel owner={position} onDataChanged={onDataChanged} />;
       case 'weight':
-        return <WeightCalculatorPanel holding={holding} wholeAccount={wholeAccount} syncedAt={syncedAt} />;
+        return (
+          <WeightCalculatorPanel
+            holding={holding}
+            tabs={weightsTabs}
+            initialInvestorId={initialWeightsInvestorId}
+            syncedAt={syncedAt}
+          />
+        );
       case 'byInvestor':
         return <InvestorSplitTable position={position} closedPositions={closedPositions} />;
     }

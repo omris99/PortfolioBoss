@@ -87,16 +87,6 @@ class ClosedPositionTest {
     }
 
     @Test
-    void aMissingBuyPriceLeavesTheRealizedPnlUnknownButNotTheSellSide() {
-        ClosedPosition closedPosition = soldInFull("10", null, "1800");
-
-        assertThat(closedPosition.averageBuyPrice()).isNull();
-        assertThat(closedPosition.averageSellPrice()).isEqualByComparingTo("180");
-        assertThat(closedPosition.realizedPnl()).isNull();
-        assertThat(closedPosition.realizedPnlPercent()).isNull();
-    }
-
-    @Test
     void sharesReceivedForFreeHaveAPnlButNoPercent() {
         ClosedPosition closedPosition = soldInFull("10", "0", "1800");
 
@@ -119,11 +109,7 @@ class ClosedPositionTest {
     private ClosedPosition soldInFullWithCommissions(String quantity, String soldCost, String sellProceeds,
                                                      String commissions) {
         return new ClosedPosition(OPEN_DATE, CLOSE_DATE, new BigDecimal(quantity), new BigDecimal(quantity),
-                decimalOrNull(soldCost), decimalOrNull(sellProceeds), new BigDecimal(commissions), BigDecimal.ZERO,
+                new BigDecimal(soldCost), new BigDecimal(sellProceeds), new BigDecimal(commissions), BigDecimal.ZERO,
                 List.of());
-    }
-
-    private BigDecimal decimalOrNull(String amount) {
-        return amount == null ? null : new BigDecimal(amount);
     }
 }

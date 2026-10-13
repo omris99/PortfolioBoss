@@ -1,13 +1,16 @@
 import { ACCOUNT_CURRENCY } from '../../lib/format';
 import type { Holding } from '../../types/portfolio';
+import type { Investment, InvestmentsAndCash } from './investmentsAndCash';
 
 /**
  * The calculations behind the Overview's graphs: how much each sector and each holding weighs — in the money in stocks
  * and in the whole account — and how the stocks and the cash split the account. No drawing here — the graphs only show
- * these results. Only figures the API already sends: each open holding's market value and sector, and the account's cash.
+ * these results. They work on one tab's investments and cash (investmentsAndCash.ts): the whole account's on Portfolio,
+ * one investor's on their tab — the same calculation for both.
  *
- * "The whole account" is the stocks weighed plus the cash, so the holdings and the cash add up to exactly 100%. IB's net
- * liquidation is a hair more (it also counts accrued interest and dividends), and is not used here.
+ * "The whole account" is the stocks weighed plus the cash, so the holdings and the cash add up to exactly 100% — on an
+ * investor's tab, all of that investor's money. IB's net liquidation is a hair more (it also counts accrued interest and
+ * dividends), and is not used here.
  */
 
 /** The weight of a part of the money in stocks: one sector's, one holding's, or several small ones added together. */
@@ -57,21 +60,20 @@ export interface PortfolioWeights {
   leftOut: LeftOutHolding[];
 }
 
-/** An open holding with a market value the graphs can weigh. */
+/** An investment with a market value the graphs can weigh. */
 interface WeighedHolding {
   holding: Holding;
   marketValue: number;
 }
 
 /**
- * The holding with its market value, or why it is left out. A value in another currency can't be added to dollars
- * without IB's exchange rate, which the API doesn't send yet; a value of 0 or less (a short position) is no part of the
- * money in stocks.
+ * The investment's holding with its market value, or why it is left out. A value in another currency can't be added to
+ * dollars without IB's exchange rate, which the API doesn't send yet; a value of 0 or less (a short position) is no part
+ * of the money in stocks.
  */
-function weighedOrLeftOut(holding: Holding): WeighedHolding | LeftOutHolding {
-  const { marketValue, currency } = holding;
+function weighedOrLeftOut({ holding, marketValue }: Investment): WeighedHolding | LeftOutHolding {
   if (marketValue === null) return { holding, reason: 'no market value from IB' };
-  if (currency !== ACCOUNT_CURRENCY) return { holding, reason: `in ${currency}` };
+  if (holding.currency !== ACCOUNT_CURRENCY) return { holding, reason: `in ${holding.currency}` };
   if (marketValue <= 0) return { holding, reason: 'a market value of 0 or less' };
   return { holding, marketValue };
 }
@@ -110,14 +112,14 @@ function groupBySector(weighedHoldings: WeighedHolding[]): {
   return { holdingsOfSector, holdingsWithoutSector };
 }
 
-/** The open holdings, split into those the graphs weigh and those they leave out. */
-function weighedAndLeftOutOf(openHoldings: Holding[]): {
+/** The investments, split into those the graphs weigh and those they leave out. */
+function weighedAndLeftOutOf(investments: Investment[]): {
   weighedHoldings: WeighedHolding[];
   leftOut: LeftOutHolding[];
 } {
   const weighedHoldings: WeighedHolding[] = [];
   const leftOut: LeftOutHolding[] = [];
-  openHoldings.map(weighedOrLeftOut).forEach((result) => {
+  investments.map(weighedOrLeftOut).forEach((result) => {
     if ('reason' in result) {
       leftOut.push(result);
     } else {
@@ -127,10 +129,13 @@ function weighedAndLeftOutOf(openHoldings: Holding[]): {
   return { weighedHoldings, leftOut };
 }
 
-/** The whole account as the graphs and the weight calculator see it: the stocks weighed plus the cash. */
+/**
+ * The whole account as the graphs and the weight calculator see it: the stocks weighed plus the cash — on an investor's
+ * tab, all of their money.
+ */
 export interface WholeAccount {
   value: number;
-  /** IB's cash; below zero when stocks were bought with borrowed money. */
+  /** IB's cash, or the investor's; below zero when stocks were bought with borrowed money. */
   cash: number;
 }
 
@@ -142,15 +147,16 @@ function wholeAccountFrom(stocksValue: number, cash: number | null): WholeAccoun
 }
 
 /** The whole account the weight calculator divides by — the same the graphs divide by. */
-export function wholeAccountOf(openHoldings: Holding[], cash: number | null): WholeAccount | null {
-  return wholeAccountFrom(sumOfMarketValues(weighedAndLeftOutOf(openHoldings).weighedHoldings), cash);
+export function wholeAccountOf(investmentsAndCash: InvestmentsAndCash): WholeAccount | null {
+  const { weighedHoldings } = weighedAndLeftOutOf(investmentsAndCash.investments);
+  return wholeAccountFrom(sumOfMarketValues(weighedHoldings), investmentsAndCash.cash);
 }
 
-/** Every weight the graphs show. `openHoldings` are the holdings IB still reports; `cash` is IB's cash in the account. */
-export function portfolioWeightsOf(openHoldings: Holding[], cash: number | null): PortfolioWeights {
-  const { weighedHoldings, leftOut } = weighedAndLeftOutOf(openHoldings);
+/** Every weight the graphs show, on one tab. */
+export function portfolioWeightsOf(investmentsAndCash: InvestmentsAndCash): PortfolioWeights {
+  const { weighedHoldings, leftOut } = weighedAndLeftOutOf(investmentsAndCash.investments);
   const stocksValue = sumOfMarketValues(weighedHoldings);
-  const wholeAccount = wholeAccountFrom(stocksValue, cash);
+  const wholeAccount = wholeAccountFrom(stocksValue, investmentsAndCash.cash);
   const weightOf = (marketValue: number): Weight => ({
     marketValue,
     percentOfStocks: (marketValue / stocksValue) * 100,
