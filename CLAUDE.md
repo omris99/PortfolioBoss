@@ -8,7 +8,8 @@ A read-only decision-support tool for a **long-term** Interactive Brokers portfo
 counterpart to the sibling IBBot intraday trading project (`~/DevProjects/IBBot`). It connects to
 TWS, syncs the holdings into a local PostgreSQL database on every connection, and serves that
 database to a React UI (`ui/`) of four pages — the API always reads from the database, never straight from TWS: an
-Overview (the account's figures, what needs a look, how the signals stand), the positions table, in which the user
+Overview (the account's figures, what needs a look, how the signals stand, how the money splits by sector and by
+holding), the positions table, in which the user
 enters what IB doesn't know (a holding's sector and its buy/sell trades), the closed positions — derived from those
 trades, plus the manual positions sold before PortfolioBoss saw them — and a card per investor for an account several
 people's money shares (each one's cash, value and profit), all of which the UI writes to the same database through a
@@ -48,14 +49,18 @@ holding's details (`/positions/:holdingId`) and for a closed position, a Columns
 confirm before a paid Analyze run quoting the real average cost, every form and confirm-delete in a modal, and the two
 warning triangles. The Radix primitives (`@radix-ui/react-dialog`, `-popover`, `-dropdown-menu`) bring the focus and
 keyboard handling; the date fields use the browser's own picker behind a calendar button, and the first load is still a
-"Loading…" box rather than the design's skeletons.
+"Loading…" box rather than the design's skeletons. Since 2026-10-13 the Overview also shows the money by sector (a ring)
+and by holding with the cash (bars), with the stocks against the cash under the account's figures, and a holding's
+drawer has a Weight tab that works out the shares to sell or buy for a target weight — built in the UI from figures
+`/api/portfolio` already sends, without Claude Design (see the architecture below).
 
 ## Hard invariant: read-only
 
 PortfolioBoss reads the account and **never places, modifies, or cancels an order**. `IbGateway`
 deliberately exposes no order-placement method, and `PortfolioWrapper` overrides only the
 account-reading callbacks and, for the momentum, the daily-bar ones (`historicalData` / `historicalDataEnd` — reads too). Do not add `placeOrder`, `cancelOrder`, or order-related `EWrapper`
-callbacks — if a task seems to need them, it is the wrong project.
+callbacks — if a task seems to need them, it is the wrong project. The drawer's Weight tab says how many shares to sell
+or buy, and that is all it does: it is a calculation on screen that sends nothing anywhere and saves nothing.
 
 The local API never touches the IB account either. It writes only to PortfolioBoss's own database — the
 sector and trades the user enters, through `HoldingWriteController`, the manual positions with their trades,
@@ -98,6 +103,10 @@ cd ui && npm install     # first time only
 npm run dev              # manual alternative to the auto-start; proxies /api to :8080
 npm run build            # tsc -b && vite build; the type check is the only UI check for now
 ```
+
+A change to `ui/tailwind.config.js` (a new color role, say) reaches a running dev server only after a restart — stop
+the app and run it again: the CSS variables in `index.css` reload, but the classes built from the config don't (the
+sector ring came up black on 2026-10-13, its fill classes missing).
 
 The UI shows the portfolio as of the last sync. It reloads `/api/portfolio` after every write (sector,
 trades, manual positions, investors, deposits) and after every analysis run, but new figures from IB need a new `run.sh`
@@ -544,6 +553,25 @@ before the first analysis. `asOf` is an ISO-8601 string. `portfolioboss.utils.Ut
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
 in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.
 
+The Overview's weight graphs and the holding drawer's Weight tab (2026-10-13) are worked out in the UI from what
+`/api/portfolio` already sends — no endpoint, nothing stored. `ui/src/components/graphs/portfolioWeights.ts` weighs the
+open holdings (`portfolioWeightsOf`): each sector's and each holding's share of the money in stocks and of "the whole
+account" — the stocks weighed plus IB's `totalCashValue` (`wholeAccountOf`), **not** `netLiquidation` (a hair more: it
+also counts accrued interest and dividends), so the holdings and the cash add up to exactly 100% and agree with the
+Account summary's stocks-and-cash bar. A holding in another currency (the API has no exchange rate yet), with no market
+value, or worth 0 or less is left out and named under the graphs. The sector ring (`DonutChart`, hand-drawn SVG — no
+chart library) is "of the money in stocks" and colors the four heaviest sectors, the rest folded into "Other"; "By
+holding" is "of the whole account": the ten heaviest holdings, the rest as "n more", then the cash, and a holding's bar
+opens its drawer on the Weight tab (the link's state, `HoldingDrawer.OpenOnTab`). The tab's arithmetic is
+`ui/src/components/weightCalculator/targetWeight.ts`: the whole shares to sell (rounded up, so it lands at the target or
+just under) or buy (rounded down), the weight after, the default commission and, for a sale, the realized P&L at IB's
+average cost — on the same whole account, which a sale or a purchase doesn't change (cash and shares trade places).
+Things that are easy to break:
+- `ui/src/lib/orderCommission.ts` copies `calculation.OrderCommission`'s rule (1¢ a share, at least $5) by hand: change
+  both together.
+- The ring's color order in `index.css` (`--color-chart-1` … `-4`) puts blue and violet, the pair hardest to tell apart,
+  2nd and 4th, which never touch in a ring; a color-blindness palette validator checked it — check again after a change.
+
 `HoldingWriteController` serves the writes through `HoldingWriteService` (`@Transactional`, the write-side
 twin of `PortfolioReadService`): `PUT /api/holdings/{holdingId}/sector` (204), `POST
 /api/holdings/{holdingId}/trades` (201 + the new trade as a `TradeResponse`), `PUT /api/trades/{tradeId}`
@@ -627,7 +655,9 @@ Things that are easy to break:
   buttons, fields, tables, tags, chips — are shared classes in `ui/src/lib/styles.ts`. Green and red are for profit
   and loss and the signal's tones only (BUY/SELL are grey); the two warning levels are told apart by shape and lightness
   (`WarnMark`: a yellow outlined triangle for minor, a solid orange one for real), and the only red fill is the confirm
-  dialog's Delete.
+  dialog's Delete. The one set of colors that only tells things apart is the sector ring's `chart-1` … `chart-4` (with
+  the grey `chart-rest`): none of them green, red, yellow or orange, which already mean something. The stocks and the
+  cash keep one color each wherever they appear side by side (`STOCKS_COLOR_CLASS`, `CASH_COLOR_CLASS`).
 - One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` owns the TWS
   host/port/client id and the single `IbGateway`. Don't add a second entry point or a second place
   that connects to TWS.
@@ -668,7 +698,8 @@ Things that are easy to break:
   deriving buy/sell dates and holding period from `trade` rows, the write endpoints for the sector and trades,
   the UI to show and enter them, the reconciliation warnings, the closed positions (commissions, average cost,
   manual positions) and the investors sharing the account are in, and so are the momentum score and the analysis of
-  AI_ANALYSIS_TODO.md, backend and UI; the API reads only from the database.
+  AI_ANALYSIS_TODO.md, backend and UI; the API reads only from the database. From Milestone 3, the weight of each holding
+  and sector (TODO.md's principle 3) and a target-weight calculator are in, in the UI only.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

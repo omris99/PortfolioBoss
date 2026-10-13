@@ -36,8 +36,9 @@ reconciliation warnings, the closed positions — commissions, average cost, and
 trades — several investors sharing the account, with their deposits, the momentum score from IB's daily closes, and the
 stock analysis — Tavily's searches (kept with each analysis), Claude's extraction, the consensus, the analysts' trend
 from price-target moves and the colored dot — behind `POST /api/analysis` and in the UI's Signal column, a holding
-drawer's "Analysts & news" tab and the Analyze buttons — and the UI's light redesign: four pages, a drawer per holding
-and per closed position, a Columns menu, forms in modals):*
+drawer's "Analysts & news" tab and the Analyze buttons — the UI's light redesign: four pages, a drawer per holding
+and per closed position, a Columns menu, forms in modals — and, worked out in the UI only, the Overview's weight graphs
+by sector and by holding with the cash, and the drawer's target-weight calculator):*
 
 | Scope | Covers |
 |---|---|
@@ -58,8 +59,8 @@ Tests (`src/test/`) take the scope of the code they cover.
 | Scope | Arrives |
 |---|---|
 | `thesis` | M1 — the written thesis per holding (the actual product) |
-| `analytics` | M3 — concentration, correlated clusters, TWR, SPY benchmark |
-| `averaging` | M3 — the averaging-down calculator and its verdict ladder |
+| `analytics` | M3 — correlated clusters, TWR, SPY benchmark (the weight of each holding and sector is already in the UI, scope `ui`) |
+| `averaging` | M3 — the averaging-down calculator's verdict ladder (its weight part, the drawer's Weight tab, is in the UI, scope `ui`) |
 | `alerts` | M4 — rule-based alerts |
 | `journal` | M4 — decision journal |
 

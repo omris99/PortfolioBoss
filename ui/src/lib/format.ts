@@ -30,6 +30,13 @@ export function formatSignedPercent(percent: number | null): string {
   return `${sign}${Math.abs(percent).toFixed(2)}%`;
 }
 
+/** A part of a whole, with one decimal place and a sign only when below zero: "24.1%", "−3.0%". */
+export function formatPercent(percent: number | null): string {
+  if (percent === null) return EMPTY_VALUE;
+  const sign = percent < 0 ? MINUS_SIGN : '';
+  return `${sign}${Math.abs(percent).toFixed(1)}%`;
+}
+
 /** Whole share counts print without decimals; fractional shares keep 4 places. */
 export function formatQuantity(shares: number): string {
   return Number.isInteger(shares) ? shares.toLocaleString('en-US') : shares.toFixed(4);

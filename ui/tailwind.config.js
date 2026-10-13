@@ -38,6 +38,8 @@ export default {
       'on-warn-real': role('on-warn-real'),
       signal: { green: role('signal-green'), yellow: role('signal-yellow'), red: role('signal-red'), none: role('signal-none') },
       status: { loading: role('status-loading'), ready: role('status-ready'), error: role('status-error') },
+      // The sector ring's colors, in ring order (`fill-chart-1` for a slice, `bg-chart-1` for its legend swatch).
+      chart: { 1: role('chart-1'), 2: role('chart-2'), 3: role('chart-3'), 4: role('chart-4'), rest: role('chart-rest') },
     },
     textColor: ({ theme }) => ({
       ...theme('colors'),

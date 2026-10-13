@@ -20,8 +20,22 @@ import { MomentumChip, MomentumPanel, passedCheckCount } from './Momentum';
 import { SectorCell } from './SectorCell';
 import { SignalDot, warningSignsOf } from './Signal';
 import { TradesPanel } from './TradesPanel';
+import type { WholeAccount } from './graphs/portfolioWeights';
+import { WeightCalculatorPanel } from './weightCalculator/WeightCalculatorPanel';
 
-type HoldingTab = 'summary' | 'momentum' | 'analysis' | 'trades' | 'byInvestor';
+export type HoldingTab = 'summary' | 'momentum' | 'analysis' | 'trades' | 'weight' | 'byInvestor';
+
+/** A link's state that opens the drawer on a tab other than Summary: the Overview's weight bars open it on Weight. */
+export interface OpenOnTab {
+  openOnTab: HoldingTab;
+}
+
+/** The tab a link asked the drawer to open on, if any; the drawer checks that the holding has it. */
+export function tabToOpenOn(state: unknown): HoldingTab | null {
+  if (typeof state !== 'object' || state === null) return null;
+  const { openOnTab } = state as Partial<OpenOnTab>;
+  return typeof openOnTab === 'string' ? openOnTab : null;
+}
 
 // ── the header's figures ────────────────────────────────────────────────────────────────────────
 
@@ -153,14 +167,18 @@ function SignalSummary({ holding, onTabChange }: { holding: Holding; onTabChange
 
 /**
  * A holding's details over the positions table (/positions/:holdingId): the key figures and its warning in the header,
- * then Summary · Momentum · Analysts & news · Trades · By investor — the last only when another investor is involved.
- * It opens on Summary; the page gives it a new `key` per holding, so ‹ › start each holding there again.
- * `closedPositions` are the holding's own, of every investor.
+ * then Summary · Momentum · Analysts & news · Trades · Weight · By investor — Weight only on an open holding, By
+ * investor only when another investor is involved. It opens on `initialTab` when the holding has that tab, else on
+ * Summary; the page gives it a new `key` per holding, so ‹ › start each holding there again. `closedPositions` are the
+ * holding's own, of every investor; `wholeAccount` and `syncedAt` are for the weight calculator.
  */
 export function HoldingDrawer({
   holding,
   closedPositions,
   estimatedAnalysisCost,
+  wholeAccount,
+  syncedAt,
+  initialTab,
   previousLabel,
   nextLabel,
   onPrevious,
@@ -171,6 +189,9 @@ export function HoldingDrawer({
   holding: Holding;
   closedPositions: ClosedPosition[];
   estimatedAnalysisCost: EstimatedAnalysisCost | null;
+  wholeAccount: WholeAccount | null;
+  syncedAt: string;
+  initialTab: HoldingTab | null;
   previousLabel: string;
   nextLabel: string;
   onPrevious: () => void;
@@ -179,7 +200,6 @@ export function HoldingDrawer({
   onDataChanged: () => Promise<void>;
 }) {
   const investors = useInvestors();
-  const [activeTab, setActiveTab] = useState<HoldingTab>('summary');
   const position = { kind: 'holding' as const, holding };
   const tradeCount = holding.trades.length;
 
@@ -188,8 +208,11 @@ export function HoldingDrawer({
     { key: 'momentum', label: 'Momentum' },
     { key: 'analysis', label: 'Analysts & news' },
     { key: 'trades', label: tradeCount === 0 ? 'Trades' : `Trades (${tradeCount})` },
+    ...(holding.status === 'OPEN' ? [{ key: 'weight' as const, label: 'Weight' }] : []),
     ...(isShared(position, closedPositions, investors) ? [{ key: 'byInvestor' as const, label: 'By investor' }] : []),
   ];
+  const hasInitialTab = tabs.some((tab) => tab.key === initialTab);
+  const [activeTab, setActiveTab] = useState<HoldingTab>(hasInitialTab && initialTab !== null ? initialTab : 'summary');
 
   const panelOf = (tab: HoldingTab): ReactNode => {
     switch (tab) {
@@ -203,6 +226,8 @@ export function HoldingDrawer({
         );
       case 'trades':
         return <TradesPanel owner={position} onDataChanged={onDataChanged} />;
+      case 'weight':
+        return <WeightCalculatorPanel holding={holding} wholeAccount={wholeAccount} syncedAt={syncedAt} />;
       case 'byInvestor':
         return <InvestorSplitTable position={position} closedPositions={closedPositions} />;
     }

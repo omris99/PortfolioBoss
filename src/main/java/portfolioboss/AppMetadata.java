@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.20.0";
+    public static final String VERSION = "0.21.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,15 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.21.0: [Portfolio weights]
+ * SectorWeightsCard added: the Overview shows the money in stocks by sector as a ring, a legend beside it with each sector's percent and value; the four heaviest in color, the rest as "Other".
+ * HoldingWeightsCard added: each holding's share of the whole account as a bar, heaviest first, then the cash, adding up to 100%; a bar opens that holding's drawer on its Weight tab.
+ * StocksAndCashBar added: under the account's four figures, one bar splits the stocks and the cash ("Stocks 82.4% · Cash 17.6%"); cash below zero is said in words instead.
+ * portfolioWeights: the whole account is the stocks plus IB's cash, not the net liquidation, so the parts add up exactly; a holding not in USD or without a market value is left out and named.
+ * WeightCalculatorPanel added: a Weight tab in an open holding's drawer — type a target percent, get the whole shares to sell or buy, the weight after, the commission and the realized P&L.
+ * targetWeight: a sale rounds up so the weight lands at the target or just under it, a purchase rounds down and says whether the cash covers it; a calculation only, nothing reaches IB.
+ * Chart colors added: four sector colors that mean nothing else in the app (no green, red, yellow or orange), ordered so the two hardest to tell apart never touch in the ring.
+ *
  * VERSION 0.20.0: [Drawers and modals]
  * HoldingDrawer added: /positions/12 opens holding 12 in a panel from the right — Summary, Momentum, Analysts & news, Trades, By investor; ‹ › step through the rows; was a row expanding in the table.
  * Summary tab: why the dot has its colour ("Signal YELLOW: news negative"), then momentum, analysts and news side by side, each linking to its own tab.
