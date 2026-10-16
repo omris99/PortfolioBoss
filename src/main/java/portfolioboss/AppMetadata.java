@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.3.0";
+    public static final String VERSION = "0.22.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,218 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.22.0: [Weights per investor, trades need a price]
+ * WeightsTabs added: the Overview's weight graphs and the drawer's Weight tab get tabs — Portfolio, then each investor, the owner first; hidden with one investor.
+ * investmentsAndCash added: an investor's tab weighs their own shares of each holding and their own cash, by their card's rule, so their weights add up to 100% of their money.
+ * HoldingWeightsCard: a bar on an investor's tab opens the drawer on Weight with that investor's tab; captions and hints name the tab's money ("all of Shay's money").
+ * WeightCalculatorPanel: on an investor's tab it uses their quantity, cash and own average cost; for an investor holding none of the stock it works out the shares to buy.
+ * TradeRequest: the price is now required (400 "price: must not be null"), and the trade form's Price field is no longer optional — every calculation on the trades needs it.
+ * V8__trade_price_required: trade.price is NOT NULL, so the database refuses a trade without a price too; every trade stored already had one.
+ * Trades without a price are gone from the calculations: an investor's cash is always known, TRADES_WITHOUT_PRICE and "(n without prices)" are removed; only an over-sell has no realized P&L.
+ *
+ * VERSION 0.21.0: [Portfolio weights]
+ * SectorWeightsCard added: the Overview shows the money in stocks by sector as a ring, a legend beside it with each sector's percent and value; the four heaviest in color, the rest as "Other".
+ * HoldingWeightsCard added: each holding's share of the whole account as a bar, heaviest first, then the cash, adding up to 100%; a bar opens that holding's drawer on its Weight tab.
+ * StocksAndCashBar added: under the account's four figures, one bar splits the stocks and the cash ("Stocks 82.4% · Cash 17.6%"); cash below zero is said in words instead.
+ * portfolioWeights: the whole account is the stocks plus IB's cash, not the net liquidation, so the parts add up exactly; a holding not in USD or without a market value is left out and named.
+ * WeightCalculatorPanel added: a Weight tab in an open holding's drawer — type a target percent, get the whole shares to sell or buy, the weight after, the commission and the realized P&L.
+ * targetWeight: a sale rounds up so the weight lands at the target or just under it, a purchase rounds down and says whether the cash covers it; a calculation only, nothing reaches IB.
+ * Chart colors added: four sector colors that mean nothing else in the app (no green, red, yellow or orange), ordered so the two hardest to tell apart never touch in the ring.
+ *
+ * VERSION 0.20.0: [Drawers and modals]
+ * HoldingDrawer added: /positions/12 opens holding 12 in a panel from the right — Summary, Momentum, Analysts & news, Trades, By investor; ‹ › step through the rows; was a row expanding in the table.
+ * Summary tab: why the dot has its colour ("Signal YELLOW: news negative"), then momentum, analysts and news side by side, each linking to its own tab.
+ * SignalCell: the dot, the warning signs in words ("Momentum weak · Analysts down") and the momentum score; was "M 4/5 A N". A "?" in the column header explains it.
+ * ColumnsMenu added: eight columns by default, Avg cost, Last, Bought and Last sold on demand, remembered in the browser; closed holdings now always sit below the open ones.
+ * GET /api/portfolio: estimatedAnalysisCost added, the average dollars and Tavily credits of each holding's latest analysis, quoted by the Analyze buttons (was a hand-written $0.04 and 5 credits).
+ * AnalyzeControls: the toolbar's Analyze first asks "Analyze 7 open holdings? About $0.29 and 35 search credits…"; "Analyze MSFT" in the drawer runs at once.
+ * Modal and ConfirmDialog added (Radix dialog): every form opens in a modal — trade, closed position, investor, deposit — and every delete asks first; the API's refusal shows as it comes.
+ * TradeModal: the date typed as yyyy-MM-dd with a calendar button; a grey note says when it starts as a BUY of the whole position at IB's average cost (was the inline TradeForm).
+ * ClosedDrawer added: a closed row opens a drawer — a holding's period shows its trades read-only with "Correct them in Positions", a manual position its details, trades and By investor.
+ * ClosedSummary: realized P&L per currency in its own card with "(n to check)" and "(n without prices)", and each investor's totals on a second line.
+ * InvestorCard: each investor as a short statement, in the same order on every card; rename and deposits open modals, the deposits listed behind "Deposits (n)".
+ * WarnMark added: a minor warning is a yellow outlined triangle, a real one a solid orange triangle — told apart by shape and lightness, not hue alone; the drawer shows the sentence in a band.
+ * Tests: PortfolioReadServiceTest averages only the latest analysis per holding (null before the first); PortfolioControllerTest pins estimatedAnalysisCost's JSON keys.
+ *
+ * VERSION 0.19.0: [Light theme and pages]
+ * UI theme: light, from the Claude Design system — colors by role only (CSS variables named in tailwind.config.js), IBM Plex Sans, a focus ring; was a dark slate theme with raw Tailwind colors.
+ * UI pages with their own addresses (react-router): / Overview, /positions, /closed, /investors, under a top bar with the account, the last sync and the load status; was one long page.
+ * OverviewPage added: the account's four figures, "Needs attention" (real warnings, RED signals, holdings never analyzed; minor warnings counted) and "Signal at a glance" with a "?" legend.
+ * InvestorsStrip added on the Overview: each investor's total value and total P&L, linking to the Investors page; shown only with more than one investor.
+ * PositionsPage: /positions/12 opens holding 12's row and scrolls to it, Back closes it, a closed holding's address shows the closed ones; the Overview and the closed positions link there.
+ * InvestorsPage: with the account owner alone it explains what an investor is and offers "Add investor" (was a small link above the positions).
+ * styles.ts added: one look for every button, field, panel, table and tag; BUY/SELL and deposit/withdrawal turn grey, green and red are left to profit and loss.
+ * Numbers: the real minus sign (−) for negatives, tabular digits instead of a monospace font, and times read "2026-10-10 16:05".
+ * AnalyzeButton hint: about $0.04 and 5 Tavily credits a stock (was $0.03 and 3, from before the four searches).
+ *
+ * VERSION 0.18.0: [Fresher analyst actions, kept search results]
+ * AnalystTrendCalculator: only price-target moves count, an action stating the target before and after; a rating alone (Zacks Rank, Weiss, Wall Street Zen) moves nothing (was every upgrade and downgrade too).
+ * GET /api/portfolio: upActionCount / downActionCount renamed raisedTargetCount / loweredTargetCount; the UI shows "Trend IMPROVING · 3 targets raised, 0 lowered", or why there is no trend.
+ * TavilyClient: two news searches for analysts' actions, MarketBeat's articles of the month and the week's news on any site, since forecast pages lag weeks in the search engine's copy; 35 credits a run.
+ * StockAnalyzer: up to 10 actions (was 5), each once, only this stock's from a multi-company roundup, a date without a year read as the latest not after today; headlines from the news search only.
+ * AnalystAction.sourcePublishedDate: the search engine's date for the page an action came from; the UI shows "copy of 2026-09-18" next to each action and the consensus source.
+ * V7 migration: stock_analysis.search_results keeps the search results Claude read and the addresses the symbol filter left out, so a missing action can be traced to the search or to Claude.
+ * StockSearches added: one stock's four searches; AnalysisService filters them by symbol once, sends that to Claude and stores the same object.
+ * Tests: StockSearchesTest, the four searches in TavilyClientTest, the stored search results in AnalysisServiceTest, analyses of earlier shapes in StockAnalysisRepositoryTest.
+ *
+ * VERSION 0.17.0: [The analysis in the UI]
+ * SignalCell (UI): the Signal column shows the colored dot, "M 4/5", and "A" (analysts' trend) and "N" (news), each green when good, amber in between, rose for a warning sign; details on hover.
+ * Signal column sorting: green, then yellow, then red, by momentum score within a color, then holdings not yet analyzed by score alone (was the momentum score only).
+ * AnalysisDetails (UI): an "Analysts and news" box in a holding's expanded row — consensus, target and upside, the spread across sources, the trend, recent actions, the news sentiment and headlines, all linked.
+ * Links from search results open only when they are http(s) pages; any other address (javascript:, say) is shown as plain text.
+ * AnalyzeButton (UI): "Analyze" above the table runs every open holding, "Analyze SYMBOL" in the box one stock; then "Analyzed 7 · 21 credits · $0.21" and any failed stocks, or the API's reason (a missing key).
+ * AnalystTrendCalculator added: the code decides the analysts' trend from the recent actions — more upgrades and raised targets IMPROVING, more downgrades and cuts DETERIORATING, as many STABLE, none unknown.
+ * Claude no longer answers a trend: it left it unknown in 4 of 7 stocks even with deciding actions (NVDA, two raised targets); analyses stored before get the new rule when read.
+ * GET /api/portfolio: analysis.analystTrend is now the code's, with upActionCount and downActionCount, shown as "Trend IMPROVING · 2 up, 0 down".
+ * Analyst actions read in plain words: RATING KEPT (was REITERATE), NEW COVERAGE (was INITIATE), UPGRADED, DOWNGRADED, TARGET RAISED, TARGET LOWERED.
+ * Tests: AnalystTrendCalculatorTest (NVDA, INTC and TTWO of the first run from the UI), and StockAnalysisRepositoryTest reads an analysis stored with Claude's old trend.
+ *
+ * VERSION 0.16.0: [Analyst ratings and news analysis]
+ * POST /api/analysis added: for each open holding, or the ids given, two Tavily searches and one call to Claude, every stock at once; it runs only when asked, never on a schedule.
+ * TavilyClient: the analysts' forecast pages of the last month and the week's news; only the symbol goes to Tavily, and only results that name it go on to Claude.
+ * StockAnalyzer: Claude Sonnet 5.5 at low effort, no tools, through Anthropic's Java SDK (anthropic-java); it hears only the symbol, currency, IB price, today's date and the results.
+ * StockAnalysisResult: each source's consensus (analysts, rating breakdown, average target), the analysts' trend, recent actions, headlines and the news sentiment — null where the results say nothing.
+ * Claude answers in a JSON schema derived from StockAnalysisResult, so the same record is the schema, the stored answer and the JSON; a refusal or a cut-off answer fails the stock.
+ * V6 migration: stock_analysis keeps every run per holding — Claude's answer as JSONB, the model, tokens, Tavily credits and the cost in dollars; a failed stock stores nothing and keeps its last analysis.
+ * ConsensusCalculator added: the code, not Claude, picks the consensus — MarketBeat first, then a source with a breakdown and a target and the most analysts — with the spread of every source's target.
+ * The consensus rating comes from the breakdown on one scale (Strong Buy 1 … Strong Sell 5), so every source is rated the same way; without a breakdown it is the source's own label.
+ * SignalCalculator added: a colored dot from weak momentum, deteriorating analysts and negative news — red for two or more, green for none, yellow for one, none while fewer than two are known.
+ * GET /api/portfolio: each holding gains analysis (the latest, with the consensus against IB's price) and signal, worked out on every read so a change of rule applies to old analyses too.
+ * AiKeys: the Tavily and Anthropic keys come from the git-ignored config/local.env or the environment; a missing one turns only the analysis off, with "[ai] analysis off: …" and a 503.
+ * Console: "[ai] analysis ready" at startup, "[ai] analyzed N of M stocks: credits, tokens, $cost" per run, and "[ai error] SYMBOL: reason" for a stock that failed.
+ * POST /api/analysis takes a JSON body even to analyze everything ({}), so a page on another site can't start a paid run; an unknown id is 404, a closed holding 400.
+ * JsonColumnMapper: the JSONB column is written with the API's Jackson, so a date is stored as "2026-10-05" rather than [2026, 10, 5].
+ * Tests: ConsensusCalculatorTest, SignalCalculatorTest, SearchResultsTest, TavilyClientTest (a fake Tavily), StockAnalyzerTest, StockAnalysisRepositoryTest, AnalysisServiceTest, AnalysisControllerTest — none calls Tavily or Claude.
+ *
+ * VERSION 0.15.0: [Momentum score from IB's daily closes]
+ * V5 migration: daily_close, a year of daily closing prices per contract (every holding, and SPY as the benchmark), keyed by IB's contract id since SPY is read whether or not it is held.
+ * IbGateway / PortfolioWrapper: after the portfolio and still connected, one historical-data request per holding plus SPY (a year of daily bars), waiting up to 20s; reads only, never an order.
+ * A contract whose closes fail (error 162) or come late is left out and keeps its stored ones, never holding up the sync: "[ib] daily closes received for N of M contracts".
+ * PortfolioSyncService.sync(snapshot, dailyCloses): in the same transaction, each contract that sent closes gets its year replaced in full (IB adjusts past prices for splits); a date sent twice is stored once.
+ * Momentum added: a 0–5 score, a point each for a close above SMA 20, above SMA 50, SMA 50 above SMA 200, at most 10% below the 20-day high, and beating SPY over the month; STRONG 4–5, NEUTRAL 2–3, WEAK 0–1.
+ * A figure without enough closes (under 200 for SMA 200, no SPY) is null, and so are the checks that need it; the score and label exist only when all five checks do — never a guess.
+ * GET /api/portfolio: each holding gains momentum (the figures, the five checks, percentBelowHigh, score and label), derived on every read from the stored closes; null while none are stored.
+ * PositionsTable (UI): a Signal column with the score ("M 4/5", emerald STRONG / amber NEUTRAL / rose WEAK), sorted strongest first, and a momentum box at the top of a holding's expanded row.
+ * MomentumDetails: the five checks with ✓/✗ and their figures ("11.7% below 127.39", "+4.30% vs SPY +1.20%"), the date of the closes, and a legend of what each label suggests.
+ * Tests: MomentumTest (with decision 5's two-day-drop example), daily closes in PortfolioWrapperTest and PortfolioSyncServiceTest, momentum in the JSON in PortfolioReadServiceTest and PortfolioControllerTest.
+ *
+ * VERSION 0.14.0: [Each investor's share of a shared position]
+ * InvestorPart added (domain): one investor's part of one holding — quantity, value at IB's price, cost at average cost — with its unrealized P&L and percent; null when a price is unknown.
+ * PositionTrades.partsByInvestor: the account owner's part is IB's value and cost minus the others', so the parts add up to IB's row for the holding and, over every holding, to each card.
+ * GET /api/portfolio: each entry of a holding's investorQuantities gains sharesValue, sharesCost, unrealizedPnl and unrealizedPnlPercent.
+ * InvestorSplitTable added (UI): "By investor" in a holding's expanded row — each investor's Qty, Cost, Value, unrealized and realized P&L, and a Total row with IB's own figures.
+ * A manual position's expanded row shows the same table with realized P&L only; both appear only once an investor other than the owner has something in the position.
+ * An investor whose closed position there has no realized P&L (a missing price, an over-sell) shows "—" in the table, never a partial sum.
+ * RealizedPnlTotals: with more than one investor, a line under the totals with each one's realized P&L per currency ("Me +18,000.00 USD +950.00 HKD · Avi +1,180.00 USD").
+ * Tests: PositionTradesTest (each investor's value, cost and profit; the owner as IB minus the others; a missing price), InvestorSummaryCalculatorTest (the parts over every holding = the card).
+ *
+ * VERSION 0.13.0: [Several investors in one account]
+ * V4 migration: investor (one account owner, "Me", created by the migration), investor_cash_movement for deposits and withdrawals, and trade.investor_id; every trade entered before is the owner's.
+ * InvestorSummaryCalculator added (domain): each investor's cash, shares value, total value, cost and P&L; the owner gets IB's figures minus the others', so the cards always add up to IB.
+ * Another investor's cash = deposits − withdrawals − buys + sells − commissions, derived on every read; their cost is at average cost (HoldingHistory.heldCost); a missing price gives null, never a guess.
+ * Profit is from the shares only, the same for everyone: unrealized in USD, realized per currency; dividends and interest stay in IB's cash, so they land on the account owner.
+ * InvestorWarning added: trades without a price, trades not in USD, negative cash, more shares than IB reports, closed positions with no P&L to count — shown on the card, never blocking.
+ * Closed positions are now per investor (PositionTrades splits a position's trades by investor): one investor selling out of a holding the other still holds is a closed position of their own.
+ * GET /api/portfolio gains investors (the cards, with deposits and warnings), investorQuantities on each holding, and investorId on every trade and closed position.
+ * InvestorWriteController added: POST/PUT /api/investors (a name already taken, ignoring case, is 409) and POST/PUT/DELETE for deposits; a deposit for the account owner is 400, their cash comes from IB.
+ * TradeRequest and NewManualPositionRequest gain an optional investorId: a new trade without one is the owner's, a correction without one keeps its investor, an unknown id is 400.
+ * InvestorsSummary added (UI): a card per investor under the account summary, rename, "+ Add investor" and a deposits panel; with the owner alone only "+ Add investor" shows.
+ * With more than one investor: Qty in Positions reads "39 (15 · 24)" with names on hover, an Investor column in the trades and closed positions tables, and an Investor field in the trade forms.
+ * New tests: InvestorSummaryCalculatorTest (with INVESTORS_TODO.md's worked example), PositionTradesTest, InvestorWriteControllerTest, InvestorWriteServiceTest; heldCost in HoldingHistoryTest.
+ *
+ * VERSION 0.12.0: [Average cost, partial sells and manual positions]
+ * HoldingHistory: a period still held after a partial sell is now a closed position of the shares sold; before, only a sell back to zero counted. Tagged "partial · still holding N".
+ * ClosedPosition: the shares sold are measured at average cost (each costs the average of the shares held then, with its part of the buy commissions); a closed period adds up exactly.
+ * ClosedPositionResponse: quantity is now the shares sold, not bought; gains remainingQuantity and trades (the period's own trades); manualClosedPositionId becomes manualPositionId.
+ * V3 migration: manual_position replaces manual_closed_position; its buys and sells are trade rows (of a holding or a manual position, never both); each old row became one buy and one sell.
+ * ManualPositionWriteController replaces ClosedPositionWriteController: POST/PUT/DELETE /api/manual-positions and POST /api/manual-positions/{id}/trades; symbol and currency stored in capitals.
+ * HoldingWriteService: PUT/DELETE /api/trades/{id} also correct a manual position's trades; its last sell can be corrected but not deleted or turned into a buy (409), so the position never vanishes.
+ * Trade quantity must be a whole number: TradeRequest and NewManualPositionRequest reject 2.5 ("must be a whole number"), and the forms take whole numbers only; before, 6 decimal places passed.
+ * ClosedPositionsTable: a chevron opens each row's trades, read-only for a holding and editable for a manual position (details, delete, add/edit/delete trades); the row's own edit/delete are gone.
+ * NewManualPositionForm replaces ManualClosedPositionForm, with a commission for the buy and for the sell; TradeForm and TradesPanel now serve a holding or a manual position alike.
+ * New tests: ManualPositionWriteControllerTest and ManualPositionWriteServiceTest replace the ClosedPositionWrite tests; average cost and partial sells in ClosedPositionTest and HoldingHistoryTest.
+ *
+ * VERSION 0.11.0: [Commissions and manual closed positions]
+ * Trades gain a commission: optional when entered; without one the default for an order is stored, 1 cent a share with a $5 minimum (Utils.calculateOrderCommission, IBBot's rule).
+ * V2 migration adds trade.commission and gives the trades entered before it the same default, so the column is never empty.
+ * ClosedPosition: the realized P&L and its % now subtract the commissions of every buy and sell in the period; before, commissions were ignored. ClosedPositionResponse gains commissions.
+ * Manual closed positions added: table manual_closed_position and POST/PUT/DELETE /api/manual-closed-positions, for a round trip sold before the first sync; JSON only, sell date never before buy date.
+ * GET /api/portfolio serves them in closedPositions with source MANUAL, their id and note (holdingId null); one entered without a commission is charged the default for both orders.
+ * TradeForm gains a Commission field (empty = the default, hint on hover) and TradesPanel a Commission column.
+ * ClosedPositionsSection: an "Add closed position" form, and edit and delete for the rows entered by hand, tagged "manual"; a derived row says it is corrected through its holding's trades.
+ * ClosedPositionsTable gains Commission and Note columns and the currency next to each realized P&L ("+40.00 USD"); percentages now show two decimals instead of one, in Positions too.
+ * New tests: UtilsTest for the default commission, ClosedPositionWriteControllerTest and ClosedPositionWriteServiceTest; commissions in ClosedPositionTest, HoldingHistoryTest and the HoldingWrite tests.
+ *
+ * VERSION 0.10.1: [Over-sold closed positions]
+ * ClosedPosition: a period that sold more shares than it bought no longer shows a realized P&L; the extra shares' proceeds counted as pure profit (+1,400 instead of +200). It is "—" now.
+ * ClosedPosition: the average sell price is taken over the shares sold instead of the shares bought, so it is always a price the sells could have had (118, not 196.67).
+ * ClosedPositionResponse gains warning: "Sold 25 shares but bought 15…", shown in an orange row under the position, always visible; the header counts "(n to check)" apart from "(n without prices)".
+ * New test: ClosedPositionTest for a period sold beyond what it bought; HoldingHistoryTest, PortfolioControllerTest and PortfolioReadServiceTest cover the quantity sold and the warning.
+ *
+ * VERSION 0.10.0: [Closed positions]
+ * ClosedPosition added (domain): a position bought and sold back to zero; it keeps the raw totals and derives the average prices, realized P&L and its %, null when a trade has no price.
+ * HoldingHistory now splits the trades into position periods (formerly "episodes") and lists every closed one in closedPositions, including one that ended inside a holding still open today.
+ * HoldingHistory: a sell that takes the quantity below zero now closes the period; before, the quantity stayed negative and the next buy did not start a new one. The quantity warning still points at it.
+ * GET /api/portfolio gains closedPositions (ClosedPositionResponse): symbol, sector, dates, days held, quantity, average prices and realized P&L of every closed position, open and closed holdings alike.
+ * ClosedPositionsTable added (UI): a "Closed positions" section below Positions, newest sale first, with the realized P&L totaled per currency and "—" plus a hint where prices are missing.
+ * New tests: ClosedPositionTest for the math, HoldingHistoryTest for the split into periods, PortfolioReadServiceTest and PortfolioControllerTest for closedPositions in the JSON.
+ *
+ * VERSION 0.9.0: [Reconciliation warnings]
+ * HoldingHistory.warnings added: checks the trades entered against IB and returns the one gap to fix first — no buy entered, a closed holding with no sell, or a quantity other than IB's (0.0001 tolerance).
+ * HoldingWarning / HoldingWarningType added (domain): sent as they are in a new warnings list on each holding in GET /api/portfolio; a warning never blocks a write, IB stays the source of truth.
+ * HoldingHistory.netQuantity now sums every trade entered, including a sell while flat that the dates ignore; before, it was the episode's running quantity, so such a sell never showed up as a gap.
+ * HoldingWarnings added (UI): a triangle next to the symbol with the message on hover, and the same message at the top of the trades panel; "no buy entered yet" in yellow, the other two in orange.
+ * App shows "n holdings need attention" under the Positions title, counting closed holdings too and noting "(n closed, hidden)", since a closed holding with no sell is hidden by default.
+ * New tests: HoldingHistoryTest for each warning, their order, the decimal tolerance and a sell the dates ignore; PortfolioControllerTest and PortfolioReadServiceTest for warnings in the JSON.
+ *
+ * VERSION 0.8.0: [Sector and trades in the UI]
+ * PositionsTable gains Sector, Bought, Last sold and Held columns; sorting keeps empty values ("—") last in both directions, and rows are keyed by holding id, so two holdings sharing a symbol no longer collide.
+ * The UI types IB figures as number | null and shows a missing one as "—"; before, a price IB did not report rendered as 0.00, which looked like a real zero.
+ * Held shows the holding period in its two largest units ("1y 1m", a month counted as 30 days), with the exact number of days on hover.
+ * SectorCell added: the sector is edited in the table — Enter or leaving the field saves, Esc cancels, an empty field clears it — and the sectors already entered are offered as you type.
+ * TradesPanel / TradeForm added: a chevron opens a holding's trades to add, correct or delete them; a holding with no trades starts as a BUY of the whole position at IB's average cost.
+ * TradeForm rounds that prefilled average cost to 4 decimal places: IB's figure (188.2990476) has more than the 6 the API accepts, so the first prefilled trade was rejected.
+ * apiClient added: the four write calls, named like the backend; a failed write shows the API's own reason, and every write reloads the portfolio (usePortfolio's retry is now reload).
+ * App shows only open holdings, with a "Show closed (n)" toggle that adds the closed ones dimmed and tagged; the summary always totals open holdings; the API-unreachable message no longer mentions TWS.
+ * HoldingHistory.holdingDays is never negative: a buy dated after the last sync (entered today while an older sync is served) counts as 0 days instead of -3.
+ * TradeRequest: too many digits now reads "must have at most 6 decimal places (and 14 digits before the point)" instead of Hibernate Validator's "numeric value out of bounds".
+ * New tests: HoldingHistoryTest for a buy dated after the last sync, and HoldingWriteControllerTest for a price with too many decimal places — the case the prefill hit.
+ *
+ * VERSION 0.7.0: [Write endpoints for the sector and trades]
+ * HoldingWriteController added: PUT /api/holdings/{id}/sector, POST /api/holdings/{id}/trades, PUT and DELETE /api/trades/{id}; the API was GET-only, now it also writes hand-entered data, never anything at IB.
+ * HoldingWriteService added: one transaction per write; the sector and note are trimmed and blank becomes null; holdings are never created or deleted here, only by the sync.
+ * SectorRequest / TradeRequest added (api/request): checked by @Valid before the endpoint runs — date not in the future, positive quantity, limits matching the NUMERIC(20,6) and VARCHAR columns.
+ * pom.xml: spring-boot-starter-validation added; without Hibernate Validator @Valid is silently ignored and invalid trades would reach the database.
+ * ApiErrorHandler added: API errors are ProblemDetail JSON; a failed validation names the fields ("quantity: must be greater than 0") instead of Spring's generic text; an unknown id is 404.
+ * Write endpoints accept JSON only and there is no CORS configuration, so another website can't make the browser write to the local API: text or form posts get 415, JSON needs a preflight nothing grants.
+ * TradeRepository added; HoldingEntity.changeSector, the new TradeEntity constructor and TradeEntity.changeDetails are the only code that writes the hand-entered columns.
+ * New tests: HoldingWriteControllerTest (status codes, messages, 415, no CORS) and HoldingWriteServiceTest (what is stored, against portfolioboss_test, incl. sector and trades surviving a re-sync).
+ *
+ * VERSION 0.6.0: [Derived buy/sell dates and holding period]
+ * HoldingHistory and TradeFact added (portfolioboss.domain, pure computation, no Spring): derive a holding's buy/sell dates and holding period from its trade rows instead of storing them.
+ * The derivation resets on every full sell followed by a rebuy of the same holding (a new "episode"), so a stock sold and bought again later doesn't inherit an unrelated first-buy date.
+ * A sell entered with nothing left to sell is ignored rather than rejected, on the assumption the matching buy just hasn't been entered yet.
+ * HoldingRepository.findByAccountOrderById now loads a holding's trades in the same query (@EntityGraph) instead of one extra query per holding.
+ * TradeResponse added; HoldingResponse gains firstBuyDate, lastSellDate, holdingDays and trades — the UI does not read them yet.
+ * New tests: HoldingHistoryTest (pure, no Spring or database) and two PortfolioReadServiceTest scenarios that insert real trade rows and check the derived fields end to end.
+ *
+ * VERSION 0.5.0: [Sync at connection; the API reads from the database]
+ * PortfolioSyncService added (portfolioboss.db): on every TWS connection, upserts holdings by (account, conId), refreshing IB's figures without touching sector or trades.
+ * A holding TWS no longer reports is marked CLOSED instead of deleted (reversible if it reappears), so manually-entered sector and trades survive; one account_state row is replaced per sync.
+ * Holding gains conId, IB's stable contract id, as its second field; PortfolioWrapper now keys holdings by conId instead of symbol, so two positions sharing a symbol no longer collide.
+ * PortfolioReadService added; PortfolioController now serves GET /api/portfolio from it instead of from SnapshotStore (deleted): the API always reads the database, never TWS directly.
+ * HoldingResponse gains id, conId, sector and status; the UI does not read them yet.
+ * TwsPortfolioRunner no longer exits when TWS is unreachable: it skips the sync and serves the last sync's data instead, printing [db]; only a database write failure still exits.
+ * portfolioboss.utils.Utils added (finiteOrNull, nanIfNull), replacing JsonNumbers: the same NaN-to-null rule now serves both the JSON responses and the stored database figures.
+ * AccountStateRepository, SyncResult, PortfolioSyncServiceTest and PortfolioReadServiceTest added: the sync and read path are tested against the real portfolioboss_test database.
+ *
+ * VERSION 0.4.0: [PostgreSQL, Flyway and the database schema]
+ * pom.xml / application.properties: JPA, Flyway and the PostgreSQL driver added; at startup the app now connects to the portfolioboss database, and exits with code 1 before reading TWS if PostgreSQL is down.
+ * V1__portfolio_schema.sql added: the holding, trade and account_state tables, created by Flyway at startup; a migration that has run is never edited, a later change is a new V2__ file.
+ * HoldingEntity / TradeEntity / AccountStateEntity added (portfolioboss.db): JPA mappings that Hibernate checks against the schema at startup; IB figures are DOUBLE PRECISION, hand-entered trade amounts NUMERIC.
+ * HoldingRepository added: finds a holding by account and IB contract id, or by account and status; nothing reads or writes the tables yet, so the API and the console report are unchanged.
+ * scripts/backup-db.sh added: dumps the database to ~/PortfolioBossBackups, outside the repo, through a .partial file so a failed dump never leaves a file that looks like a good backup.
+ *
  * VERSION 0.3.0: [Maven and Spring Boot: Spring MVC API, first tests]
  * pom.xml added: Maven build (Java 21, Spring Boot 4.1.1, JUnit 5) replaces the javac build; protobuf-java is now an ordinary dependency instead of a jar directory on the classpath.
  * run.sh now wraps mvn spring-boot:run and registers the TWS API jar in the local Maven repository once, since the jar is not on Maven Central; usage (./run.sh 7497 102) is unchanged.

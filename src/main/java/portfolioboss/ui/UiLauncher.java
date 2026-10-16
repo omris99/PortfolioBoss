@@ -48,12 +48,12 @@ public final class UiLauncher {
     private boolean startDevServer() {
         Path logFile = uiDirectory.resolve("dev-server.log");
         // A login shell, so that npm is on the PATH even when the JVM was not started from a terminal.
-        ProcessBuilder command = new ProcessBuilder("bash", "-l", "-c", "npm run dev")
+        ProcessBuilder devServerCommand = new ProcessBuilder("bash", "-l", "-c", "npm run dev")
                 .directory(uiDirectory.toFile())
                 .redirectErrorStream(true)
                 .redirectOutput(logFile.toFile());
         try {
-            Process devServer = command.start();
+            Process devServer = devServerCommand.start();
             stopWhenJvmExits(devServer);
             System.out.println("[ui] dev server started (pid " + devServer.pid() + "), log: " + logFile);
             return true;
@@ -64,7 +64,7 @@ public final class UiLauncher {
     }
 
     /** npm starts Vite as a child process, so stopping only npm would leave Vite holding the port. */
-    private static void stopWhenJvmExits(Process devServer) {
+    private void stopWhenJvmExits(Process devServer) {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             devServer.descendants().forEach(ProcessHandle::destroy);
             devServer.destroy();
@@ -123,7 +123,7 @@ public final class UiLauncher {
         return false;
     }
 
-    private static void openInBrowser(String url) {
+    private void openInBrowser(String url) {
         try {
             new ProcessBuilder("open", url).start();   // macOS, as in IBBot
             System.out.println("[ui] opened " + url);

@@ -1,0 +1,124 @@
+import type {
+  AnalysisRun,
+  CashMovementRequest,
+  ManualPositionRequest,
+  NewManualPositionRequest,
+  TradeRequest,
+} from '../types/portfolio';
+
+/** A write the API refused or could not be reached for; `message` is meant to be shown to the user as it is. */
+export class ApiError extends Error {}
+
+const API_UNREACHABLE_MESSAGE = 'Could not reach the PortfolioBoss API. Is ./run.sh running?';
+
+/** What to show for a failed write: the API's own reason when there is one. */
+export function errorMessageOf(error: unknown): string {
+  return error instanceof ApiError ? error.message : 'Saving failed unexpectedly.';
+}
+
+export function changeSector(holdingId: number, sector: string | null): Promise<void> {
+  return sendJson('PUT', `/api/holdings/${holdingId}/sector`, { sector });
+}
+
+export function addTrade(holdingId: number, trade: TradeRequest): Promise<void> {
+  return sendJson('POST', `/api/holdings/${holdingId}/trades`, trade);
+}
+
+export function changeTrade(tradeId: number, trade: TradeRequest): Promise<void> {
+  return sendJson('PUT', `/api/trades/${tradeId}`, trade);
+}
+
+export function deleteTrade(tradeId: number): Promise<void> {
+  return sendJson('DELETE', `/api/trades/${tradeId}`);
+}
+
+export function addManualPosition(manualPosition: NewManualPositionRequest): Promise<void> {
+  return sendJson('POST', '/api/manual-positions', manualPosition);
+}
+
+export function changeManualPosition(manualPositionId: number, details: ManualPositionRequest): Promise<void> {
+  return sendJson('PUT', `/api/manual-positions/${manualPositionId}`, details);
+}
+
+/** Its trades go with it. */
+export function deleteManualPosition(manualPositionId: number): Promise<void> {
+  return sendJson('DELETE', `/api/manual-positions/${manualPositionId}`);
+}
+
+/** A manual position's trades are then corrected and deleted like any trade: `changeTrade`, `deleteTrade`. */
+export function addManualPositionTrade(manualPositionId: number, trade: TradeRequest): Promise<void> {
+  return sendJson('POST', `/api/manual-positions/${manualPositionId}/trades`, trade);
+}
+
+/** Never a second account owner: the API adds other investors only. A taken name is refused (409). */
+export function addInvestor(name: string): Promise<void> {
+  return sendJson('POST', '/api/investors', { name });
+}
+
+/** The account owner's name too. */
+export function renameInvestor(investorId: number, name: string): Promise<void> {
+  return sendJson('PUT', `/api/investors/${investorId}`, { name });
+}
+
+/** Never for the account owner, whose cash comes from IB (400). */
+export function addCashMovement(investorId: number, cashMovement: CashMovementRequest): Promise<void> {
+  return sendJson('POST', `/api/investors/${investorId}/cash-movements`, cashMovement);
+}
+
+export function changeCashMovement(movementId: number, cashMovement: CashMovementRequest): Promise<void> {
+  return sendJson('PUT', `/api/cash-movements/${movementId}`, cashMovement);
+}
+
+export function deleteCashMovement(movementId: number): Promise<void> {
+  return sendJson('DELETE', `/api/cash-movements/${movementId}`);
+}
+
+/**
+ * Analyzes the analyst ratings and news of the given holdings, or of every open one (`null`): two web searches and one
+ * Claude call a stock, paid — about $0.04 and 5 Tavily credits each. Answers once every stock is done, which takes tens of
+ * seconds, with what the run did and cost; the analyses themselves come with the next reload of the portfolio.
+ */
+export async function analyzeHoldings(holdingIds: number[] | null): Promise<AnalysisRun> {
+  const response = await sendRequest('POST', '/api/analysis', { holdingIds });
+  return (await response.json()) as AnalysisRun;
+}
+
+/** Sends one write whose answer is not needed: after a write the caller reloads the whole portfolio. */
+async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, body?: unknown): Promise<void> {
+  await sendRequest(method, url, body);
+}
+
+/** Sends one request, its body as JSON — the only kind the write endpoints accept — and answers the successful response. */
+async function sendRequest(method: 'PUT' | 'POST' | 'DELETE', url: string, body?: unknown): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(API_UNREACHABLE_MESSAGE);
+  }
+  if (!response.ok) {
+    throw new ApiError(await readErrorMessage(response));
+  }
+  return response;
+}
+
+/**
+ * The API answers errors with a ProblemDetail JSON body whose `detail` says what was wrong
+ * ("quantity: must be greater than 0"). Anything else — say, Vite's own error page when the API is down —
+ * gets a message with just the status.
+ */
+async function readErrorMessage(response: Response): Promise<string> {
+  try {
+    const problemDetail = (await response.json()) as { detail?: unknown };
+    if (typeof problemDetail.detail === 'string' && problemDetail.detail !== '') {
+      return problemDetail.detail;
+    }
+  } catch {
+    // Not JSON: fall through to the status.
+  }
+  return `The API answered HTTP ${response.status}`;
+}

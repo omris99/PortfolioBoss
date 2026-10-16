@@ -1,28 +1,32 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { PortfolioSnapshot } from '../types/portfolio';
 
-const API_UNREACHABLE_MESSAGE =
-  'Could not read the portfolio from the PortfolioBoss API. Is ./run.sh running, with TWS logged in?';
+// The API serves the last sync even with TWS off, so TWS is not the thing to check here.
+const API_UNREACHABLE_MESSAGE = 'Could not reach the PortfolioBoss API. Is ./run.sh running?';
 
-/** Loads the portfolio snapshot once on mount; `retry` loads it again (e.g. after starting the API). */
+/**
+ * Loads the portfolio snapshot once on mount. `reload` loads it again: after a failed load, and after every write
+ * (sector, trades), since the API derives the dates and holding period on the server. The previous snapshot stays
+ * in place while reloading, so the table does not disappear.
+ */
 export function usePortfolio() {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const loadSnapshot = useCallback(async () => {
-    setLoading(true);
+    setIsLoading(true);
     try {
       const response = await fetch('/api/portfolio');
       if (!response.ok) {
         throw new Error(`The API answered HTTP ${response.status}`);
       }
       setSnapshot((await response.json()) as PortfolioSnapshot);
-      setError(null);
+      setErrorMessage(null);
     } catch {
-      setError(API_UNREACHABLE_MESSAGE);
+      setErrorMessage(API_UNREACHABLE_MESSAGE);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }, []);
 
@@ -30,5 +34,5 @@ export function usePortfolio() {
     void loadSnapshot();
   }, [loadSnapshot]);
 
-  return { snapshot, error, loading, retry: loadSnapshot };
+  return { snapshot, errorMessage, isLoading, reload: loadSnapshot };
 }

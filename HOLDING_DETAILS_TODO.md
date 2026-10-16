@@ -66,7 +66,7 @@ src/main/java/portfolioboss/
 ├── Main.java                # @SpringBootApplication בלבד
 ├── TwsPortfolioRunner.java  # ApplicationRunner (TWS → sync → UI). הבעלים של host/port/clientId
 ├── ib/  model/  ui/         # IbGateway, PortfolioWrapper, Holding(+conId), PortfolioSnapshot, UiLauncher — תפקיד זהה
-├── persistence/             # *Entity, *Repository, PortfolioSyncService            (סשנים 1–2)
+├── db/                      # *Entity, *Repository, PortfolioSyncService            (סשנים 1–2)
 ├── domain/                  # HoldingHistory — חישובים טהורים, בלי Spring          (סשן 3)
 └── api/                     # PortfolioController, HoldingWriteController, *Request, ApiErrors   (סשנים 0, 2–4)
     └── response/            # *Response — מה שה-UI מקבל                                           (סשנים 0, 2–3)
@@ -83,7 +83,7 @@ src/main/resources/          # application.properties, db/migration/V1__portfoli
 > **תנאי מוקדם:** אין. **המטרה:** אותה התנהגות ואותו JSON כמו היום, אבל נבנה ב-Maven ורץ כאפליקציית
 > Spring Boot. **עדיין אין DB.** מומלץ לעבוד על branch ייעודי — זה משנה את שיטת הבנייה כולה (המשתמש מחליט).
 >
-> **סטטוס (21.09.2026):** 0.1–0.6 ✅ בוצעו על branch `maven-spring-boot` (עדיין לא committed). נשארו פתוחים: ה-diff החי מול TWS ובדיקת ה-UI מול נתונים חיים (ב"בדיקת אימות סשן 0" למטה).
+> **סטטוס (21.09.2026):** 0.1–0.6 ✅ בוצעו על branch `maven-spring-boot` (commit 8427918). הבדיקה החיה מול TWS דלוק ✅ — המשתמש הריץ ואישר שהכול עובד.
 
 ### ✅ 0.1 🟡 `brew install maven` + `pom.xml`
 
@@ -298,7 +298,7 @@ mvn -q spring-boot:run -Dspring-boot.run.arguments="$*"
 **בדיקת אימות סשן 0:**
 1. **לפני** שמתחילים: כש-`run.sh` הישן רץ מול TWS — `curl -s localhost:8080/api/portfolio > before.json`.
 2. אחרי הסשן: `after.json` באותה דרך; `diff <(jq -S . before.json) <(jq -S . after.json)` — רק `asOf` רשאי להיות שונה.
-3. ✅ `mvn -q test` ירוק; ✅ `cd ui && npm run build` ירוק; ה-UI מציג אותה טבלה — עדיין לא נבדק (דורש TWS).
+3. ✅ `mvn -q test` ירוק; ✅ `cd ui && npm run build` ירוק; ✅ ה-UI מציג אותה טבלה — נבדק מול TWS דלוק ב-21.09.2026 (אישור המשתמש; ה-diff הפורמלי של before/after לא תועד).
 4. ✅ **בלי TWS:** אותן הודעות שגיאה ויציאה נקייה (קוד 0) — נבדק ב-21.09.2026. נוספו שורות לוג של Spring (עלייה וכיבוי של Tomcat) סביב הודעות השגיאה.
 
 ---
@@ -306,8 +306,17 @@ mvn -q spring-boot:run -Dspring-boot.run.arguments="$*"
 ## סשן 1 — PostgreSQL + Flyway + סכמה + ישויות JPA
 
 > **תנאי מוקדם:** סשן 0. **המטרה:** DB אמיתי עם סכמה, שהאפליקציה מתחברת אליו ומאמתת. **עדיין אין סנכרון.**
+>
+> **סטטוס (21.09.2026):** 1.1–1.5 ✅ בוצעו על branch `maven-spring-boot` (עדיין לא committed). סטיות מהתוכנית שמופיעה למטה:
+> - **עמודות IB הן `DOUBLE PRECISION`**, לא `NUMERIC(20,6)` (גם ב-`account_state`); `NUMERIC` נשאר רק ל-`trade.quantity` / `price`.
+>   נבדק: `ddl-auto=validate` נכשל על שדה `Double` מול עמודת `NUMERIC` (`wrong column type encountered in column [average_cost]`).
+> - **החבילה היא `portfolioboss.db`**, לא `persistence` — עקבית עם `ib` / `api` / `ui` ועם תגית הלוג `[db]`.
+> - `HoldingEntity.position` הוא `double` (העמודה `NOT NULL`), לא `Double`. `trade.created_at` לא ממופה ב-`TradeEntity` (ברירת המחדל של ה-DB ממלאת אותו).
+> - נוצר רק `HoldingRepository`; `TradeRepository` ו-`AccountStateRepository` ייווצרו כשיהיה להם שימוש (סשנים 2 ו-4).
+> - **נדחו:** `spring-boot-starter-validation` — לסשן 4 (`@Valid`); סטארטרי ה-`*-test` של JPA ו-Flyway — לסשן 2 (`@DataJpaTest`).
+> - `psql` לא ב-PATH (הנוסחה `postgresql@17` היא keg-only): לקרוא לו ב-`/opt/homebrew/opt/postgresql@17/bin/`, או להוסיף את התיקייה ל-PATH.
 
-### 1.1 🟢 התקנת PostgreSQL והקמת מסדי נתונים
+### ✅ 1.1 🟢 התקנת PostgreSQL והקמת מסדי נתונים
 
 **המימוש:**
 ```bash
@@ -322,7 +331,7 @@ createdb portfolioboss_test              # לבדיקות בלבד — לעול�
 
 ---
 
-### 1.2 🟡 מיגרציית Flyway `V1__portfolio_schema.sql`
+### ✅ 1.2 🟡 מיגרציית Flyway `V1__portfolio_schema.sql`
 
 **קובץ חדש:** `src/main/resources/db/migration/V1__portfolio_schema.sql`
 
@@ -383,7 +392,7 @@ CREATE TABLE account_state (
 
 ---
 
-### 1.3 🟡 ישויות JPA ו-repositories (`portfolioboss.persistence`)
+### ✅ 1.3 🟡 ישויות JPA ו-repositories (`portfolioboss.db`)
 
 **המימוש:** `HoldingEntity`, `TradeEntity`, `AccountStateEntity`, `enum HoldingStatus { OPEN, CLOSED }`, `enum TradeSide { BUY, SELL }`
 (`@Enumerated(EnumType.STRING)`). תבנית:
@@ -421,7 +430,7 @@ public interface HoldingRepository extends JpaRepository<HoldingEntity, Long> {
 
 ---
 
-### 1.4 🟢 `application.properties`
+### ✅ 1.4 🟢 `application.properties`
 
 ```properties
 spring.application.name=portfolioboss
@@ -445,7 +454,7 @@ spring.jpa.open-in-view=false
 
 ---
 
-### 1.5 🟢 גיבוי — `scripts/backup-db.sh`
+### ✅ 1.5 🟢 גיבוי — `scripts/backup-db.sh`
 
 **הבעיה:** הנתונים הידניים הם המוצר ואי אפשר לשחזר אותם מ-IB.
 
@@ -462,13 +471,31 @@ pg_dump portfolioboss | gzip > "${HOME}/PortfolioBossBackups/portfolioboss-$(dat
 `account_state`, `flyway_schema_history`. עם Postgres כבוי (`brew services stop postgresql@17`) — האפליקציה נכשלת מהר עם שגיאה ברורה.
 ה-UI והתנהגות ה-TWS — ללא שינוי.
 
+**סטטוס הבדיקה (21.09.2026):**
+1. ✅ `./run.sh` עולה; `Successfully applied 1 migration ... now at version v1`; `\dt` מציג `holding`, `trade`, `account_state`, `flyway_schema_history`; `mvn -q test` ירוק. הורץ עם פורט TWS שלא קיים (`./run.sh 7599`), כדי שהחזקות אמיתיות לא יודפסו לשיחה.
+2. ✅ DB לא זמין → נכשל תוך 3 שניות, קוד יציאה 1, `Connection to localhost:5999 refused`. נבדק בהפניית ה-datasource לפורט שלא מאזין (`SPRING_DATASOURCE_URL=... ./run.sh`), לא בכיבוי השירות. הפלט הוא stack trace של Spring (~105 שורות) וההודעה בראשו.
+3. ✅ `validate` נבדק שלילית על `portfolioboss_test` (עמודה ששונתה ל-`NUMERIC` → כשל בעלייה); מסד הבדיקות נוצר מחדש נקי. ✅ גיבוי ושחזור ל-`portfolioboss_test` נבדקו.
+4. ⬜ **פתוח:** ריצה רגילה של `./run.sh` מול TWS דלוק, כדי לראות שה-UI מציג אותה טבלה כמו קודם.
+
 ---
 
 ## סשן 2 — סנכרון בחיבור + ה-API קורא מה-DB
 
 > **תנאי מוקדם:** סשן 1. **המטרה:** בכל חיבור ל-TWS ה-DB מתעדכן, וה-API מגיש **רק מה-DB**.
+>
+> **סטטוס (22.09.2026):** 2.1–2.5 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית:
+> - השירות הקורא נקרא **`PortfolioReadService`**, לא `PortfolioQueryService` (המלצה שאושרה).
+> - סדר המימוש: 2.1, ואז 2.2+2.5 (הסנכרון ובדיקותיו) יחד, ואז 2.4+2.3 יחד — אי אפשר היה למחוק את `SnapshotStore`
+>   לפני ששני הצדדים (הקורא והכותב) עברו לדבר עם ה-DB.
+> - `HoldingEntity` / `AccountStateEntity` קיבלו accessors ציבוריים בסגנון record ו-`HoldingEntity.toIbHolding()`,
+>   כך ש-`costBasis` / `unrealizedPnlPercent` נשארים מחושבים פעם אחת, ב-`Holding`.
+> - העוזר המשותף ל-JSON ול-DB (`finiteOrNull`, ובכיוון ההפוך `nanIfNull`) יושב ב-**`portfolioboss.utils.Utils`**
+>   (השם `Figures` נדחה — "שם גרוע מאוד"; `Utils` הוא הדפוס הקיים ב-IBBot). `JsonNumbers` נמחק.
+> - נוספו `PortfolioWrapperTest` ו-`PortfolioReadServiceTest`, לא בתוכנית המקורית.
+> - **חריגה מכוונת מהתוכנית, ביוזמת עומרי (22.09.2026):** יישמנו כבר עכשיו את הליבה של **סשן 9** למטה —
+>   TWS לא זמין כבר לא מפיל את האפליקציה. 9.2/9.3 (דגל stale + באנר ב-UI) נשארו בכוונה לסשן 9 עצמו.
 
-### 2.1 🟢 `Holding` מקבל `conId`; `PortfolioWrapper` ממפה לפיו
+### ✅ 2.1 🟢 `Holding` מקבל `conId`; `PortfolioWrapper` ממפה לפיו
 
 **קוד קיים רלוונטי:**
 ```java
@@ -489,9 +516,9 @@ holdings.put(contract.symbol(), new Holding(contract.symbol(), ...));
 
 ---
 
-### 2.2 🔴 `PortfolioSyncService` — הליבה של הסנכרון
+### ✅ 2.2 🔴 `PortfolioSyncService` — הליבה של הסנכרון
 
-**קובץ חדש:** `src/main/java/portfolioboss/persistence/PortfolioSyncService.java`
+**קובץ חדש:** `src/main/java/portfolioboss/db/PortfolioSyncService.java`
 
 **המימוש:**
 ```java
@@ -536,14 +563,16 @@ public class PortfolioSyncService {
 
 ---
 
-### 2.3 🟡 `Main`: סנכרון במקום `SnapshotStore`
+### ✅ 2.3 🟡 `Main`: סנכרון במקום `SnapshotStore`
 
 **המימוש:** ב-`ApplicationRunner` (0.3): `snapshotStore.set(snapshot)` ← `syncService.sync(snapshot)`. **למחוק את `SnapshotStore`.**
-אם הסנכרון זורק (שגיאת DB) — `[db error] ...` ויציאה עם קוד 1: בלי DB האפליקציה לא יכולה לעבוד. (יציאה על TWS לא זמין — נשארת עד סשן 9.)
+אם הסנכרון זורק (שגיאת DB) — `[db error] ...` ויציאה עם קוד 1: בלי DB האפליקציה לא יכולה לעבוד.
+**עודכן בפועל (22.09.2026):** המשפט "יציאה על TWS לא זמין — נשארת עד סשן 9" **כבר לא נכון** — ראו הליבה
+של סשן 9 למטה, שבוצעה מוקדם באותו יום ביוזמת עומרי.
 
 ---
 
-### 2.4 🟡 `PortfolioQueryService` + ה-DTOs — ה-API קורא מה-DB
+### ✅ 2.4 🟡 `PortfolioReadService` (בתוכנית: `PortfolioQueryService`) + ה-DTOs — ה-API קורא מה-DB
 
 **המימוש:**
 - `PortfolioResponse(account, asOf, netLiquidation, totalCashValue, holdings)` — `asOf` מ-`account_state.as_of`.
@@ -558,7 +587,7 @@ public class PortfolioSyncService {
 
 ---
 
-### 2.5 🟡 בדיקות סנכרון (JUnit מול DB אמיתי)
+### ✅ 2.5 🟡 בדיקות סנכרון (JUnit מול DB אמיתי)
 
 **הגדרה:** `src/test/resources/application-test.properties` → `jdbc:postgresql://localhost:5432/portfolioboss_test`, `@ActiveProfiles("test")`.
 **⚠️ בדיקות לעולם לא רצות מול `portfolioboss`.** שימוש ב-`@DataJpaTest` עם `@AutoConfigureTestDatabase(replace = NONE)` (כדי לא לעבור ל-DB מוטמע) + `@Import(PortfolioSyncService.class)`;
@@ -579,15 +608,34 @@ public class PortfolioSyncService {
 2. `psql portfolioboss -c "select symbol, position, status from holding"` תואם ל-TWS.
 3. `update holding set sector='Test' where symbol='...'` → ריצה נוספת → הסקטור נשאר.
 4. ה-UI מציג אותה טבלה כמו קודם (השדות החדשים עדיין לא מוצגים). `diff` מול `before.json` מסשן 0 — נוספו רק `id`, `conId`, `sector`, `status`.
-5. בלי TWS: יציאה עם ההודעה הישנה.
+5. ~~בלי TWS: יציאה עם ההודעה הישנה.~~ **שונה ב-22.09.2026** — ראו הסטטוס למעלה: בלי TWS האפליקציה עולה
+   כרגיל ומגישה את הסנכרון האחרון, במקום לצאת.
+
+**סטטוס הבדיקה (22.09.2026, חלקי):**
+1. ✅ ריצה ראשונה מול TWS חי: `holding` ב-`portfolioboss` (האמיתי) מכיל 7 שורות `OPEN`, שורת `account_state` אחת.
+   ⬜ ריצה שנייה מול TWS חי (כדי לראות `updated` ולא `new`) — עוד לא בוצעה.
+2. ⬜ פתוח — עומרי דחה לסשן 4.
+3. ✅ (25.09.2026, סשן 4) מכוסה אוטומטית: `HoldingWriteServiceTest.theSectorAndTradesEnteredByHandSurviveTheNextSync` מזין
+   סקטור ועסקה דרך השירות הכותב, מריץ סנכרון אמיתי נוסף (מול `portfolioboss_test`), ובודק ששניהם נשארו. לא הורץ חי מול TWS.
+4. ⬜ פתוח חלקית: אומת ש-`GET /api/portfolio` מחזיר 200 עם `id`/`conId`/`sector`/`status` על גבי הנתונים האמיתיים;
+   לא בוצעה השוואה חזותית מול ה-UI הפתוח בדפדפן ולא `diff` מול `before.json`.
+5. ✅ אומת פעמיים: (א) TWS כבוי **לפני** השינוי — יציאה עם ההודעה הישנה, ה-DB לא נגע. (ב) TWS כבוי **אחרי**
+   השינוי, מול אותו DB עם 7 השורות מ-(1) — האפליקציה עלתה, הדפיסה
+   `[db] TWS unreachable; serving the portfolio from the last sync, if any`, ו-`/api/portfolio` החזיר את
+   אותם 7 holdings ואת אותו `asOf` כמו הסנכרון האחרון.
 
 ---
 
 ## סשן 3 — נגזרות: תאריך קנייה, תאריך מכירה, זמן החזקה
 
 > **תנאי מוקדם:** סשן 2. **המטרה:** לחשב מהעסקאות ולהגיש ב-API. **עדיין אין כתיבה ולא UI** — עסקאות נכנסות כרגע רק דרך `psql`.
+>
+> **סטטוס (22.09.2026):** 3.1–3.4 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית:
+> - האלגוריתם וההגדרות זהים לתוכנית; נוספה בדיקה עשירית ל"SELL בלי BUY בכלל מעולם" (מקרה קצה של הכלל בסעיף האחרון).
+> - `snapshotDate` ל-`OPEN` מחושב מ-`account_state.as_of` (`Instant`) דרך `ZoneId.systemDefault()` — פרט שהתוכנית לא פירטה; זו החלטה שלי, לא אושרה או נדחתה במפורש.
+> - **שינוי חיצוני שבוצע בקוד אחרי הכתיבה הראשונית שלי (22.09.2026, לא על ידי):** `HoldingEntity.firstSeen(...)` ו-`AccountStateEntity.of(...)` (factory-ים סטטיים) הפכו לבנאים (`new HoldingEntity(...)`, `new AccountStateEntity(...)`); `TradeResponse.from(...)` ו-`HoldingResponse.from(...)` עברו לאותו דפוס (`TradeResponse::new`). כל מה שהיה package-private (`refreshFromIb`, `markClosed`, הבנאים, ה-`from`) הפך ל-`protected` — החלטה מכוונת של עומרי לטובת קריאות (מילת מפתח מפורשת עדיפה על "העדר מילה" ש-package-private הוא בפועל), אושרה ונשארת ככה. ראו CLAUDE.md (Conventions) לניסוח המלא. שמות משתנים ופרמטרים רבים שופרו לקריאות (`reading`→`holdingFromIb`, `entity`→`holdingEntity`, `context`→`applicationContext` וכו').
 
-### 3.1 🟡 `HoldingHistory` — חישוב טהור בלי Spring (`portfolioboss.domain`)
+### ✅ 3.1 🟡 `HoldingHistory` — חישוב טהור בלי Spring (`portfolioboss.domain`)
 
 **הבעיה:** "זמן החזקה" הוא המדד המרכזי, והוא נשבר בשקט במקרה נפוץ אצל משקיע ארוך-טווח: **מכירה מלאה וקנייה מחדש** של אותה מניה.
 תאריך הקנייה הראשון הוא אז של פוזיציה אחרת.
@@ -608,13 +656,13 @@ public class PortfolioSyncService {
 
 ---
 
-### 3.2 🟡 טעינת עסקאות בלי N+1
+### ✅ 3.2 🟡 טעינת עסקאות בלי N+1
 
-**המימוש:** ב-`HoldingRepository`: `@EntityGraph(attributePaths = "trades")` על השאילתה ש-`PortfolioQueryService` משתמש בה (שאילתה אחת עם join fetch).
+**המימוש:** ב-`HoldingRepository`: `@EntityGraph(attributePaths = "trades")` על `findByAccountOrderById`, השאילתה ש-`PortfolioReadService` (בתוכנית: `PortfolioQueryService`) משתמש בה (שאילתה אחת עם join fetch).
 
 ---
 
-### 3.3 🟡 הרחבת `HoldingResponse`
+### ✅ 3.3 🟡 הרחבת `HoldingResponse`
 
 **המימוש (תוספות בלבד):**
 ```java
@@ -628,7 +676,7 @@ List<TradeResponse> trades     // מסודר לפי תאריך ואז id
 
 ---
 
-### 3.4 🟢 `HoldingHistoryTest` (טהור — בלי Spring, בלי DB)
+### ✅ 3.4 🟢 `HoldingHistoryTest` (טהור — בלי Spring, בלי DB)
 
 1. אין עסקאות → הכול `null`
 2. קנייה אחת → `firstBuyDate` נכון, `lastSellDate = null`, `holdingDays` = הפרש הימים
@@ -645,13 +693,35 @@ List<TradeResponse> trades     // מסודר לפי תאריך ואז id
 **בדיקת אימות סשן 3:** `insert into trade (holding_id, trade_date, side, quantity) values (...)` דרך `psql` →
 `curl -s localhost:8080/api/portfolio | jq '.holdings[] | select(.symbol=="X") | {firstBuyDate, lastSellDate, holdingDays, trades}'`.
 
+**סטטוס הבדיקה (22.09.2026):** ✅ הוחלף בכיסוי אוטומטי — `PortfolioReadServiceTest` מכניס עסקאות אמיתיות ל-DB
+של הבדיקות דרך `JdbcTemplate` ובודק בדיוק את השרשרת הזו (עד ל-response, כולל `CLOSED` עם `lastSellDate`).
+עומרי סירב במפורש לבדיקה חיה מול ה-`portfolioboss` האמיתי ("הבדיקות האוטומטיות מספיקות") — לא בוצעה בכוונה,
+לא נשכחה. גם בדיקת חבלה (ניטרול איפוס ה-episode) בוצעה ידנית וחזרה — לא נשמרה כבדיקה קבועה.
+
 ---
 
 ## סשן 4 — endpoints כותבים (סקטור ועסקאות)
 
 > **תנאי מוקדם:** סשן 3. **⚠️ זה הסשן ששובר במכוון את הכלל ב-CLAUDE.md** "`ApiServer` has one GET endpoint … Don't add an endpoint that changes anything".
+>
+> **סטטוס (25.09.2026):** 4.1–4.5 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית (אושרו מראש):
+> - השירות נקרא **`HoldingWriteService`**, לא `TradeService` — הוא כותב גם את הסקטור; התאום של `PortfolioReadService`, ויושב לידו ב-`api`.
+> - **`ApiErrorHandler`**, לא `ApiErrors` — השם אומר מה המחלקה עושה.
+> - **אין `NotFoundException`:** 404 נזרק כ-`ResponseStatusException(NOT_FOUND, "No holding with id …")`, ומחלקת הבסיס
+>   `ResponseEntityExceptionHandler` כבר הופכת אותו ל-`ProblemDetail` עם ההודעה — מחלקה אחת ו-handler אחד פחות.
+> - ה-records של הבקשות יושבים ב-**`api/request/`** (מקביל ל-`api/response/`). ה-controller עם נתיבים מלאים, בלי `@RequestMapping("/api")` —
+>   כמו `PortfolioController`. שמות המתודות: `changeSector`, `addTrade`, `changeTrade`, `deleteTrade`.
+> - **הבדיקות מפוצלות לשתיים** (ולא בדיקת MockMvc אחת מול ה-DB): `HoldingWriteControllerTest` (`@WebMvcTest`, שירות מדומה — 14 בדיקות)
+>   ו-`HoldingWriteServiceTest` (`@DataJpaTest` מול `portfolioboss_test` — 10). `@SpringBootTest` היה מריץ את `TwsPortfolioRunner` ומתחבר ל-TWS.
+> - **תוספות:** `@Digits(integer = 14, fraction = 6)` על כמות ומחיר (תואם `NUMERIC(20,6)`; בלעדיו מספר ענק מגיע ל-Postgres ומחזיר 500),
+>   ו-`note` ריקה נשמרת כ-`null` כמו הסקטור.
+> - **נמצא בבדיקת חבלה:** `consumes` אינו ההגנה היחידה — `@RequestBody` של record נקרא רק מ-JSON, ולכן גם בלעדיו מתקבל 415. נשאר כהצהרה מפורשת.
+> - הודעות הולידציה באנגלית: ל-Hibernate Validator אין קובץ הודעות בעברית.
 
-### 4.1 🟡 החלטה מתועדת: ניסוח מחדש של ה-invariant
+### ✅ 4.1 🟡 החלטה מתועדת: ניסוח מחדש של ה-invariant
+
+> **בפועל (25.09.2026, ב"עדכונים של סוף סשן"):** עודכנו CLAUDE.md ("Hard invariant: read-only" — כולל "אין הגדרת CORS"),
+> ה-Rules של ה-commit skill, reference_ui.md, והשורה "GET only" ב-README.
 
 **קוד קיים רלוונטי (CLAUDE.md):** "The local API is covered by the same rule: `ApiServer` has one GET endpoint and binds to the loopback interface only. Don't add an endpoint that changes anything…"
 
@@ -663,7 +733,7 @@ database (sector, trades). It binds to loopback only, has no CORS configuration,
 
 ---
 
-### 4.2 🟡 `HoldingWriteController` + `TradeService`
+### ✅ 4.2 🟡 `HoldingWriteController` + `TradeService` (בפועל: `HoldingWriteService`)
 
 **המימוש:**
 ```java
@@ -699,7 +769,7 @@ record TradeRequest(
 
 ---
 
-### 4.3 🟡 טיפול בשגיאות — `ApiErrors`
+### ✅ 4.3 🟡 טיפול בשגיאות — `ApiErrors` (בפועל: `ApiErrorHandler`)
 
 **הבעיה:** ה-UI צריך להציג הודעה שימושית, אבל `ProblemDetail` ברירת המחדל של שגיאות ולידציה הוא רק `"Invalid request content."`.
 
@@ -715,7 +785,7 @@ JSON פגום (`HttpMessageNotReadableException`) — נכלל בבסיס (400).
 
 ---
 
-### 4.4 🔴 עמדת אבטחה — בדיקות
+### ✅ 4.4 🔴 עמדת אבטחה — בדיקות
 
 **הבעיה:** ברגע שה-API כותב, דף אינטרנט זדוני יכול לנסות לשלוח בקשות ל-`localhost:8080` מהדפדפן.
 
@@ -727,7 +797,7 @@ JSON פגום (`HttpMessageNotReadableException`) — נכלל בבסיס (400).
 
 ---
 
-### 4.5 🟡 בדיקות `HoldingWriteControllerTest` (MockMvc, מול ה-DB של הבדיקות)
+### ✅ 4.5 🟡 בדיקות `HoldingWriteControllerTest` (MockMvc, מול ה-DB של הבדיקות — בפועל מפוצל, ראו הסטטוס למעלה)
 
 עסקה תקינה → 201 ונשמרת; תאריך עתידי → 400; כמות `0` → 400; `side` לא מוכר → 400; החזקה לא קיימת → 404;
 סקטור ריק → `null`; `text/plain` → 415; מחיקה כפולה → 404 בפעם השנייה; הודעת השגיאה מכילה את שם השדה.
@@ -737,13 +807,28 @@ JSON פגום (`HttpMessageNotReadableException`) — נכלל בבסיס (400).
 **בדיקת אימות סשן 4:** `curl -X POST -H 'Content-Type: application/json' -d '{"tradeDate":"2025-01-15","side":"BUY","quantity":10}' localhost:8080/api/holdings/1/trades`
 → 201; שורה ב-`psql`; `GET /api/portfolio` מחזיר אותה. אותה בקשה עם `-H 'Content-Type: text/plain'` → 415.
 
+**סטטוס הבדיקה (25.09.2026):** ✅ `mvn -q test` ירוק — 62 בדיקות (24 חדשות). ✅ בדיקה חיה מול ה-`portfolioboss` האמיתי, בבחירת עומרי
+(`./run.sh 7599`, בלי TWS): `POST` של BUY להחזקה 1 → 201; `GET` הציג את העסקה עם `firstBuyDate` ו-`holdingDays` (615);
+`text/plain` → 415; כמות 0 → 400 עם `"quantity: must be greater than 0"`; preflight מאתר אחר — בלי כותרות CORS;
+`DELETE` דרך ה-proxy של Vite (5174, עם `Origin` של הדפדפן) → 204; מחיקה חוזרת → 404 `"No trade with id 1"`.
+ה-DB חזר למצבו (רק מונה ה-id של `trade` התקדם). בדיקת חבלה: הסרת `@Valid` או של ה-override ב-`ApiErrorHandler` מפילה בדיקות;
+הסרת `consumes` לא (ראו הסטטוס למעלה).
+
 ---
 
 ## סשן 5 — UI: צד הקריאה (types, פורמט, עמודות, מיון)
 
 > **תנאי מוקדם:** סשן 3 (סשן 4 לא הכרחי לזה, אבל יאפשר לבדוק בקלות).
+>
+> **סטטוס (25.09.2026):** 5.1–5.4 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית:
+> - **תיקון שלא היה בתוכנית (אושר):** נתוני IB ב-`Holding` הם עכשיו `number | null` (כמו שה-API שולח), וכל פונקציות `format.ts` מקבלות `null` ← "—".
+>   קודם `null` הוצג כ-`0.00` — נראה כמו מחיר אמיתי של אפס. `formatOptionalMoney` של `SummaryBar` נמחק (`formatMoney` עושה אותו דבר).
+> - `compareNullableLast` נקרא **`compareWithEmptyLast`**; העמודות מחולקות ל-`TextField` / `NumberField` (`isTextField`) — תאריכי ISO ממוינים כטקסט.
+>   עמודה שנבחרת לראשונה: טקסט ותאריכים עולה (הישן קודם), מספרים יורד.
+> - תוספות קטנות: tooltip עם מספר הימים המדויק על "Held" (`formatDayCount`), כי החודשים מקורבים; `whitespace-nowrap` בתאים.
+> - `SummaryBar` מקבל `{ snapshot, openHoldings }` (הסכומים מהפתוחות, נתוני החשבון מה-snapshot); `openHoldingsOf` ב-`App`.
 
-### 5.1 🟢 `ui/src/types/portfolio.ts`
+### ✅ 5.1 🟢 `ui/src/types/portfolio.ts`
 
 **קוד קיים רלוונטי:** `Holding` שורות 3-16; ההערה בשורה 1 מפנה ל-`PortfolioJson.java` (שנמחק בסשן 0).
 
@@ -777,7 +862,7 @@ export interface Holding {
 
 ---
 
-### 5.2 🟢 `ui/src/lib/format.ts`
+### ✅ 5.2 🟢 `ui/src/lib/format.ts`
 
 **המימוש:**
 ```ts
@@ -795,7 +880,7 @@ export function formatHoldingPeriod(days: number | null): string { ... }
 
 ---
 
-### 5.3 🟡 `PositionsTable.tsx` — עמודות חדשות ומיון
+### ✅ 5.3 🟡 `PositionsTable.tsx` — עמודות חדשות ומיון
 
 **קוד קיים רלוונטי:**
 ```ts
@@ -844,7 +929,7 @@ function compareNullableLast<T>(
 
 ---
 
-### 5.4 🟢 `App.tsx` — סינון פתוחות + טקסטים
+### ✅ 5.4 🟢 `App.tsx` — סינון פתוחות + טקסטים
 
 **קוד קיים רלוונטי:** שורות 65-67 (`sectionSubtitle`: "snapshot taken …"), שורה 74 ("Read-only view of your Interactive Brokers holdings."), שורה 79 (`SummaryBar`), שורה 58 (`PositionsTable`).
 
@@ -860,13 +945,30 @@ const openHoldings = snapshot.holdings.filter((holding) => holding.status === 'O
 **בדיקת אימות סשן 5:** `cd ui && npm run build` ירוק. בדפדפן: העמודות החדשות מופיעות; מיון בכל אחת בשני הכיוונים — **ריקים תמיד בתחתית**;
 החזקה בלי עסקאות מציגה "—"; החזקה שהוספתי לה `BUY` דרך `curl`/`psql` מציגה תאריך וזמן החזקה.
 
+**סטטוס הבדיקה (25.09.2026):** ✅ `npm run build` ירוק. ✅ `format.ts` הורץ על מקרי קצה (esbuild + node): 45 ← `1m 15d`, 412 ← `1y 1m`,
+364 ← `12m 4d`, `null` ← "—". ✅ רינדור בצד השרת (`react-dom/server`) של הטבלה עם נתונים חסרים והחזקה סגורה — הסדר ברירת המחדל שם ריקים בסוף.
+הבדיקה בדפדפן נדחתה ביוזמת עומרי לאחר סשן 6 ונעשית יחד איתה — ראו שם.
+
 ---
 
 ## סשן 6 — UI: טפסי הזנה (סקטור, עסקאות, החזקות סגורות)
 
 > **תנאי מוקדם:** סשנים 4 + 5.
+>
+> **סטטוס (25.09.2026):** 6.1–6.5 ✅ בוצעו על branch `maven-spring-boot`, עדיין לא committed. סטיות מהתוכנית (אושרו מראש, חוץ מהבאג בסוף):
+> - `apiClient.ts` חושף **ארבע פונקציות בשמות של השרת** (`changeSector`, `addTrade`, `changeTrade`, `deleteTrade`) — `sendJson` פרטי, וכל הכתובות במקום אחד.
+>   `errorMessageOf(error)` נותן את הטקסט להצגה. `TradeRequest` נוסף ל-`types/portfolio.ts` (מקביל ל-record ב-Java).
+> - `usePortfolio`: **`retry` ← `reload`** (משמש גם אחרי כל כתיבה), והודעת השגיאה כבר לא מזכירה את TWS.
+> - **תיקון ב-backend:** `HoldingHistory.holdingDays` לא שלילי לעולם (`Math.max(0, …)`) — קנייה בתאריך שאחרי הסנכרון האחרון הציגה `-3d`. בדיקה חדשה ב-`HoldingHistoryTest`.
+> - `SectorCell`: `readOnly` בזמן שמירה (לא `disabled`, כדי לא לגרום ל-blur כפול); Enter מוריד פוקוס, כך שה-blur הוא נקודת השמירה היחידה.
+> - `TradeForm`: "היום" מקומי (`localTodayIsoDate`, לא `toISOString()` שהוא UTC); במקום placeholder "IB avg cost" — שורת הסבר מתחת לטופס
+>   כשהוא ממולא מ-IB. `TradesPanel`: `formGeneration` ב-`key` של הטופס מאפס אותו אחרי כל שמירה.
+> - "Show closed" מציג גם את מספר הסגורות (`Show closed (n)`); ה-`datalist` נבנה מההחזקות המוצגות בלבד.
+> - **באג שעומרי מצא בבדיקה בדפדפן (תוקן):** המילוי מראש שם את העלות הממוצעת הגולמית של IB (`188.2990476`, 7 ספרות) — השרת דחה עם הודעה סתומה.
+>   `prefilledPriceText` מעגל ל-4 ספרות (הכמות לא מעוגלת — חייבת להתאים ל-IB), ול-`@Digits` ב-`TradeRequest` נוספה הודעה קריאה
+>   (`TOO_MANY_DIGITS`: "must have at most 6 decimal places (and 14 digits before the point)") + בדיקה `rejectsAPriceWithMoreDecimalPlacesThanTheDatabaseKeeps`.
 
-### 6.1 🟢 `ui/src/lib/apiClient.ts`
+### ✅ 6.1 🟢 `ui/src/lib/apiClient.ts`
 
 **הבעיה:** `usePortfolio` מציג הודעה אחת לכל כשל (`API_UNREACHABLE_MESSAGE`). לכתיבה צריך את הודעת השרת ("quantity: must be greater than 0").
 
@@ -889,7 +991,7 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 
 ---
 
-### 6.2 🟡 `SectorCell` — עריכה בתוך הטבלה
+### ✅ 6.2 🟡 `SectorCell` — עריכה בתוך הטבלה
 
 **המימוש:** `components/SectorCell.tsx`. מצב צפייה: כפתור עם הסקטור או "+ add". מצב עריכה: `<input list="sector-options">`, `Enter`/`blur` שומר (`PUT /api/holdings/{id}/sector`)
 אם השתנה, `Esc` מבטל, ריק מנקה; שגיאה מוצגת מתחת בוורוד; בזמן שמירה — disabled.
@@ -900,7 +1002,7 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 
 ---
 
-### 6.3 🟡 שורה נפתחת + `TradesPanel`
+### ✅ 6.3 🟡 שורה נפתחת + `TradesPanel`
 
 **המימוש:** עמודה צרה בהתחלה עם כפתור chevron (`aria-expanded`); ב-`PositionsTable` state `expandedHoldingId: number | null` (אחת פתוחה בכל פעם);
 כשפתוחה — `<tr><td colSpan={COLUMNS.length + 1}>` עם `TradesPanel`: רשימת העסקאות (תאריך, תג BUY ירוק / SELL אדום, כמות, מחיר, הערה) עם אייקוני עריכה (`Pencil`)
@@ -908,7 +1010,7 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 
 ---
 
-### 6.4 🟡 `TradeForm`
+### ✅ 6.4 🟡 `TradeForm`
 
 **המימוש:** שדות: תאריך (`<input type="date" max={היום}>`, ברירת מחדל היום), צד (שני כפתורים BUY / SELL), כמות (`type="number" step="any"`), מחיר (אופציונלי), הערה (אופציונלית, `maxLength=500`, placeholder "Why? (optional)").
 יצירה → `POST /api/holdings/{id}/trades`; עריכה → `PUT /api/trades/{id}` עם שדות ממולאים. ולידציה בצד הלקוח משקפת את השרת (כמות > 0, תאריך קיים), **והשרת הוא הסמכות** — מציגים את `ApiError.message`.
@@ -919,7 +1021,7 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 
 ---
 
-### 6.5 🟢 מתג "Show closed"
+### ✅ 6.5 🟢 מתג "Show closed"
 
 **המימוש:** checkbox בכותרת אזור ה-Positions; state ב-`App` (`showClosed`); הטבלה מקבלת `showClosed ? snapshot.holdings : openHoldings`.
 שורות `CLOSED`: `opacity-60` ותג "closed" ליד הסימבול. עריכת עסקאות של החזקה סגורה מותרת (זה בדיוק המקום להשלים היסטוריה). `SummaryBar` תמיד על הפתוחות.
@@ -930,18 +1032,37 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 להוסיף `BUY` → מתעדכנים "Bought" ו-"Held"; להוסיף `SELL` חלקי → "Last sold"; למחוק עסקה → חוזר; שגיאת ולידציה (כמות 0) מציגה את הודעת השרת;
 מתג "Show closed"; החזקה ללא עסקאות מציעה BUY מוכן; `npm run build`.
 
+**סטטוס הבדיקה (25.09.2026):** ✅ `npm run build` ירוק; ✅ `mvn -q test` ירוק — 64 בדיקות. ✅ רינדור בצד השרת של פאנל העסקאות והטופס
+(כולל מילוי backfill: `188.2990476` ← `188.299`, `0.0523456` ← `0.0523`). 🟡 **הבדיקה בדפדפן (של סשנים 5 ו-6 יחד) — בידי עומרי:** הוא התחיל
+אותה ומצא את באג המחיר הממולא (ראו הסטטוס למעלה, תוקן); לא דווח על שאר הרשימה.
+
 ---
 
-## 🔮 סשנים 7–9 — רעיונות לעתיד (לא לפני שסשנים 0–6 יציבים)
+## 🔮 סשנים 7–9 — רעיונות לעתיד (לא לפני שסשנים 0–6 יציבים) — סשן 7 בוצע
 
 > אלה ההצעות שאושרו כ"נחמדות להוסיף". הן נשענות על כך ש-**ה-API תמיד קורא מה-DB** (סשן 2).
 > סשן 9 בלתי-תלוי בסשנים 3–8 ואפשר לעשות אותו כבר אחרי סשן 2.
 
-## סשן 7 — [רעיון עתידי] אזהרות אי-התאמה (Reconciliation)
+## סשן 7 — אזהרות אי-התאמה (Reconciliation)
 
 > **תנאי מוקדם:** סשן 6. **הרעיון:** IB יודע את הכמות האמיתית, והיומן הידני עלול לחסור או לטעות — להראות פער, בלי לחסום.
+>
+> **סטטוס (02.10.2026):** 7.1–7.3 ✅ בוצעו על branch `maven-spring-boot` (נבנו ב-26.09.2026), גרסה 0.9.0. סטיות מהתוכנית:
+> - **אזהרה אחת לכל היותר לכל החזקה**, לפי סדר עדיפויות: אין BUY ← רק `NO_TRADES_LOGGED`; `CLOSED` וה-episode הנוכחי לא נסגר ב-SELL ←
+>   רק `CLOSED_WITHOUT_SELL`; אחרת פער של יותר מ-`0.0001` ← `QUANTITY_MISMATCH`. בלי הסדר הזה החזקה בלי עסקאות הייתה גם פער כמות — אותו פער פעמיים.
+>   השדה נשאר רשימה, כדי שסוגי אזהרה נוספים יוכלו להצטרף בלי לשנות את צורת ה-JSON.
+> - **`netQuantity` שינה משמעות (אושר):** סכום פשוט של כל העסקאות (`TradeFact.signedQuantity()`), כולל SELL כשהפוזיציה אפסית שהתאריכים מתעלמים ממנו —
+>   כך בדיקת הכמות מצביעה עליו. קודם זו הייתה הכמות הרצה של ה-episode. שתי בדיקות ישנות מצפות עכשיו ל-`-10` / `-3`.
+> - `position` של IB שהוא NaN ← אין בדיקת כמות (`BigDecimal.valueOf(NaN)` זורק ← 500). **אין לזה בדיקה קבועה.**
+> - `HoldingWarning(type, message)` ו-`HoldingWarningType` יושבים ב-`domain` ונשלחים ל-JSON כמות שהם, בלי עותק `*Response` (כמו `HoldingStatus` / `TradeSide`).
+>   ההודעה: "The trades entered add up to 90 shares; IB reports 100."
+> - **צבעים:** `NO_TRADES_LOGGED` צהוב (`text-yellow-400`), השניים האחרים כתום (`text-orange-500`) — לא slate וענבר. שונה ביוזמת עומרי אחרי שראה:
+>   המשולש ב-slate "כמעט נעלם" (5 מ-7 ההחזקות הפתוחות שלו בלי BUY). הוא בחר שני צבעים ולא אחד.
+> - **תוספת (אושרה):** `HoldingWarningList` — אותן הודעות בראש `TradesPanel`, המקום שבו מתקנים אותן. הקומפוננטות ב-`components/HoldingWarnings.tsx`.
+> - **הספירה בכותרת סופרת את כל ההחזקות** (אושר ב-02.10.2026), רק אזהרות שאינן `NO_TRADES_LOGGED` (`needsAttention`), ומוסיפה "(n closed, hidden)"
+>   כשהסגורות מוסתרות — `CLOSED_WITHOUT_SELL` קיימת רק על החזקות סגורות, שמוסתרות כברירת מחדל.
 
-### 7.1 🟡 חישוב אזהרות ב-`HoldingHistory`
+### ✅ 7.1 🟡 חישוב אזהרות ב-`HoldingHistory`
 
 **המימוש:** `enum HoldingWarningType { NO_TRADES_LOGGED, QUANTITY_MISMATCH, CLOSED_WITHOUT_SELL }`.
 - `NO_TRADES_LOGGED` — אין אף BUY (זו גם "רשימת ה-backfill").
@@ -951,15 +1072,19 @@ export async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, b
 **⚠️ לא משווים מחירים / עלות ממוצעת:** `averageCost` של IB כולל עמלות ולכן לא יתאים לעולם.
 **⚠️** פיצול מניה (split) יוצר פער קבוע — היומן צריך להיות במניות שאחרי הפיצול; "אישור התעלמות" (acknowledge) — מחוץ לתחום כרגע.
 
-### 7.2 🟢 API + UI
+### ✅ 7.2 🟢 API + UI
 
 **המימוש:** `warnings: [{ type, message }]` ב-`HoldingResponse` (הודעה באנגלית: "Trade log says 90 shares, IB reports 100 (difference 10)").
 ב-UI: אייקון `TriangleAlert` ליד הסימבול עם `title`; ספירה בתת-הכותרת ("3 holdings need attention").
 **⚠️** `NO_TRADES_LOGGED` בצבע עמום (slate) ו-`QUANTITY_MISMATCH` בענבר — כדי למנוע עייפות התראות בזמן ה-backfill.
 
-### 7.3 🟢 בדיקות
+### ✅ 7.3 🟢 בדיקות
 
 תוספות ל-`HoldingHistoryTest`: כל אחד מ-3 סוגי האזהרות מופיע/לא מופיע; סבלנות עשרונית; `CLOSED` תקין (סך 0) — בלי אזהרה.
+
+**סטטוס הבדיקה (02.10.2026):** ✅ `mvn -q test` ירוק — 73 בדיקות (8 חדשות ב-`HoldingHistoryTest`, אחת ב-`PortfolioControllerTest`, ושני assertions
+חדשים בבדיקות קיימות של `PortfolioReadServiceTest`). ✅ `npm run build` ירוק. ✅ בדיקה בדפדפן — עומרי, "הכול תקין": המשולשים ליד הסימבול, הרשימה בפאנל העסקאות
+והספירה בכותרת.
 
 ---
 
@@ -1017,13 +1142,21 @@ CREATE TABLE trade_draft (
 ## סשן 9 — [רעיון עתידי] עבודה ללא TWS (Offline fallback)
 
 > **תנאי מוקדם:** סשן 2 (בלתי-תלוי בסשנים 3–8). **הרעיון:** אם TWS סגור או לא מחובר — להציג את הנתונים השמורים האחרונים ולאפשר להמשיך להזין סקטור ועסקאות.
+>
+> **סטטוס (22.09.2026):** 9.1 בוצע מוקדם, בתוך סשן 2, ביוזמת עומרי — ראו שם. 9.2 ו-9.3 (דגל stale + באנר
+> ב-UI) עדיין לא בוצעו ונשארים לסשן הזה, בכוונה (עומרי בחר להשאיר, 22.09.2026).
 
-### 9.1 🟢 `Main` — במקום יציאה
+### ✅ 9.1 🟢 `Main` — במקום יציאה
 
 **קוד קיים רלוונטי:** ה-runner (0.3): `if (snapshot == null) { System.exit(SpringApplication.exit(context)); }`.
 
 **התיקון:** אם `snapshot == null` **וקיימת** שורה ב-`account_state` → `[db] TWS unavailable — serving the last saved portfolio (synced <asOf>)`, ממשיכים ל-`UiLauncher`.
 אם אין נתונים שמורים בכלל — יוצאים כמו היום (אין מה להציג).
+
+**בפועל (`TwsPortfolioRunner`, סשן 2):** ההודעה היא `[db] TWS unreachable; serving the portfolio from the
+last sync, if any`, וה-runner **תמיד** ממשיך ל-`UiLauncher` — גם אם `account_state` ריק לגמרי — ונשען על
+ה-503 הקיים ב-`PortfolioController` כדי לטפל במקרה הזה, במקום ענף נפרד שבודק אם יש נתונים ויוצא אם אין.
+פשוט יותר מהתכנון המקורי, ואומת חי ב-22.09.2026.
 
 ### 9.2 🟢 מצב סנכרון ב-API
 
@@ -1061,6 +1194,6 @@ CREATE TABLE trade_draft (
 | סשן 4 (4.1–4.5) | endpoints כותבים + אבטחה | ~2 שעות | API | 🔴 | סשן 3 |
 | סשן 5 (5.1–5.4) | UI: types, עמודות, מיון | ~1.5 שעות | UI | 🟡 | סשן 3 |
 | סשן 6 (6.1–6.5) | UI: טפסי סקטור/עסקאות, סגורות | ~3 שעות | UI | 🟡 | סשנים 4+5 |
-| 🔮 סשן 7 | אזהרות אי-התאמה | ~1.5 שעות | UI + לוגיקה | 🟡 | סשן 6 |
+| ✅ סשן 7 | אזהרות אי-התאמה | ~1.5 שעות | UI + לוגיקה | 🟡 | סשן 6 |
 | 🔮 סשן 8 | זיהוי שינוי → טיוטת עסקה | ~2.5 שעות | לוגיקה + UI | 🔴 | סשן 6 |
 | 🔮 סשן 9 | עבודה ללא TWS | ~1 שעה | חוויה | 🟢 | סשן 2 |
