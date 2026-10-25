@@ -7,6 +7,11 @@ symbol, name and account id in this brief is made up.**
 Work through it **one screen at a time**, in this order: the app shell and the Overview page, the Positions table,
 the holding drawer, the Closed page, the Investors page, then the modals.
 
+**Status:** sections 1–6 were the **first round**: every screen in them was designed and then built on 2026-10-11, and
+they describe the UI as it was *before* that round. **Section 7 is the second round:** the weight graphs and the
+drawer's Weight tab, built on 2026-10-13 from the first round's tokens but without a design pass, then designed in
+Claude Design and rebuilt from it on 2026-10-25.
+
 ---
 
 ## 1. What PortfolioBoss is
@@ -225,7 +230,7 @@ may offer previous/next holding arrows.
 
 - **Header:**
   - "Realized P&L" summed per currency ("+1,757.89 USD · +950.00 HKD"), plus "(1 to check)" in orange when a
-    position sold more than it bought, and "(n without prices)" when some trade has no price
+    position sold more than it bought
   - with several investors, the same per investor under it: "Me +1,757.89 USD +950.00 HKD · Dana +0.00 USD"
 - **+ Add closed position** opens a modal for a position sold before PortfolioBoss existed.
 - **Table,** newest sale first:
@@ -239,7 +244,7 @@ may offer previous/next holding arrows.
   | Avg buy | average cost of the shares sold |
   | Avg sell | |
   | Commission | |
-  | Realized P&L | signed, green/red, with its currency in the cell: "+242.89 USD"; "—" with a hint when a price is missing |
+  | Realized P&L | signed, green/red, with its currency in the cell: "+242.89 USD"; "—" only when the position sold more than it bought (below) |
   | % | |
   | Bought / Sold / Held | |
   | Note | manual positions only, truncated, full text on hover |
@@ -282,7 +287,7 @@ Save buttons read "Saving…" while saving.
   - Date: defaults to today, can't be in the future
   - BUY / SELL toggle
   - Quantity: a whole number greater than 0
-  - Price: optional
+  - Price: required (0 is a price)
   - Commission: optional; empty means the default (1¢ a share, at least $5 an order), explained on hover
   - Note: optional, placeholder "Why? (optional)"
   - Buttons: Save / Save changes, Cancel
@@ -394,3 +399,220 @@ Totals: **+1,757.89 USD · +950.00 HKD (1 to check)**
 - One investor only (no Investor columns, no "(20 · 20)" in Qty, no investors strip) **and** several.
 - The Analyze button in each state: idle, running, done, done with a failure, error.
 - The API unreachable (the error banner) and the first load (nothing to show yet).
+
+---
+
+## 7. Second round: the weights
+
+Since the first round, three things were built in the UI from the first round's tokens, without a design pass:
+- a bar of **the stocks against the cash** under the account's figures
+- two **weight graphs** on the Overview: the money by sector (a ring) and by holding (bars)
+- a **Weight tab** in the holding drawer that works out how many shares to sell or buy for a target weight
+
+With several investors, the graphs and the Weight tab both have a row of tabs to weigh one investor's own money.
+**Design them as components of the same system.** Section 2's rules still hold:
+- no new figure (everything is worked out in the UI from what the API already sends)
+- no change in behavior
+- the Weight tab only calculates: it sends nothing anywhere and saves nothing (PortfolioBoss never places an order)
+
+### 7.1 What a weight is
+
+- **"The whole account"** is the stocks weighed plus the cash. It is not the net liquidation, which also counts
+  accrued interest and dividends (a hair more), so the holdings and the cash always add up to exactly 100%.
+- **Two bases**, each graph naming its own in a caption:
+  - the sector ring is a share **of the money in stocks**
+  - the holding bars, the cash and the Weight tab are shares **of the whole account**
+- Only holdings in the account's currency (USD) are weighed: the API has no exchange rate yet. A holding in another
+  currency, with no market value from IB, or worth 0 or less is left out and named under the graphs.
+- A weight has **one decimal**: "22.7%". Money as in §3.
+
+### 7.2 Whose weights: the tabs
+
+- **Only with several investors:** Portfolio · Me · Dana, the account owner first. With one investor there is no
+  row at all.
+- **Today:** the same segmented control as the forms' BUY / SELL toggle, above the two graphs and again at the top of
+  the Weight tab.
+- **Portfolio** weighs the whole account: IB's quantities, values and average cost, and IB's cash.
+- **An investor's tab** weighs only that investor's money:
+  - their shares of each holding they hold some of, valued at IB's price, at their own average cost
+  - their own cash: the Cash on their card
+  - The investors' tabs add up to Portfolio's.
+- **The wording follows the tab:**
+
+  | On Portfolio | On Dana's tab |
+  |---|---|
+  | the whole account | all of Dana's money |
+  | the money in stocks | Dana's money in stocks |
+  | the stocks plus the cash | Dana's shares plus Dana's cash |
+  | IB's average cost | the average cost of Dana's shares |
+
+### 7.3 Overview: the stocks and the cash
+
+- **Where:** at the bottom of the Account summary card, under its four figures, as a thin full-width strip.
+  - It always shows the whole account: there are no tabs here.
+- **What:** one bar, with the stocks filling from the left in the accent color and the cash from the right in the
+  soft accent with an accent outline. Each part is named at its end: "Stocks **85.0%**" … "Cash **15.0%**".
+- **Cash below zero:** the bar gives way to the line "The cash is below zero: part of the stocks is bought with
+  borrowed money."
+- **Cash unknown:** nothing is shown.
+
+### 7.4 Overview: By sector and By holding
+
+**Where:** under Needs attention and Signal at a glance comes the tab row, then two cards side by side, each half the
+page's width.
+
+**By sector**, caption "Share of the money in stocks":
+- **The ring and its legend:**
+  - a ring (hand-drawn SVG, no chart library) with a legend beside it
+  - a legend row: swatch · sector · percent · value
+- **Colors:**
+  - the four heaviest sectors are colored `chart-1` … `chart-4` in that order
+  - the rest are folded into a grey **"Other (n sectors)"** (`chart-rest`)
+  - **"No sector"** comes last, outlined grey like the signal's empty ring. A sector not entered yet is unknown, not a
+    sector of its own.
+- **The ring's hole** shows the number of sectors ("5 sectors").
+- **Hover:**
+  - pointing at a slice or at its legend row highlights both, and the hole then shows that slice's percent and name
+  - each row's hint: "2 holdings · 25.3% of the whole account"
+  - Other's hint names its sectors
+  - No sector's hint: "1 holding without a sector yet: add it in Positions · 7.1% of the whole account"
+
+**By holding**, caption "Share of the whole account":
+- **The rows:**
+  - one row per holding, heaviest first: symbol · bar (accent) · percent · value
+  - the longest bar spans the whole track, and the others are drawn to the same scale
+- **Past 10 holdings:** the lightest share one grey row, "3 more", which opens Positions. Its hint names them.
+- **Cash:** under a hairline, the last row, in the same cash color as in 7.3.
+  - It opens nothing.
+  - Its hint says what the cash is: "The cash in the account, as IB reported it"; on Dana's tab, "Dana's cash:
+    deposits less withdrawals, less buys and plus sells, commissions off"; on the owner's tab, "Me's cash: IB's cash
+    less the other investors'".
+  - Cash below zero draws no bar and shows its negative percent.
+- **A holding's row** opens its drawer **on the Weight tab, on the same tab**: Dana's MSFT bar opens Weight → Dana. Its
+  hint: "26.7% of the money in stocks".
+
+**Around the cards:**
+- **Under the cards**, only when something is left out: "Not in the graphs: 0700 (in HKD)." The other reasons are "no
+  market value from IB" and "a market value of 0 or less".
+- **An investor's tab with nothing to weigh** shows one card in place of the two: "Dana holds no stocks the graphs can
+  weigh · cash 2,000.00".
+- **Hints:** every hint here is the browser's own tooltip (`title`) today.
+
+### 7.5 The holding drawer: the Weight tab
+
+The tab is shown for open holdings only. The drawer's tabs are Summary · Momentum · Analysts & news · Trades (3) ·
+**Weight** · By investor.
+
+**From the top:**
+1. **The tab row** (7.2). The target typed in stays when the tab changes, to compare.
+2. **Now:** "Now **22.7%** of the whole account · 18,726.00 of 82,500.00".
+3. **Target weight:** a short number field followed by "%", with the hint "Of the whole account: the stocks plus the
+   cash."
+4. **The result:**
+   - nothing typed: a dashed box, "Type a target weight to see how many shares to sell or buy."
+   - a sale or a purchase: a box headed **"Sell 14 shares"**, with "≈ 6,554.10" on the right, then rows:
+     - **After the sale** (or **After the purchase**): "26 shares · 14.8% of the whole account"
+     - **Commission:** "≈ 5.00"
+     - for a sale, **Realized P&L:** "≈ +776.90" (green or red), then "at IB's average cost, the commission off"
+     - for a purchase, **Cash:** "12,407.80: enough"
+5. **A footer line:** "At IB's last price, 468.15, from the sync of 2026-10-10 16:05. A calculation only: nothing is
+   sold or bought."
+
+**The rules** (unchanged; for the designer's understanding):
+- **Shares:** a sale rounds the shares **up**, so it lands at the target or just under it, and never sells more than
+  every share. A purchase rounds **down**.
+- **The commission** is the default: 1¢ a share, at least $5.
+- **The realized P&L** is at the tab's average cost, the commission off.
+- **The whole account keeps its size:** a sale turns shares into cash, and a purchase turns cash into shares.
+- **On an investor's tab for a holding they hold none of,** it starts from 0 shares, and only buying is worked out.
+
+**Its other states:**
+- **A target that can't be used** shows a form error: "Type the target as a number, like 15 or 12.5." or "A weight is
+  between 0% and 100%."
+- **Already at the target:** "Already at the target: no whole share brings it closer to 2.6%."
+- **A purchase the cash can't pay for:** the Cash row turns orange with the real-warning triangle: "7,065.00: less
+  than the purchase and its commission". It is still shown, and nothing is blocked.
+- **Can't calculate:** one line in place of the whole calculator:
+  - "This holding is in HKD: the calculator works in USD only for now."
+  - "IB reported no price for this holding."
+  - "This is not a long position." On an investor's tab: "Dana's part of this holding is below zero: check its
+    trades."
+  - "No weight can be worked out: the whole account is unknown (IB reported no cash) or not above zero."
+
+### 7.6 Sample data (made up, the same account as §6)
+
+**Whole accounts:**
+- **Portfolio:** stocks 70,092.20 + cash 12,407.80 = **82,500.00**
+- **Me:** shares 55,369.20 + cash 5,342.80 = **60,712.00**
+- **Dana:** shares 14,723.00 + cash 7,065.00 = **21,788.00**
+
+**The stocks against the cash** (Account summary): Stocks 85.0% · Cash 15.0%.
+
+**By holding** (share of each tab's whole; a "—" holding is not on that tab):
+
+| Row | Portfolio | Me | Dana |
+|---|---|---|---|
+| MSFT | 18,726.00 · 22.7% | 9,363.00 · 15.4% | 9,363.00 · 43.0% |
+| COST | 14,028.00 · 17.0% | 14,028.00 · 23.1% | — |
+| AMZN | 12,864.00 · 15.6% | 7,504.00 · 12.4% | 5,360.00 · 24.6% |
+| ASML | 8,911.20 · 10.8% | 8,911.20 · 14.7% | — |
+| V | 7,545.00 · 9.1% | 7,545.00 · 12.4% | — |
+| GOOGL | 5,883.00 · 7.1% | 5,883.00 · 9.7% | — |
+| PLTR | 2,135.00 · 2.6% | 2,135.00 · 3.5% | — |
+| Cash | 12,407.80 · 15.0% | 5,342.80 · 8.8% | 7,065.00 · 32.4% |
+
+**By sector, Portfolio** (the hole reads "5 sectors"):
+
+| Slice | Holdings | Value | Of the money in stocks | Of the whole account (hint) |
+|---|---|---|---|---|
+| Technology (`chart-1`) | MSFT, PLTR | 20,861.00 | 29.8% | 25.3% |
+| Consumer staples (`chart-2`) | COST | 14,028.00 | 20.0% | 17.0% |
+| Consumer (`chart-3`) | AMZN | 12,864.00 | 18.4% | 15.6% |
+| Semiconductors (`chart-4`) | ASML | 8,911.20 | 12.7% | 10.8% |
+| Other (1 sector), grey | V (Financials) | 7,545.00 | 10.8% | 9.1% |
+| No sector, outlined | GOOGL | 5,883.00 | 8.4% | 7.1% |
+
+**By sector, Dana's tab** (the hole reads "2 sectors"):
+- Technology (MSFT): 9,363.00 · 63.6%, with 43.0% of all of Dana's money in its hint
+- Consumer (AMZN): 5,360.00 · 36.4%, with 24.6% in its hint
+
+**The Weight tab:**
+
+| Holding, tab | Now | Target | Result |
+|---|---|---|---|
+| MSFT, Portfolio | 22.7% · 18,726.00 of 82,500.00 | 15 | Sell 14 shares ≈ 6,554.10 · after: 26 shares, 14.8% · commission ≈ 5.00 · realized P&L ≈ +776.90 at IB's average cost (412.30) |
+| V, Portfolio | 9.1% · 7,545.00 of 82,500.00 | 12 | Buy 7 shares ≈ 2,112.60 · after: 32 shares, 11.7% · commission ≈ 5.00 · cash 12,407.80: enough |
+| MSFT, Dana | 43.0% · 9,363.00 of 21,788.00 | 30 | Sell 7 shares ≈ 3,277.05 · after: 13 shares, 27.9% · commission ≈ 5.00 · realized P&L ≈ +365.30 at the average cost of Dana's shares (415.25) |
+| ASML, Dana (holds none) | 0.0% · 0.00 of 21,788.00 | 40 | Buy 11 shares ≈ 8,168.60 · after: 11 shares, 37.5% · commission ≈ 5.00 · cash 7,065.00: less than the purchase and its commission (orange) |
+| PLTR, Portfolio | 2.6% · 2,135.00 of 82,500.00 | 2.6 | Already at the target: no whole share brings it closer to 2.6%. |
+
+### 7.7 What to design
+
+- **The pieces, with their states:**
+  - the stocks-and-cash bar (7.3)
+  - the By sector card (7.4)
+  - the By holding card (7.4)
+  - the tab row (7.2)
+  - the Weight tab (7.5)
+- **Colors to keep:**
+  - **Sector colors:** `chart-1` … `chart-4` and `chart-rest` are the one set of colors that only tells things
+    apart.
+  - **Colors they can't use:** none may be green, red, yellow or orange, which already mean something (§4).
+  - **Order in the ring:** blue and violet, the pair hardest to tell apart, sit 2nd and 4th, so they never touch. A
+    color-blindness palette check confirmed this; check again after a change.
+  - **Stocks and cash** keep one color each wherever they appear side by side: the accent for the stocks, the soft
+    accent with an accent outline for the cash.
+- **What is open:** the designer may propose a better arrangement. For example:
+  - where the tab row sits
+  - how the hints show (the system's own tooltip or popover in place of the browser's)
+  - how the two cards balance when one is much taller than the other
+
+  The rule stays: no figure the API doesn't already provide, and nothing sent anywhere.
+- **Edge cases:**
+  - one investor (no tabs) and several
+  - more than 4 sectors and more than 10 holdings
+  - a holding with no sector
+  - a holding left out of the graphs (another currency)
+  - cash below zero and cash unknown
+  - an investor's tab with nothing to weigh
+  - every state of the Weight tab in 7.5

@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.22.0";
+    public static final String VERSION = "0.22.1";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,16 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.22.1: [Weights from the design system]
+ * WeightGraphs: the two weight graphs are now the halves of one "Weights" card with the investor tabs in its header, so a tab clearly switches both; the left-out note sits inside it.
+ * Tip added: a small bubble from the design system that explains a weight on hover or keyboard focus, in place of the browser's tooltip; only the weight graphs use it for now.
+ * SectorWeightsCard: legend rows can be reached with the keyboard and open their Tip; the ring is thinner and the other slices fade more; "Other" names its sectors and counts their holdings.
+ * HoldingWeightsCard: bars sit on a grey track and are scaled by amount, so they show even when IB reports no cash; every row, the cash too, can be reached with the keyboard and opens its Tip.
+ * WeightsTabs: names in sentence case instead of the BUY/SELL capitals; only the selected tab is in the Tab order, and the left and right arrow keys move to the previous or next tab.
+ * StocksAndCashBar: "Stocks" and "Cash" with their percents now sit on a line above a thinner bar; cash below zero gets an info icon.
+ * WeightCalculatorPanel: the result is a box of rows on hairlines with the P&L's basis under it; a target that can't be used turns the field red; "already at the target" and "can't calculate" get grey boxes.
+ * Chart colors: the pink sector color is darker (#db6898, from the design system), so it reaches the 3:1 contrast a mark needs on white; the old one was 2.6:1.
+ *
  * VERSION 0.22.0: [Weights per investor, trades need a price]
  * WeightsTabs added: the Overview's weight graphs and the drawer's Weight tab get tabs — Portfolio, then each investor, the owner first; hidden with one investor.
  * investmentsAndCash added: an investor's tab weighs their own shares of each holding and their own cash, by their card's rule, so their weights add up to 100% of their money.

@@ -52,9 +52,12 @@ keyboard handling; the date fields use the browser's own picker behind a calenda
 "Loading…" box rather than the design's skeletons. Since 2026-10-13 the Overview also shows the money by sector (a ring)
 and by holding with the cash (bars), with the stocks against the cash under the account's figures, and a holding's
 drawer has a Weight tab that works out the shares to sell or buy for a target weight — built in the UI from figures
-`/api/portfolio` already sends, without Claude Design (see the architecture below); both have a tab per investor
-(Portfolio · Omri · Shay …) that weighs that investor's own shares and cash. Every trade has a price since then too:
-the API, the form and the table (V8) all refuse one without.
+`/api/portfolio` already sends (see the architecture below); both have a tab per investor (Portfolio · Omri · Shay …)
+that weighs that investor's own shares and cash. They were built first without Claude Design, then designed in its
+second round (DESIGN_BRIEF.md §7, 2026-10-25) and rebuilt from it the same day, browser-checked: one "Weights"
+card with the tabs in its header, the explanations in a small bubble (`Tip`) instead of the browser's tooltip, the
+Weight tab's result in rows. Every trade has a price since 2026-10-13 too: the API, the form and the table (V8) all
+refuse one without.
 
 ## Hard invariant: read-only
 
@@ -580,12 +583,21 @@ same investor (the link's state, `HoldingDrawer.OpenOnTab` with `weightsInvestor
 (rounded up, so it lands at the target or just under) or buy (rounded down), the weight after, the default commission
 and, for a sale, the realized P&L at the tab's average cost — on the same whole account, which a sale or a purchase
 doesn't change (cash and shares trade places). On the tab of an investor who holds none of the holding it starts from 0
-shares, so only buying is worked out (`investmentIn`).
+shares, so only buying is worked out (`investmentIn`). Since the design's second round (2026-10-25) the two graphs are
+the halves of one "Weights" card (`graphs/WeightGraphs.tsx`) whose header holds the tab row; every row of the legend and
+of the bars can be reached with the keyboard and explains itself in `ui/src/components/Tip.tsx` — the design system's
+bubble, used only here so far (the rest of the app still uses the browser's `title`) —, and the bars are drawn to scale
+by amount.
 Things that are easy to break:
 - `ui/src/lib/orderCommission.ts` copies `calculation.OrderCommission`'s rule (1¢ a share, at least $5) by hand: change
   both together.
 - The ring's color order in `index.css` (`--color-chart-1` … `-4`) puts blue and violet, the pair hardest to tell apart,
   2nd and 4th, which never touch in a ring; a color-blindness palette validator checked it — check again after a change.
+  `chart-3` is the design system's darker pink, `#db6898` (the first, `#ec7fa9`, was 2.6:1 on white, under the 3:1 a
+  mark needs). The validator (2026-10-25) passes the four colors and every pair that touches but one: the grey "Other"
+  next to the teal 1st sector, where the ring closes on itself when there is no "No sector" slice — known, not fixed.
+- A `Tip` is placed over its parent, which must be `relative` and must not clip it: a `truncate` (or any
+  `overflow-hidden`) element around it hides the bubble — the legend's name truncates inside its own inner span.
 
 `HoldingWriteController` serves the writes through `HoldingWriteService` (`@Transactional`, the write-side
 twin of `PortfolioReadService`): `PUT /api/holdings/{holdingId}/sector` (204), `POST

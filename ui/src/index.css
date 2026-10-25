@@ -54,12 +54,12 @@
    * The Overview's sector ring: four colors that mean nothing else in the app (green and red are P&L, yellow and orange
    * warnings), then one grey for the smaller sectors added together. The order matters: in a ring the last slice touches
    * the first, and blue and violet — the pair hardest to tell apart with a color-vision deficiency — sit 2nd and 4th,
-   * which never touch. Checked with a palette validator; the pink is light (2.6:1 on white), so every slice is named in
-   * the legend beside it.
+   * which never touch. Checked with a palette validator. The pink is the design system's darker one (3.3:1 on white,
+   * over the 3:1 a mark needs; the first, #ec7fa9, was 2.6:1), and every slice is still named in the legend beside it.
    */
   --color-chart-1: #00897b;
   --color-chart-2: #2a78d6;
-  --color-chart-3: #ec7fa9;
+  --color-chart-3: #db6898;
   --color-chart-4: #6250d6;
   --color-chart-rest: #868b94;
 
