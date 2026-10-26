@@ -2,6 +2,7 @@ package portfolioboss.ib;
 
 import com.ib.client.Bar;
 import com.ib.client.Contract;
+import com.ib.client.ContractDetails;
 import com.ib.client.Decimal;
 import com.ib.client.DefaultEWrapper;
 import com.ib.client.EClientSocket;
@@ -10,13 +11,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -24,15 +22,19 @@ import java.util.concurrent.TimeUnit;
  * Read-only IB callback handler.
  *
  * <p>Extends {@link DefaultEWrapper} (empty implementations of every callback) and overrides only
- * the handful of methods needed to read the account's portfolio, and then the daily closes of its holdings and of
- * SPY for the momentum. It requests one snapshot of the holdings, prints them, then unsubscribes — it never places,
- * modifies, or cancels an order.
+ * the handful of methods needed to read the account's portfolio, then the scans for hot stocks with the contract details
+ * of the stocks they found, and then the daily closes of the holdings, of SPY and of those stocks for the momentum. It
+ * requests one snapshot of the holdings, prints them, then unsubscribes — and one picture of each scan, then cancels it.
+ * It never places, modifies, or cancels an order.
  */
 public class PortfolioWrapper extends DefaultEWrapper {
 
-    /** IB status/notice codes that are informational, not real errors. */
+    /**
+     * IB status/notice codes that are informational, not real errors. 165 is a scan's "50 out of 990 items retrieved":
+     * taken for an error, it once ended a scan before its rows came (session 0).
+     */
     private static final Set<Integer> INFO_CODES = Set.of(
-            2104, 2106, 2107, 2108, 2119, 2158, 2100, 2103, 2105, 2110, 2137, 2168, 2169);
+            165, 2104, 2106, 2107, 2108, 2119, 2158, 2100, 2103, 2105, 2110, 2137, 2168, 2169);
     /** {@code yyyyMMdd}: how IB dates a daily bar when asked with {@code formatDate=1}. */
     private static final DateTimeFormatter BAR_DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
 
@@ -47,12 +49,18 @@ public class PortfolioWrapper extends DefaultEWrapper {
     private volatile boolean connectionFailed = false;
     private volatile PortfolioSnapshot snapshot;
 
-    // The daily closes are requested after the portfolio, one request per contract. They arrive on the reader thread
-    // while the startup thread waits — and on a timeout reads what came so far — hence the concurrent collections.
-    private final Map<Integer, Integer> conIdByDailyCloseRequest = new ConcurrentHashMap<>();
-    private final Map<Integer, List<DailyClose>> dailyClosesByRequest = new ConcurrentHashMap<>();
-    private final Set<Integer> finishedDailyCloseRequests = ConcurrentHashMap.newKeySet();
-    private volatile CountDownLatch dailyClosesDownloaded = new CountDownLatch(0);
+    // After the portfolio, three batches of requests: the scans (by scan code), the contract details of the stocks they
+    // found and the daily closes (both by contract id). Each batch numbers its requests from its own start, far enough
+    // apart never to meet: two scans, a contract-details request for each stock found, a daily-close request for each
+    // holding, SPY and stock found. Nothing else in PortfolioBoss uses request ids.
+    protected static final int FIRST_SCAN_REQUEST_ID = 100;
+    protected static final int FIRST_DAILY_CLOSE_REQUEST_ID = 1000;
+    protected static final int FIRST_STOCK_DETAILS_REQUEST_ID = 5000;
+    private final RequestBatch<String, ScanRow> scanRequests = new RequestBatch<>("scan", FIRST_SCAN_REQUEST_ID);
+    private final RequestBatch<Integer, StockDetails> stockDetailsRequests =
+            new RequestBatch<>("contract details of contract", FIRST_STOCK_DETAILS_REQUEST_ID);
+    private final RequestBatch<Integer, DailyClose> dailyCloseRequests =
+            new RequestBatch<>("daily closes of contract", FIRST_DAILY_CLOSE_REQUEST_ID);
 
     protected void setClient(EClientSocket client) {
         this.client = client;
@@ -72,33 +80,17 @@ public class PortfolioWrapper extends DefaultEWrapper {
         return connectionFailed;
     }
 
-    /** Called before the daily-close requests go out: the contract each request id asks for. */
-    protected void expectDailyCloses(Map<Integer, Integer> conIdByRequestId) {
-        conIdByRequestId.forEach((requestId, conId) -> {
-            conIdByDailyCloseRequest.put(requestId, conId);
-            dailyClosesByRequest.put(requestId, Collections.synchronizedList(new ArrayList<>()));
-        });
-        dailyClosesDownloaded = new CountDownLatch(conIdByRequestId.size());
+    /** The scans' requests: {@code IbGateway} says which to expect, waits for them and reads their rows. */
+    protected RequestBatch<String, ScanRow> scanRequests() {
+        return scanRequests;
     }
 
-    /** Blocks until every daily-close request has ended — with its bars or with an error — or the timeout elapses. */
-    protected boolean awaitDailyCloses(long timeout, TimeUnit unit) throws InterruptedException {
-        return dailyClosesDownloaded.await(timeout, unit);
+    protected RequestBatch<Integer, StockDetails> stockDetailsRequests() {
+        return stockDetailsRequests;
     }
 
-    /**
-     * By contract id, the closes of every request that has ended with at least one; one still running when this is
-     * called (a timeout) is left out rather than served half-received.
-     */
-    protected Map<Integer, List<DailyClose>> dailyCloses() {
-        Map<Integer, List<DailyClose>> closesByConId = new LinkedHashMap<>();
-        for (int requestId : finishedDailyCloseRequests) {
-            List<DailyClose> closes = List.copyOf(dailyClosesByRequest.get(requestId));
-            if (!closes.isEmpty()) {
-                closesByConId.put(conIdByDailyCloseRequest.get(requestId), closes);
-            }
-        }
-        return closesByConId;
+    protected RequestBatch<Integer, DailyClose> dailyCloseRequests() {
+        return dailyCloseRequests;
     }
 
     // ── connection lifecycle ────────────────────────────────────────────────────────────────────
@@ -158,27 +150,56 @@ public class PortfolioWrapper extends DefaultEWrapper {
         portfolioDownloaded.countDown();
     }
 
+    // ── the scans for hot stocks ────────────────────────────────────────────────────────────────
+
+    /** One row of a scan; a scan's row carries no exchange or sector — those come with the contract details. */
+    @Override
+    public void scannerData(int requestId, int rank, ContractDetails contractDetails, String distance,
+                            String benchmark, String projection, String legsStr) {
+        String scanCode = scanRequests.keyOf(requestId);
+        if (scanCode != null) {
+            Contract contract = contractDetails.contract();
+            scanRequests.addAnswer(requestId, new ScanRow(scanCode, rank, contract.conid(), contract.symbol()));
+        }
+    }
+
+    /** A scan would go on updating its rows every few seconds: cancelled after its first answer, one picture is kept. */
+    @Override
+    public void scannerDataEnd(int requestId) {
+        if (scanRequests.finish(requestId) && client != null && client.isConnected()) {
+            client.cancelScannerSubscription(requestId);
+        }
+    }
+
+    // ── contract details (of the stocks the scans found) ────────────────────────────────────────
+
+    @Override
+    public void contractDetails(int requestId, ContractDetails contractDetails) {
+        Integer conId = stockDetailsRequests.keyOf(requestId);
+        if (conId != null) {
+            stockDetailsRequests.addAnswer(requestId, new StockDetails(conId, contractDetails.contract().primaryExch(),
+                    contractDetails.longName(), contractDetails.industry(), contractDetails.category()));
+        }
+    }
+
+    @Override
+    public void contractDetailsEnd(int requestId) {
+        stockDetailsRequests.finish(requestId);
+    }
+
     // ── daily closes (for the momentum) ─────────────────────────────────────────────────────────
 
     @Override
     public void historicalData(int requestId, Bar bar) {
-        List<DailyClose> closes = dailyClosesByRequest.get(requestId);
         LocalDate barDate = dateOf(bar);
-        if (closes != null && barDate != null) {
-            closes.add(new DailyClose(barDate, bar.close()));
+        if (barDate != null) {
+            dailyCloseRequests.addAnswer(requestId, new DailyClose(barDate, bar.close()));
         }
     }
 
     @Override
     public void historicalDataEnd(int requestId, String startDate, String endDate) {
-        finishDailyCloses(requestId);
-    }
-
-    /** Counts a request down once, whether it ended with its bars or with an error. */
-    private void finishDailyCloses(int requestId) {
-        if (conIdByDailyCloseRequest.containsKey(requestId) && finishedDailyCloseRequests.add(requestId)) {
-            dailyClosesDownloaded.countDown();
-        }
+        dailyCloseRequests.finish(requestId);
     }
 
     /**
@@ -202,13 +223,12 @@ public class PortfolioWrapper extends DefaultEWrapper {
             System.out.println("[ib] " + errorMessage);
             return;
         }
-        Integer dailyCloseConId = conIdByDailyCloseRequest.get(requestId);
-        if (dailyCloseConId != null) {
-            // e.g. 162, no market data permission: this contract keeps the closes of an earlier sync
-            System.err.println("[ib error] daily closes of contract " + dailyCloseConId + ": code=" + errorCode
-                    + " — " + errorMessage);
-            finishDailyCloses(requestId);
-            return;
+        // An error for one request of a batch ends only that request — e.g. 162, no market data permission for one
+        // contract, which then keeps the closes of an earlier sync.
+        for (RequestBatch<?, ?> requestBatch : List.of(scanRequests, stockDetailsRequests, dailyCloseRequests)) {
+            if (requestBatch.finishWithError(requestId, errorCode, errorMessage)) {
+                return;
+            }
         }
         System.err.println("[ib error] code=" + errorCode + " id=" + requestId + " — " + errorMessage);
         if (errorCode == 502 || errorCode == 504) {   // couldn't connect / not connected

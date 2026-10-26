@@ -155,7 +155,13 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].momentum.beatsSpy").value(true))
                 .andExpect(jsonPath("$.holdings[0].momentum.percentBelowHigh").value(12.5))
                 .andExpect(jsonPath("$.holdings[0].momentum.score").value(4))
-                .andExpect(jsonPath("$.holdings[0].momentum.label").value("STRONG"));
+                .andExpect(jsonPath("$.holdings[0].momentum.label").value("STRONG"))
+                .andExpect(jsonPath("$.holdings[0].momentum.firstCloseDate").value("2025-10-07"))
+                .andExpect(jsonPath("$.holdings[0].momentum.high52Weeks").value(210.0))
+                .andExpect(jsonPath("$.holdings[0].momentum.yearReturnPercent").value(30.0))
+                .andExpect(jsonPath("$.holdings[0].momentum.maxDrawdownPercent").value(18.0))
+                .andExpect(jsonPath("$.holdings[0].momentum.monthsInMarket").value(12))
+                .andExpect(jsonPath("$.holdings[0].momentum.percentBelowHigh52Weeks").value(16.666));
     }
 
     @Test
@@ -394,9 +400,10 @@ class PortfolioControllerTest {
                         new BigDecimal("600"), new BigDecimal("200"), new BigDecimal("33.33333333333333")),
                 new InvestorQuantityResponse(OTHER_INVESTOR_ID, new BigDecimal("6"), new BigDecimal("1200"),
                         new BigDecimal("900"), new BigDecimal("300"), new BigDecimal("33.33333333333333")));
-        // four of the five checks hold: 12.5% below the 20-day high
+        // four of the five checks hold: 12.5% below the 20-day high; a full year, 30% up, 18% at its worst
         MomentumResponse momentum = new MomentumResponse(LocalDate.of(2026, 10, 6), 175.0, 170.0, 160.0, 150.0, 200.0,
-                4.2, 2.1, true, true, true, false, true, 12.5, 4, MomentumLabel.STRONG);
+                4.2, 2.1, true, true, true, false, true, 12.5, 4, MomentumLabel.STRONG,
+                LocalDate.of(2025, 10, 7), 210.0, 30.0, 18.0, 12, 16.666);
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
                 LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities, momentum,

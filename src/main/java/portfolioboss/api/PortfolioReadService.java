@@ -22,7 +22,6 @@ import portfolioboss.calculation.PositionTrades;
 import portfolioboss.calculation.SignalCalculator;
 import portfolioboss.db.AccountStateEntity;
 import portfolioboss.db.AccountStateRepository;
-import portfolioboss.db.DailyCloseEntity;
 import portfolioboss.db.DailyCloseRepository;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
@@ -121,9 +120,7 @@ public class PortfolioReadService {
         Set<Integer> conIds = new HashSet<>();
         holdings.forEach(holding -> conIds.add(holding.conId()));
         conIds.add(Benchmark.SPY_CON_ID);
-        return dailyCloseRepository.findByConIdInOrderByConIdAscBarDateAsc(conIds).stream()
-                .collect(Collectors.groupingBy(DailyCloseEntity::conId,
-                        Collectors.mapping(DailyCloseEntity::toDailyClose, Collectors.toList())));
+        return dailyCloseRepository.dailyClosesByConId(conIds);
     }
 
     /** The latest analysis of every holding that has one, by holding id — one query for all of them. */

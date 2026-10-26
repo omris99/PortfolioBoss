@@ -5,25 +5,29 @@
 /*
  * The design system's colors by role (Claude Design, "PortfolioBoss", tokens.json). Light theme only. Components never
  * use these directly: tailwind.config.js names them (`bg-surface`, `text-muted`, `border-strong`…).
+ *
+ * The neutrals — page, subtle, border, border-strong, the three text greys, accent-soft and selected — are scheme
+ * "A · Slate" from Claude Design's color-schemes page (2026-10-25): a cool blue-grey in place of the design system's warm
+ * cream (#f5f4f0), every text still WCAG AA on its ground. tokens.json still has the cream ones.
  */
 :root {
-  --color-page: #f5f4f0;
+  --color-page: #edf1f6;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
   --color-scrim: #1d202614;
   --color-scrim-modal: #1d202666;
-  --color-subtle: #efede8;
-  --color-border: #e2dfd8;
-  --color-border-strong: #8c877d;
+  --color-subtle: #e3e8ef;
+  --color-border: #d3dbe5;
+  --color-border-strong: #6f7b8c;
 
-  --color-text: #1d2026;
-  --color-text-muted: #575c66;
-  --color-text-faint: #6b707a;
+  --color-text: #18202b;
+  --color-text-muted: #4d5767;
+  --color-text-faint: #5f6979;
 
   --color-accent: #0f5b6b;
   --color-on-accent: #ffffff;
-  --color-accent-soft: #e3eff1;
-  --color-selected: #e3eff1;
+  --color-accent-soft: #e1eef1;
+  --color-selected: #e1eef1;
   --color-link: #1a5aad;
 
   --color-positive: #16723a;

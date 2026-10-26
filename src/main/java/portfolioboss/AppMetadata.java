@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.22.1";
+    public static final String VERSION = "0.23.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,21 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.23.0: [Hot stocks from IB's scan]
+ * RecommendationsPage added: a fifth page lists the US stocks IB's scan finds in a long upward trend, as Hot, Too hot and Correcting, with each investor's free cash above them.
+ * CandidateDrawer added: a scanned stock's drawer with why it is in its list, its year, IB's sector and exchange, the holdings it moves with, and its momentum checks.
+ * Scan for hot stocks: ./run.sh asks IB for the stocks that rose most over 3 and 6 months (above $15, $2B, a million shares a day), then their contract details, NYSE and NASDAQ only.
+ * ScanSchedule added: ./run.sh scans once a US trading day, only when the market has closed since the last scan by the New York clock, and says why when it skips.
+ * Scan again added (POST /api/scans): a new scan on demand from the page, free and read-only; 503 with a clear message when TWS can't be read, 409 while another reading runs.
+ * TwsReader added: the one place that connects to TWS, for the startup and Scan again alike, one reading at a time; TwsPortfolioRunner now decides, stores and opens the UI.
+ * HotStockCalculator added: a long trend (above the 200-day average, the 50-day above it), then Hot 0–15% above the 50-day, Too hot above, Correcting below; Pulled back and Recovering marks.
+ * ReturnsCorrelation added: how closely a scanned stock moves with each holding, from daily returns on shared dates; the page shows the top 3 and "Moves together" from 0.7.
+ * GET /api/recommendations added: the latest scan's three lists in the page's order, each stock with its momentum, stretch, marks, correlations and the investors who hold it.
+ * V9__scans: the scan and scan_candidate tables keep every scan with each stock's last close, the base of a later measurement; the stocks' daily closes go into daily_close.
+ * Momentum: the year's figures — highest close, return since IB's first close with the months it covers, biggest fall — are added to every holding's momentum in the JSON.
+ * PortfolioWrapper: IB's code 165 ("50 out of 992 items retrieved") is information, not an error; an answer or an error after its request has ended is dropped.
+ * Colors: the neutrals are a cool slate (Claude Design's scheme "A · Slate") in place of the warm cream; every text still passes WCAG AA on its ground.
+ *
  * VERSION 0.22.1: [Weights from the design system]
  * WeightGraphs: the two weight graphs are now the halves of one "Weights" card with the investor tabs in its header, so a tab clearly switches both; the left-out note sits inside it.
  * Tip added: a small bubble from the design system that explains a weight on hover or keyboard focus, in place of the browser's tooltip; only the weight graphs use it for now.

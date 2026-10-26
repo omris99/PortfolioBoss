@@ -5,11 +5,14 @@ import org.springframework.transaction.annotation.Transactional;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
+import portfolioboss.ib.Scan;
 import portfolioboss.model.HoldingStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -20,8 +23,8 @@ import java.util.TreeMap;
 /**
  * Brings the database up to date with one snapshot from TWS, once per connection. A holding TWS reported is
  * created or refreshed; an open holding TWS no longer reports is marked closed, never deleted, so the
- * sector and trades entered by hand survive. The daily closes read on the same connection (for the momentum) are
- * stored with it.
+ * sector and trades entered by hand survive. The daily closes read on the same connection (for the momentum) and the
+ * scan for hot stocks, when one ran, are stored with it.
  *
  * <p>Everything happens in one transaction: either the whole snapshot is stored or nothing is.
  */
@@ -31,12 +34,20 @@ public class PortfolioSyncService {
     private final HoldingRepository holdingRepository;
     private final AccountStateRepository accountStateRepository;
     private final DailyCloseRepository dailyCloseRepository;
+    private final ScanRepository scanRepository;
 
     public PortfolioSyncService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository,
-                                DailyCloseRepository dailyCloseRepository) {
+                                DailyCloseRepository dailyCloseRepository, ScanRepository scanRepository) {
         this.holdingRepository = holdingRepository;
         this.accountStateRepository = accountStateRepository;
         this.dailyCloseRepository = dailyCloseRepository;
+        this.scanRepository = scanRepository;
+    }
+
+    /** When the latest stored scan ran; empty before the first one. */
+    @Transactional(readOnly = true)
+    public Optional<Instant> lastScannedAt() {
+        return scanRepository.findLatestScannedAt();
     }
 
     /** A sync without daily closes: the ones stored before stay as they are. */
@@ -45,11 +56,19 @@ public class PortfolioSyncService {
         return sync(snapshot, Map.of());
     }
 
-    /**
-     * @param dailyCloses by IB contract id — the holdings' and SPY's, as many as IB sent this connection
-     */
+    /** A sync without a scan: the latest stored scan stays the latest. */
     @Transactional
     public SyncResult sync(PortfolioSnapshot snapshot, Map<Integer, List<DailyClose>> dailyCloses) {
+        return sync(snapshot, dailyCloses, null);
+    }
+
+    /**
+     * @param dailyCloses by IB contract id — the holdings', SPY's and the scanned stocks', as many as IB sent this
+     *                    connection
+     * @param scan        {@code null} when no scan ran or answered this connection
+     */
+    @Transactional
+    public SyncResult sync(PortfolioSnapshot snapshot, Map<Integer, List<DailyClose>> dailyCloses, Scan scan) {
         String account = snapshot.account();
         Instant syncedAt = snapshot.asOf();
         Set<Integer> reportedConIds = new HashSet<>();
@@ -74,7 +93,36 @@ public class PortfolioSyncService {
         System.out.printf("[db] synced %d holdings (%d new, %d updated, %d closed)%n",
                 reportedConIds.size(), addedCount, updatedCount, closedCount);
         storeDailyCloses(dailyCloses);
+        storeScan(scan, dailyCloses);
         return new SyncResult(addedCount, updatedCount, closedCount);
+    }
+
+    /**
+     * The Scan again button: a new scan and the daily closes read with it — its stocks' and SPY's —, without a
+     * portfolio: the holdings stay as the last sync left them. In one transaction, like a sync.
+     */
+    @Transactional
+    public void syncScan(Scan scan, Map<Integer, List<DailyClose>> dailyCloses) {
+        storeDailyCloses(dailyCloses);
+        storeScan(scan, dailyCloses);
+    }
+
+    /**
+     * A new row for every scan, never replacing an older one: the measurement compares them over months. Each
+     * candidate is stored with its last close of this run — the price the measurement starts from.
+     */
+    private void storeScan(Scan scan, Map<Integer, List<DailyClose>> dailyCloses) {
+        if (scan == null) {
+            return;
+        }
+        Map<Integer, DailyClose> lastCloseByConId = new HashMap<>();
+        dailyCloses.forEach((conId, closes) -> lastCloseByConId.put(conId, lastCloseOf(closes)));
+        ScanEntity storedScan = scanRepository.save(new ScanEntity(scan, lastCloseByConId));
+        System.out.printf("[db] stored a scan of %d stocks%n", storedScan.candidates().size());
+    }
+
+    private DailyClose lastCloseOf(List<DailyClose> closes) {
+        return closes.stream().max(Comparator.comparing(DailyClose::date)).orElse(null);
     }
 
     /**

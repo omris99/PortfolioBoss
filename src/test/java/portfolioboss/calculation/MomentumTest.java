@@ -182,6 +182,63 @@ class MomentumTest {
         assertThat(Momentum.of(List.of(), spyRisingFast)).isNull();
     }
 
+    // ── the year's figures ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * A full year, 2025-09-01 to 2026-09-01: up from 100 to 150 by day 100, down to 90 by day 150, back up to 120 by the
+     * last day. The worst fall is from 150 to 90.
+     */
+    @Test
+    void theYearFiguresOfARiseAFallAndARecovery() {
+        Momentum momentum = Momentum.of(series(366, this::riseFallAndRecovery), spyRisingFast);
+
+        assertThat(momentum.asOf()).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(momentum.firstCloseDate()).isEqualTo(START);
+        assertThat(momentum.high52Weeks()).isCloseTo(150, within(1e-9));
+        assertThat(momentum.percentBelowHigh52Weeks()).isCloseTo(20, within(1e-9));    // 120 against 150
+        assertThat(momentum.yearReturnPercent()).isCloseTo(20, within(1e-9));          // 120 against 100
+        assertThat(momentum.maxDrawdownPercent()).isCloseTo(40, within(1e-9));         // 90 against 150
+        assertThat(momentum.monthsInMarket()).isEqualTo(12);
+    }
+
+    @Test
+    void aSteadyRiseNeverFellAndEndsAtItsHigh() {
+        Momentum momentum = Momentum.of(series(YEAR_OF_CLOSES, day -> 100 + day), spyRisingFast);
+
+        assertThat(momentum.maxDrawdownPercent()).isZero();
+        assertThat(momentum.percentBelowHigh52Weeks()).isCloseTo(0, within(1e-9));
+    }
+
+    /** As in the real database: a sync on 2026-10-16 got closes from 2025-10-17, the day after a year earlier. */
+    @Test
+    void ibsYearStartingAFewDaysLateIsStillAFullYear() {
+        Momentum dayAfter = Momentum.of(firstAndLastClose(LocalDate.of(2025, 10, 17)), spyRisingFast);
+        Momentum weekAfter = Momentum.of(firstAndLastClose(LocalDate.of(2025, 10, 23)), spyRisingFast);
+        Momentum eightDaysAfter = Momentum.of(firstAndLastClose(LocalDate.of(2025, 10, 24)), spyRisingFast);
+
+        assertThat(dayAfter.monthsInMarket()).isEqualTo(12);
+        assertThat(dayAfter.yearReturnPercent()).isCloseTo(10, within(1e-9));
+        assertThat(weekAfter.monthsInMarket()).isEqualTo(12);
+        assertThat(eightDaysAfter.monthsInMarket()).isEqualTo(11);
+    }
+
+    /** A stock that started trading on 2026-07-03: its return since then, over the 3 whole months it has traded. */
+    @Test
+    void aYoungStockShowsTheMonthsItHasTraded() {
+        List<DailyClose> closes = List.of(
+                new DailyClose(LocalDate.of(2026, 7, 3), 40),
+                new DailyClose(LocalDate.of(2026, 8, 14), 70),
+                new DailyClose(LocalDate.of(2026, 10, 26), 50));
+
+        Momentum momentum = Momentum.of(closes, spyRisingFast);
+
+        assertThat(momentum.firstCloseDate()).isEqualTo(LocalDate.of(2026, 7, 3));
+        assertThat(momentum.monthsInMarket()).isEqualTo(3);
+        assertThat(momentum.yearReturnPercent()).isCloseTo(25, within(1e-9));         // 50 against 40
+        assertThat(momentum.high52Weeks()).isCloseTo(70, within(1e-9));
+        assertThat(momentum.maxDrawdownPercent()).isCloseTo(28.571428571, within(1e-6));   // 50 against 70
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
     /** One close per calendar day from {@link #START}, the price given by the day's index. */
@@ -212,10 +269,26 @@ class MomentumTest {
         return day == 248 ? 130 * 0.94 : 130 * 0.88;
     }
 
-    /** A last close of 100 and a month's return of +5%, against the given figures. */
+    /** Days 0–100 from 100 up to 150, 101–150 down to 90, 151–365 back up to 120, all in equal steps. */
+    private double riseFallAndRecovery(int day) {
+        if (day <= 100) {
+            return 100 + day * 0.5;
+        }
+        if (day <= 150) {
+            return 150 - (day - 100) * 1.2;
+        }
+        return 90 + (day - 150) * 30.0 / 215;
+    }
+
+    /** A close of 100 on {@code firstCloseDate} and one of 110 on 2026-10-16. */
+    private List<DailyClose> firstAndLastClose(LocalDate firstCloseDate) {
+        return List.of(new DailyClose(firstCloseDate, 100), new DailyClose(LocalDate.of(2026, 10, 16), 110));
+    }
+
+    /** A last close of 100 and a month's return of +5%, against the given figures; the year's figures don't matter here. */
     private Momentum momentumWith(double sma20, double sma50, double sma200, double high20,
                                   double spyOneMonthReturnPercent) {
         return new Momentum(LocalDate.of(2026, 10, 6), 100, sma20, sma50, sma200, high20, 5.0,
-                spyOneMonthReturnPercent);
+                spyOneMonthReturnPercent, LocalDate.of(2025, 10, 6), 120, 10.0, 15);
     }
 }

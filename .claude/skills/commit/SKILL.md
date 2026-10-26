@@ -37,18 +37,22 @@ trades — several investors sharing the account, with their deposits, the momen
 stock analysis — Tavily's searches (kept with each analysis), Claude's extraction, the consensus, the analysts' trend
 from price-target moves and the colored dot — behind `POST /api/analysis` and in the UI's Signal column, a holding
 drawer's "Analysts & news" tab and the Analyze buttons — the UI's light redesign: four pages, a drawer per holding
-and per closed position, a Columns menu, forms in modals — and, worked out in the UI only, the Overview's weight graphs
-by sector and by holding with the cash, and the drawer's target-weight calculator):*
+and per closed position, a Columns menu, forms in modals —, worked out in the UI only, the Overview's weight graphs
+by sector and by holding with the cash, and the drawer's target-weight calculator — and the fifth page,
+Recommendations: IB's scan for hot stocks once a trading day in `./run.sh` and on demand (Scan again, `POST
+/api/scans`), the hot / too hot / correcting lists with their correlations to the holdings behind
+`GET /api/recommendations`, and a drawer per scanned stock):*
 
 | Scope | Covers |
 |---|---|
-| `ib` | `IbGateway`, `PortfolioWrapper`, `TwsPortfolioRunner` — socket, reader loop, EWrapper callbacks (the portfolio's and the daily closes'), and the startup read from TWS — and what IB reports, as records (`Holding`, `PortfolioSnapshot`, `DailyClose`, `Benchmark`) |
+| `ib` | `IbGateway`, `PortfolioWrapper`, `RequestBatch`, `TwsReader` (the one class that connects to TWS: the startup's reading and Scan again's), `TwsPortfolioRunner` (the startup flow) — socket, reader loop, EWrapper callbacks (the portfolio's, the scans', the contract details' and the daily closes') — and what IB reports, as records (`Holding`, `PortfolioSnapshot`, `DailyClose`, `Benchmark`, `HotStockScan`, `ScanRow`, `StockDetails`, `ScanCandidate`, `Scan`, `TwsReading`, `ScanReading`) |
 | `report` | the console snapshot report and its formatting |
-| `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`, which the service puts together), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `AnalysisController` + `AnalysisService` (`POST /api/analysis`: runs the analysis and stores it), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
+| `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`, which the service puts together), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `AnalysisController` + `AnalysisService` (`POST /api/analysis`: runs the analysis and stores it), `RecommendationsController` + `RecommendationsReadService` (`GET /api/recommendations`), `ScanController` + `ScanService` (`POST /api/scans`: a new scan through `TwsReader`), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
 | `ai` | `portfolioboss.ai` — `AiKeys` (the two API keys from `config/local.env`), `TavilyClient` + `SearchResult` / `SearchResults` / `StockSearches` (the four searches, the symbol filter, and what is kept with an analysis), `StockAnalyzer` + `StockToAnalyze` / `ClaudeReply` (the call to Claude), and the shape of Claude's answer (`StockAnalysisResult`, `SourceConsensus`, `RatingCounts`, `AnalystAction`, `Headline`, `AnalystRating`, `AnalystActionType`, `Sentiment`), which is also its JSON schema |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection, `JsonColumnMapper` for the `JSONB` column), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
-| `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`) and `AnalystConsensus` |
-| `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `OrderCommission`: derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score, the analysts' consensus and trend and the dot, the default commission — no Spring, no database |
+| `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`) and `AnalystConsensus` |
+| `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `OrderCommission`: derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score and the year's figures, the analysts' consensus and trend and the dot, the hot-stock rule and the page's order, the correlations, when a scan is due, the default commission — no Spring, no database |
+| `exceptions` | `portfolioboss.exceptions` (since 2026-10-26) — the app's own exceptions (`TwsUnavailableException`, `TwsBusyException`) |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 
@@ -80,9 +84,10 @@ Tests (`src/test/`) take the scope of the code they cover.
 - The body should explain *what* and *why*, not restate the diff line by line
 - This project is **read-only toward IB by design** — a commit that adds `placeOrder`, `cancelOrder`, any
   order-related callback, an API endpoint that writes anything other than PortfolioBoss's own data (the hand-entered
-  sector, trades, manual positions, investors and their deposits, and the stock analyses), CORS configuration, a write
-  endpoint that accepts something other than JSON, binding beyond localhost, or sending a quantity, a cost, an investor
-  or the account number to Tavily or Claude is a signal something is wrong; flag it instead of committing
+  sector, trades, manual positions, investors and their deposits, the stock analyses and the scans), CORS configuration, a
+  write endpoint that accepts something other than JSON, binding beyond localhost, a second place that connects to TWS
+  besides `ib.TwsReader`, or sending a quantity, a cost, an investor or the account number to Tavily or Claude is a signal
+  something is wrong; flag it instead of committing
 - If `$ARGUMENTS` is provided, use it as the commit message (skip analysis)
 
 ## Arguments

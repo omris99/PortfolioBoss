@@ -10,6 +10,7 @@ import { ClosedPositionsPage } from './pages/ClosedPositionsPage';
 import { InvestorsPage } from './pages/InvestorsPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { PositionsPage } from './pages/PositionsPage';
+import { RecommendationsPage } from './pages/RecommendationsPage';
 import type { PortfolioSnapshot } from './types/portfolio';
 
 function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStatus {
@@ -20,7 +21,8 @@ function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStat
 
 /**
  * Loads the portfolio once for every page, and shows the page of the address: / the Overview, /positions (with
- * /positions/12 opening holding 12's row), /closed and /investors. Any other address goes to the Overview.
+ * /positions/12 opening holding 12's row), /closed, /investors and /recommendations (with /recommendations/40 opening a
+ * scanned stock's drawer). Any other address goes to the Overview.
  */
 function App() {
   const { snapshot, errorMessage, isLoading, reload } = usePortfolio();
@@ -64,6 +66,8 @@ function App() {
             path="investors"
             element={pageOnceLoaded((loaded) => <InvestorsPage investors={loaded.investors} onDataChanged={reload} />)}
           />
+          {/* After the portfolio too: the page names the investors and their cash, which come with it. */}
+          <Route path="recommendations/:candidateId?" element={pageOnceLoaded(() => <RecommendationsPage />)} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppShell>

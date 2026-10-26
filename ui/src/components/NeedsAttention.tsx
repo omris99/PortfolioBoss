@@ -1,6 +1,6 @@
 import { ChevronRight, CircleCheckBig } from 'lucide-react';
 import { Link } from 'react-router';
-import { CARD_CLASS, TAG_CLASS } from '../lib/styles';
+import { CARD_CLASS, COUNT_CHIP_CLASS, TAG_CLASS } from '../lib/styles';
 import type { Holding } from '../types/portfolio';
 import { CardHeading } from './CardHeading';
 import { firstRealWarningOf, hasOnlyMinorWarnings } from './HoldingWarnings';
@@ -131,9 +131,7 @@ export function NeedsAttention({ holdings }: { holdings: Holding[] }) {
     <section aria-label="Needs attention" className={`flex flex-col ${CARD_CLASS}`}>
       <CardHeading title="Needs attention">
         {items.length > 0 && (
-          <span className="inline-flex h-5 min-w-[22px] items-center justify-center rounded-sm bg-subtle px-1.5 text-caption font-semibold">
-            {items.length}
-          </span>
+          <span className={COUNT_CHIP_CLASS}>{items.length}</span>
         )}
       </CardHeading>
       {items.length === 0 ? (

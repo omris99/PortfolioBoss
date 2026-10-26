@@ -173,6 +173,18 @@ export interface Momentum {
   /** 0–5. */
   score: number | null;
   label: MomentumLabel | null;
+  /** 'yyyy-MM-dd': the first close IB sent — about a year back, or when a young stock started trading. */
+  firstCloseDate: string;
+  /** The highest close of the year. */
+  high52Weeks: number;
+  /** The last close against the first one, over `monthsInMarket` months; null if the first close was not above 0. */
+  yearReturnPercent: number | null;
+  /** The biggest fall from a close to a later, lower one this year, in percent; 0 if it never fell. */
+  maxDrawdownPercent: number;
+  /** 12 for a full year (IB sends no more), otherwise the whole months the stock has traded. */
+  monthsInMarket: number;
+  /** How far below `high52Weeks` the last close is, in percent; 0 at the high. */
+  percentBelowHigh52Weeks: number;
 }
 
 /**

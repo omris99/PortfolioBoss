@@ -7,13 +7,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A read-only decision-support tool for a **long-term** Interactive Brokers portfolio — the calm
 counterpart to the sibling IBBot intraday trading project (`~/DevProjects/IBBot`). It connects to
 TWS, syncs the holdings into a local PostgreSQL database on every connection, and serves that
-database to a React UI (`ui/`) of four pages — the API always reads from the database, never straight from TWS: an
+database to a React UI (`ui/`) of five pages — the API always reads from the database, never straight from TWS: an
 Overview (the account's figures, what needs a look, how the signals stand, how the money splits by sector and by
 holding), the positions table, in which the user
 enters what IB doesn't know (a holding's sector and its buy/sell trades), the closed positions — derived from those
-trades, plus the manual positions sold before PortfolioBoss saw them — and a card per investor for an account several
+trades, plus the manual positions sold before PortfolioBoss saw them —, a card per investor for an account several
 people's money shares (each one's cash, value and profit), all of which the UI writes to the same database through a
-few JSON endpoints. Each holding also gets a momentum score from IB's daily closes and, on the press of a button, an analysis of
+few JSON endpoints, and Recommendations: the US stocks IB's scan finds in a long upward trend, in three lists (hot, too
+hot, correcting). Each holding also gets a momentum score from IB's daily closes and, on the press of a button, an analysis of
 its analyst ratings and news (Tavily searches, Claude extracts, the code decides), stored in the same database. It is a
 Maven / Spring Boot application (Java 21, Spring Boot 4.1.1).
 
@@ -59,29 +60,46 @@ card with the tabs in its header, the explanations in a small bubble (`Tip`) ins
 Weight tab's result in rows. Every trade has a price since 2026-10-13 too: the API, the form and the table (V8) all
 refuse one without.
 
+[RECOMMENDATIONS_TODO.md](RECOMMENDATIONS_TODO.md) is the current plan: a fifth page of hot US stocks — "hot" is a long
+upward trend, then sorted by how far the price has stretched above its 50-day average —, and later a recommendation the
+code picks by five risk signs and Claude only explains, with Finnhub's earnings dates and company figures, and a
+measurement of how the picks did. Its sessions 0 (the experiment), 1 (the scan in `./run.sh`, V9, the hot-stock rule,
+the correlations, `GET /api/recommendations`) and 1b (the page, designed first in Claude Design's third round —
+DESIGN_BRIEF.md §8, every piece marked [now] or [later] — and the Scan again button, `POST /api/scans`) are done and were
+checked against TWS and in the browser on 2026-10-26: 992 stocks passed the scan's filters, the two scans found 73, all
+73 on NYSE or NASDAQ by their contract details' `primaryExch`. Sessions 2 (Finnhub), 3 (the analysis and the
+recommendation), 4 (their UI, the [later] pieces) and 5 (the measurement) are next.
+
 ## Hard invariant: read-only
 
 PortfolioBoss reads the account and **never places, modifies, or cancels an order**. `IbGateway`
 deliberately exposes no order-placement method, and `PortfolioWrapper` overrides only the
-account-reading callbacks and, for the momentum, the daily-bar ones (`historicalData` / `historicalDataEnd` — reads too). Do not add `placeOrder`, `cancelOrder`, or order-related `EWrapper`
+account-reading callbacks, for the momentum the daily-bar ones (`historicalData` / `historicalDataEnd`), and for the
+Recommendations page the scanner's (`scannerData` / `scannerDataEnd`) and the contract details' (`contractDetails` /
+`contractDetailsEnd`) — reads too: `IbGateway` sends `reqScannerSubscription` and, after the scan's first answer,
+`cancelScannerSubscription`, and `reqContractDetails`. Do not add `placeOrder`, `cancelOrder`, or order-related `EWrapper`
 callbacks — if a task seems to need them, it is the wrong project. The drawer's Weight tab says how many shares to sell
-or buy, and that is all it does: it is a calculation on screen that sends nothing anywhere and saves nothing.
+or buy, and that is all it does: it is a calculation on screen that sends nothing anywhere and saves nothing. Likewise
+"recommended" means picked by rules in code, not a price forecast, and nothing is bought.
 
 The local API never touches the IB account either. It writes only to PortfolioBoss's own database — the
 sector and trades the user enters, through `HoldingWriteController`, the manual positions with their trades,
 through `ManualPositionWriteController`, the investors with their deposits and withdrawals, through
-`InvestorWriteController`, and the stock analyses (`stock_analysis` rows), through `AnalysisController` — and never
+`InvestorWriteController`, the stock analyses (`stock_analysis` rows), through `AnalysisController`, and a new scan
+(`scan` / `scan_candidate` rows and its stocks' daily closes), through `ScanController` — and never
 creates or deletes a holding (only the sync does). `AnalysisController` is the one endpoint that reaches outside the
 machine: it sends each stock's symbol to Tavily, and the symbol, currency, IB's price, today's date and the search results
 to Claude — **never** a quantity, a cost, an investor or the account number (AI_ANALYSIS_TODO.md, decision 8) — and it
-runs only when the user presses the button. `PortfolioController` stays
-GET-only (Spring answers 405 to every other method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
+runs only when the user presses the button. `ScanController` (`POST /api/scans`, the Scan again button) is the one
+endpoint that reads TWS: a scan, read-only and free, through the same `ib.TwsReader` as `./run.sh`. `PortfolioController`
+and `RecommendationsController` stay GET-only (Spring answers 405 to every other method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
 `application.properties`), there is **no CORS configuration**, and every write endpoint with a body accepts
 JSON only: a page on another site can make the browser send a request to localhost without asking first
 only as text or a form (415 here), while JSON, PUT and DELETE need a CORS preflight that nothing grants —
-`POST /api/analysis` takes a JSON body even to analyze everything (`{}`), so no other site can start a paid run.
+`POST /api/analysis` takes a JSON body even to analyze everything (`{}`), so no other site can start a paid run, and
+`POST /api/scans` takes `{}` (`ScanRequest`, a record with nothing in it) for the same reason.
 Don't add CORS configuration, don't add an endpoint that writes anything other than PortfolioBoss's own data (what
-the user enters, and the analyses), and don't expose the API beyond localhost (the connection to TWS and the API are both
+the user enters, the analyses and the scans), and don't expose the API beyond localhost (the connection to TWS and the API are both
 unencrypted, which is fine only while local).
 
 ## Build & run
@@ -96,7 +114,9 @@ Boot 4's name, not `-web`), JUnit 5. [run.sh](run.sh) is a thin wrapper around `
 ./run.sh 7496 102     # custom clientId
 ```
 
-`./run.sh` reads the portfolio from TWS once, prints it, syncs it into PostgreSQL, and then keeps
+`./run.sh` reads the portfolio from TWS once, prints it, scans for hot stocks when a scan is due (once a US trading
+day: only when the market has closed since the last scan, `calculation.ScanSchedule` — otherwise `[ib] scan skipped:
+…`), syncs it all into PostgreSQL, and then keeps
 running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
 and opens `http://localhost:5174` in the browser (stop everything with Ctrl+C). If TWS could not be
 read this run, it serves whatever the previous sync stored instead (see "Running requires TWS" below).
@@ -115,14 +135,22 @@ sector ring came up black on 2026-10-13, its fill classes missing).
 
 The UI shows the portfolio as of the last sync. It reloads `/api/portfolio` after every write (sector,
 trades, manual positions, investors, deposits) and after every analysis run, but new figures from IB need a new `run.sh`
-(a refresh button is a later step).
+(a refresh button is a later step). The one exception is the scan: Recommendations' Scan again reads a new one on
+demand and reloads `/api/recommendations` (TWS must be open).
 
 Tests: `mvn -q test` (JUnit 5; no TWS, but the database tests need `portfolioboss_test` running — see
 above). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc` + `@MockitoBean` on `PortfolioReadService`)
 pins the JSON contract the UI depends on with made-up responses, no database needed; `HoldingTest` covers
-the derived math; `PortfolioWrapperTest` feeds `PortfolioWrapper` IB callbacks directly, no socket — the portfolio's and
-the daily closes' (an error ending one request, a request still running at the timeout, an unreadable bar date);
-`MomentumTest` covers the momentum score on made-up series of closes (decision 5's two-day-drop example among them).
+the derived math; `PortfolioWrapperTest` feeds `PortfolioWrapper` IB callbacks directly, no socket — the portfolio's,
+the scans' (only a scan's first answer kept, an error ending it, code 165 not ending it, the cancel's confirmation after
+the end ignored), the contract details' and the daily closes' (an error ending one request, a request still running at
+the timeout, an unreadable bar date); `ScanTest` how two scans' rows and the contract details become candidates (one per
+stock, NYSE / NASDAQ only, the left-out ones named);
+`MomentumTest` covers the momentum score on made-up series of closes (decision 5's two-day-drop example among them) and
+the year's figures (IB's year starting a day late still a full year, a young stock's months).
+`HotStockCalculatorTest` (the 15% and 5–15% limits, no long trend, the page's order), `ReturnsCorrelationTest` (1 and
+−1, 99 shared days, a date missing from one) and `ScanScheduleTest` (a morning scan, the weekend, New York's clock
+change) cover the Recommendations rules.
 `PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
 `ManualPositionWriteServiceTest` and `InvestorWriteServiceTest` are `@DataJpaTest`s against the real
 `portfolioboss_test` database (`src/test/resources/application-test.properties`, `@ActiveProfiles("test")`), each test
@@ -142,7 +170,12 @@ derived from `StockAnalysisResult` (`null` allowed exactly where it says `@Nulla
 the SDK's client builds with the Jackson in use; `StockAnalysisRepositoryTest` (`@DataJpaTest`) the JSONB round trip of the result
 and the search results, analyses stored in earlier shapes still read (Claude's old `analystTrend`, no copy dates, no
 search results, no dropped addresses), and the latest analysis per holding; `AnalysisServiceTest` (`@DataJpaTest`, Tavily
-and Claude `@MockitoBean`s) a run, a failed stock, the search results stored exactly as Claude read them, 404 / 400 / 503; `AnalysisControllerTest` the status codes and the JSON-only rule. After a
+and Claude `@MockitoBean`s) a run, a failed stock, the search results stored exactly as Claude read them, 404 / 400 / 503; `AnalysisControllerTest` the status codes and the JSON-only rule.
+The Recommendations side: `RecommendationsReadServiceTest` (`@DataJpaTest`, six made-up stocks with a year of closes
+shaped for their lists) the lists, the stocks in none, a correlation of 1, a stock already held;
+`RecommendationsControllerTest` its JSON, 503 and 405; `ScanServiceTest` (`@DataJpaTest`, `TwsReader` a `@MockitoBean`:
+**no test connects to TWS**) a scan stored with its closes, 409 and 503 storing nothing; `ScanControllerTest` the status
+codes and the JSON-only rule. After a
 change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
 would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
 `target/surefire-reports/` keeps the reports of tests that have since been deleted.
@@ -171,8 +204,8 @@ with a newer TWS API, delete that `local` directory so the next `run.sh` registe
 dependency now, so `~/DevTools/google-proto-buf/` is no longer used.
 
 **Running requires TWS/Gateway to be logged in** with *Configure → API → Enable ActiveX and Socket
-Clients* on for a fresh sync. Without it (or if TWS is silent), `TwsPortfolioRunner` prints the
-connection error, skips the sync, and comes up anyway serving whatever the last successful sync
+Clients* on for a fresh sync. Without it (or if TWS is silent), `TwsReader` prints the
+connection error, `TwsPortfolioRunner` skips the sync, and the app comes up anyway serving whatever the last successful sync
 stored — an empty database (nothing has ever synced) still answers 503, same as before any sync.
 The app itself never exits over TWS being unreachable; expect the stale-data case when running
 outside the user's trading hours rather than treating it as a code bug.
@@ -200,9 +233,12 @@ what delivers real quantity and **average cost** from the broker.
 
 ```
 Main (Spring Boot: brings the web server up, then Spring runs the runner)
-  └──> TwsPortfolioRunner ──> IbGateway ──owns──> PortfolioWrapper ──> Holding (+conId), PortfolioSnapshot,
-        │                     (socket + reader loop)  (EWrapper callbacks)    DailyClose (a year per holding + SPY)
-        ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state · daily_close)
+  └──> TwsPortfolioRunner ──asks ScanSchedule whether a scan is due, then──> TwsReader (the one place that connects;
+        │                                                                     one reading at a time)
+        │        TwsReader ──> IbGateway ──owns──> PortfolioWrapper ──> Holding (+conId), PortfolioSnapshot, Scan
+        │                      (socket + reader loop)  (EWrapper callbacks,  (rows + contract details), DailyClose (a
+        │                                               three RequestBatches) year per holding, SPY and scanned stock)
+        ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state · daily_close · scan)
         └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser
 
 PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
@@ -210,6 +246,14 @@ PortfolioController ──reads── PortfolioReadService ──reads── Pos
         │                      with calculation/HoldingHistory, InvestorSummaryCalculator, Momentum,
         │                      ConsensusCalculator, AnalystTrendCalculator, SignalCalculator)
         └──JSON──> ui/ (React; the dev server proxies /api to :8080)
+
+RecommendationsController ──reads── RecommendationsReadService ──reads── Postgres (the latest scan, its stocks' closes)
+        │                           (with calculation/Momentum, HotStockCalculator, ReturnsCorrelation)
+        └──JSON──> ui/'s Recommendations page
+
+ScanController ──> ScanService ──> TwsReader.readScan() ──> TWS (a scan, contract details, closes; read-only, free)
+        ▲                  └──writes──> Postgres (PortfolioSyncService.syncScan: a scan row and its closes only)
+        └──JSON── POST /api/scans — only from the Recommendations page's Scan again, then a reload
 
 AnalysisController ──> AnalysisService ──per stock, all at once──> TavilyClient ──HTTPS──> Tavily (4 searches)
         ▲              (keys: ai/AiKeys)                            StockAnalyzer ──HTTPS──> Claude (JSON only, no tools)
@@ -243,17 +287,31 @@ The sync-at-connection lifecycle, which is the part worth knowing:
 4. `accountDownloadEnd` stores a `PortfolioSnapshot` (exposed by `IbGateway.snapshot()`), prints the
    report, **unsubscribes** (`reqAccountUpdates(false, …)` — we want a snapshot, not the ~3-minute
    live updates), and counts down a `CountDownLatch`.
-5. `TwsPortfolioRunner` is blocked on that latch with a 15s timeout. With a snapshot, **still connected**, it asks
-   for the daily closes (`readDailyCloses`): `IbGateway.requestDailyCloses` sends one `reqHistoricalData` per contract
-   — every holding plus SPY (`ib.Benchmark.SPY_CON_ID` = 756733, IB's fixed id, requested whether or not SPY is
-   held), by conId + `SMART`, `"1 Y"` of `"1 day"` `TRADES` bars, regular hours, dates as `yyyyMMdd`, request ids from
-   1000 — and waits up to 20s (`awaitDailyCloses`); late or failed contracts are just left out (`[ib] daily closes
-   received for N of M contracts`). Then it disconnects and hands the snapshot and the closes to
-   `PortfolioSyncService.sync(snapshot, dailyCloses)`, which upserts them into the database (see below). Either
+5. `TwsReader.readPortfolio(withScan)` is blocked on that latch with a 15s timeout. With a snapshot, **still
+   connected**: when `withScan` (the runner asked `ScanSchedule` first), the scans for hot stocks
+   (`IbGateway.requestHotStockScans`: `SCAN_histPerfRatio3m_DESC` and `…6m_DESC`, `STK.US.MAJOR`, `CORP`, the filters
+   `priceAbove` 15, `marketCapAbove1e6` 2,000, `avgVolumeAbove` 1,000,000 — `ib.HotStockScan` —, up to 50 rows each,
+   10s), then `reqContractDetails` for every stock found (15s) — a scan's row carries no exchange or sector; then the
+   daily closes: `IbGateway.requestDailyCloses` sends one `reqHistoricalData` per contract
+   — every holding, SPY (`ib.Benchmark.SPY_CON_ID` = 756733, IB's fixed id, requested whether or not SPY is
+   held) and every stock the scan kept, by conId + `SMART`, `"1 Y"` of `"1 day"` `TRADES` bars, regular hours, dates as
+   `yyyyMMdd` — and waits up to 20s (`awaitDailyCloses`); late or failed contracts are just left out (`[ib] daily closes
+   received for N of M contracts`). Then it disconnects and the runner hands the snapshot, the closes and the scan
+   (`null` when none was due or none answered) to `PortfolioSyncService.sync(snapshot, dailyCloses, scan)`, which
+   upserts them into the database (see below). Either
    way — synced or not — it then launches the UI and returns; Tomcat's non-daemon threads keep the
    JVM alive until Ctrl+C. If the sync itself throws (a database problem, not a TWS problem) it prints
    `[db error]` and calls `System.exit(SpringApplication.exit(applicationContext, () -> 1))`: the database
    is required, TWS is not.
+
+`ib.TwsReader` (a `@Service`, since 2026-10-26) is the one place that connects to TWS: it owns the host, the port and
+the client id (`ApplicationArguments`: `./run.sh 7497 102`), opens a new `IbGateway` per reading and disconnects at its
+end, and a `ReentrantLock` lets one reading through at a time — TWS refuses a second connection with the same client
+id. `readPortfolio` (the startup) waits for the lock; `readScan` (the Scan again button: a scan, its contract details
+and the closes of its stocks and SPY, the portfolio that comes with every connection not kept) takes it only if free,
+else `exceptions.TwsBusyException` (409), and turns any failure — no socket, refused, no portfolio in time, no scan
+answered — into `exceptions.TwsUnavailableException`, whose message is the user's ("TWS is not reachable: open TWS and
+log in, then scan again.") and whose `reason()` is the console's.
 
 `TwsPortfolioRunner` is an `ApplicationRunner`, so Spring runs it once, **after the web server is
 already listening** — a request that arrives while TWS is still being read (up to 15s) gets a 503 from
@@ -267,18 +325,26 @@ Slices skip plain `@Component`s.
 small wrapper on purpose.
 
 Error handling note: `INFO_CODES` in `PortfolioWrapper` filters IB's informational status codes
-(2104, 2106, …) to stdout; codes 502/504 mean connection failure and release the latch early so the
-program reports a clear message instead of waiting out the timeout. An error carrying a daily-close request id (162, no
-market data permission) ends that one request without closes (`[ib error] daily closes of contract …`) — the contract
-keeps the closes of an earlier sync. The daily closes arrive on the reader thread while the startup thread waits, so
-they sit in concurrent collections; `dailyCloses()` serves only requests that have ended (a timeout leaves a half-received
-one out), and a bar whose date can't be read is skipped — an exception there would stop the reader loop's whole batch.
+(165 — a scan's "50 out of 992 items retrieved", which ended a scan before its rows in session 0 —, 2104, 2106, …) to
+stdout; codes 502/504 mean connection failure and release the latch early so the
+program reports a clear message instead of waiting out the timeout. The scans, the contract details and the daily
+closes are three `ib.RequestBatch<Key, Answer>`s (one per kind: requests numbered from 100, 5000 and 1000, each answered
+and then ended by its end callback or an error): an error carrying one of a batch's request ids (162, no market data
+permission) ends that one request without answers (`[ib error] daily closes of contract …`) — a contract keeps the
+closes of an earlier sync; an error after the request ended (IB confirming a cancelled scan) is dropped without a line,
+and so is an answer after the end (a scan updating itself). The answers arrive on the reader thread while the startup
+thread waits, so they sit in concurrent collections; `answersOfFinishedRequests()` serves only requests that have ended
+(a timeout leaves a half-received one out), and a bar whose date can't be read is skipped — an exception there would stop
+the reader loop's whole batch.
 
 `ib.Holding` is a record mirroring `updatePortfolio` exactly — the broker is the source of truth, so no
 field is hand-entered — plus `conId`, IB's stable contract id, its second component. Derived math
 (`costBasis`, `unrealizedPnlPercent`) lives on the record. `PortfolioSnapshot`, `DailyClose` and `Benchmark` sit next to
-it in `ib`: what IB reports lives with the code that reads it, and `calculation`, `db` and `api` use only these records,
-never the IB API itself.
+it in `ib`, and so do the scan's: `ScanRow` (one row of one scan), `StockDetails` (exchange — `primaryExch`, not the
+scan row's `marketName`, which for many NYSE stocks is the symbol —, name, industry, category), `Scan` (the rows and the
+details, from which `candidates()` derives one `ScanCandidate` per stock, NYSE / NASDAQ only, with its place in each scan,
+and `leftOutStocks()` the console line), and `TwsReading` / `ScanReading`. What IB reports lives with the code that reads
+it, and `calculation`, `db` and `api` use only these records, never the IB API itself.
 
 The database layer, `portfolioboss.db`, is now connected to the flow: `PortfolioSyncService.sync` runs
 once per connection (called from `TwsPortfolioRunner`, step 5 above), and the API reads only from the
@@ -321,16 +387,26 @@ migration), the tokens, Tavily's credits and `cost_usd`; every run is kept, the 
 those that didn't — so that a fact missing from an analysis can be traced to the search or to Claude (decision 22); the
 API doesn't serve it, it is there for a look in SQL. `V8__trade_price_required.sql` (2026-10-13) made `trade.price`
 `NOT NULL`: every trade has a price, which every calculation on the trades needs (all 40 stored then had one).
+`V9__scans.sql` (2026-10-26) added `scan` (`ScanEntity`: `scanned_at`, `scan_codes` as a JSON list) and `scan_candidate`
+(`ScanCandidateEntity`: `con_id`, `symbol`, `company_name`, `exchange`, `industry`, `category` — IB's words, an empty
+text stored as `NULL` —, `rank_by_scan_code` as a JSON map, and `close_at_scan` / `close_date`, the stock's last close
+read in the same run: the price the measurement will start from), saved together (`cascade = PERSIST`); every scan is
+kept, the page shows the latest. `sync(snapshot, dailyCloses, scan)` stores the scan in the same transaction (a `null`
+scan stores none; the two older overloads pass none), `syncScan(scan, dailyCloses)` is the Scan again button's — a scan
+and its closes without a portfolio —, and `lastScannedAt()` is what `ScanSchedule` asks.
 `HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
 default method `accountOwner()`), `InvestorCashMovementRepository`, `AccountStateRepository`, `DailyCloseRepository`
-(`findByConIdInOrderByConIdAscBarDateAsc`, and `deleteForContracts` — a hand-written `@Modifying @Query` bulk `DELETE`,
-because a derived `deleteBy…` loads every row and deletes them one at a time) and `StockAnalysisRepository`
-(`findLatestOfEveryHolding` — PostgreSQL's own `DISTINCT ON (holding_id)` in a `nativeQuery`) are the repositories.
+(`findByConIdInOrderByConIdAscBarDateAsc`, its default method `dailyClosesByConId` — the same closes grouped by contract,
+used by both read services —, and `deleteForContracts` — a hand-written `@Modifying @Query` bulk `DELETE`,
+because a derived `deleteBy…` loads every row and deletes them one at a time), `StockAnalysisRepository`
+(`findLatestOfEveryHolding` — PostgreSQL's own `DISTINCT ON (holding_id)` in a `nativeQuery`) and `ScanRepository`
+(`findFirstByOrderByScannedAtDesc`, its candidates read lazily — an `@EntityGraph` with a "first" would load every scan
+into memory —, and `findLatestScannedAt`, a `max` in JPQL) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V9__….sql`.
+  checksum): a schema change is a new `V10__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -347,11 +423,12 @@ Things that are easy to break:
   row (`NULL` → `NaN`) so the derived math is never duplicated outside `Holding`.
 - `scripts/backup-db.sh` dumps the database to `~/PortfolioBossBackups`, outside the repo.
 - Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
-  `ManualPositionWriteServiceTest`, `InvestorWriteServiceTest`, `StockAnalysisRepositoryTest`, `AnalysisServiceTest`) are
+  `ManualPositionWriteServiceTest`, `InvestorWriteServiceTest`, `StockAnalysisRepositoryTest`, `AnalysisServiceTest`,
+  `RecommendationsReadServiceTest`, `ScanServiceTest`) are
   `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
-  database and compared table by table first). One that only adds a table or a column (V5, V6, V7) or a constraint
+  database and compared table by table first). One that only adds a table or a column (V5, V6, V7, V9) or a constraint
   (V8, after counting the rows it would refuse: none) still gets the backup first, checked for the same row counts as
   the database. A live check that writes test data (a made-up investor) runs against a
   scratch copy too, pointed at with `SPRING_DATASOURCE_URL`: there is no way to delete an investor.
@@ -359,13 +436,15 @@ Things that are easy to break:
 `portfolioboss.calculation` holds only the computation — split on 2026-10-09 at the user's request, since most of its
 files were not calculations: `HoldingHistory`, `ClosedPosition`, `TradeFact`, for the investors `PositionTrades`,
 `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, for the momentum `Momentum`, for the
-analysis `ConsensusCalculator`, `AnalystTrendCalculator` and `SignalCalculator`, and `OrderCommission` (the default
+analysis `ConsensusCalculator`, `AnalystTrendCalculator` and `SignalCalculator`, for the Recommendations page
+`HotStockCalculator`, `ReturnsCorrelation` and `ScanSchedule`, and `OrderCommission` (the default
 commission) — pure Java, no
 Spring and no database, so it is unit tested directly. What it computes on comes from three packages of plain data:
 `ib` (what IB reports, above), `ai` (Claude's answer, below) and **`model`** — the values the whole app shares: the
 enums the entities and the JSON share with the computation (`TradeSide`, `HoldingStatus`, `CashMovementType`), the
 warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels
-(`MomentumLabel`, `AnalystTrend`, `HoldingSignal`) and `AnalystConsensus` (see Conventions for which package uses which).
+(`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`) and `AnalystConsensus` (see Conventions for which
+package uses which).
 A holding's
 `firstBuyDate`, `lastSellDate`, `holdingDays` and closed positions are derived from its `trade` rows, never stored:
 `HoldingHistory.of(List<TradeFact>)` walks them in chronological order (a buy before a sell on the same date) tracking
@@ -434,11 +513,33 @@ day a month earlier, so a weekend takes the Friday) — and derives five checks,
 `sma50AboveSma200`, `nearHigh` (at most 10% below `high20`, inclusive) and `beatsSpy`; `score()` counts them and
 `label()` maps it (`MomentumLabel`: `STRONG` 4–5, `NEUTRAL` 2–3, `WEAK` 0–1). A figure there are not enough closes for
 is `null`, so is every check that needs it, and the score and label exist only when all five checks do — never a
-guess. The private record `DailyCloses` sorts one contract's closes once and computes the figures from them, so only
-`of` is static. Things that are easy to break:
+guess. Appended for the Recommendations page (and in every holding's `MomentumResponse` too): the year's figures over
+every close given — a year, what IB sends —, `firstCloseDate`, `high52Weeks`, `yearReturnPercent` (the last close against
+the first) and `maxDrawdownPercent` (the biggest fall from a close to a later, lower one), and derived `monthsInMarket()`
+and `percentBelowHigh52Weeks()`. The private record `DailyCloses` sorts one contract's closes once and computes the
+figures from them, so only `of` is static. Things that are easy to break:
 - `beatsSpy` is a strict "greater than", so SPY itself can never score more than 4/5.
 - The 20-day average and the one-month comparison react fast on purpose (an early warning after a drop): the label
   changes far more often than a 200-day rule would.
+- IB's `"1 Y"` starts the trading day after the same date a year earlier (in the real database: 17.10.2025 for a sync on
+  16.10.2026), so a "close on or before a year ago" never exists: the year's return is from the first close, and
+  `monthsInMarket()` is 12 when that close is at most a week after a year back — otherwise the whole months a young stock
+  has traded (the user chose that over "unknown"). IB sends no more than a year, so a ten-year-old stock shows 12 too.
+
+The Recommendations rules (RECOMMENDATIONS_TODO.md, decision 1) are derived on every read from the stored closes, like the
+momentum. `HotStockCalculator(momentum)`: `hasLongUpwardTrend()` — the last close above the 200-day average and the
+50-day above the 200-day (`null` under 200 closes) —, then `label()` (`model.HotStockLabel`) by `percentAboveSma50()`:
+`HOT` 0–15% (15 inclusive), `TOO_HOT` above, `CORRECTING` below, `null` without the long trend; `pulledBack()` — `HOT`
+only, 5–15% below `high52Weeks` —, `recovering()` — the year's return below 0, a mark, not a filter —, and
+`comparePlaceInList(other)`, the page's order as an ordinary method (`HotStockCalculator::comparePlaceInList` sorts): the
+lists in the enum's order, within `HOT` pulled back first, then the higher score, then the less stretched; within the
+other two the closest to the 50-day average first (the user's choice). `ReturnsCorrelation(closes, otherCloses)`:
+`coefficient()`, Pearson's correlation of the daily returns on the dates both have a close (each return from the previous
+shared date, so a missing date is left out of both), `null` under 100 shared dates or when a price never moved;
+`movesTogether()` from 0.7. `ScanSchedule(lastScannedAt, now)`: `isScanDue()` — before the first scan, or when the latest
+New York close (`latestMarketClose()`, 16:00 on a weekday, holidays unknown) came after the last scan: once a trading day,
+measured in New York because the market closes late in the evening here. The thresholds (15%, 5–15%, 0.7, 100 days) are
+opening numbers the measurement of session 5 is meant to test.
 
 The stock analysis (AI_ANALYSIS_TODO.md, session 2) lives in `portfolioboss.ai` (console `[ai]` / `[ai error]`).
 `AiKeys` holds the two keys (`@Value("${TAVILY_API_KEY:}")` — the colon's empty default keeps a missing key from stopping
@@ -544,7 +645,8 @@ and its derived ones, `realizedPnlByCurrency` (a `{"HKD": 950, "USD": 500}` map)
 `InvestorPart` each, only investors holding some of it; the four figures were appended in INVESTORS_TODO.md session 4)
 and `TradeResponse.investorId` were appended for the split. `HoldingResponse.momentum` (appended last) is a
 `MomentumResponse` — `Momentum`'s figures, its five checks, `percentBelowHigh`, `score` and `label` (`MomentumLabel` goes
-into the JSON as it is) — or `null` while no closes are stored for the holding: `PortfolioReadService` loads the closes of
+into the JSON as it is), then (appended 2026-10-26) the year's figures, `monthsInMarket` and `percentBelowHigh52Weeks` —
+or `null` while no closes are stored for the holding: `PortfolioReadService` loads the closes of
 every holding and of SPY in one query, and hands each holding's, with SPY's, to `Momentum.of`. `HoldingResponse.analysis`
 and `signal` (appended after it) are the latest analysis and the dot: a `StockAnalysisResponse` — `analyzedAt`, `model`,
 `consensus` (`model.AnalystConsensus` as it is, chosen on this read against IB's latest price; `null` without any source),
@@ -560,6 +662,19 @@ before the first analysis. `asOf` is an ISO-8601 string. `portfolioboss.utils.Ut
 `null` for both JSON and the database (`nanIfNull` is the reverse, used by `toIbHolding()`); without it
 Jackson writes the *string* `"NaN"`, which breaks the UI's `number | null` types. The port is `server.port`
 in `application.properties`; `ui/vite.config.ts` proxies `/api` to it.
+
+`RecommendationsController` serves `GET /api/recommendations` through `RecommendationsReadService`
+(`@Transactional(readOnly = true)`): 503 before the first scan, then 200 with `Cache-Control: no-store` and a
+`RecommendationsResponse(scannedAt, candidateCount, hotStocks, tooHotStocks, correctingStocks)` built from the latest
+scan — the closes of its stocks, of the open holdings and of SPY in one query; a stock with no closes or no long upward
+trend is in no list but counted in `candidateCount`. A `HotStockResponse` is the candidate's row (`candidateId`, `conId`,
+`symbol`, `companyName`, `exchange`, `industry`, `category`), `label`, its `MomentumResponse` (the price is its
+`lastClose`), `percentAboveSma50`, `pulledBack`, `recovering`, `correlations` — the 3 highest with open holdings, never
+with itself, as `CorrelationResponse(holdingId, symbol, coefficient, movesTogether)` — and `heldByInvestorIds` (the
+`partsByInvestor` keys of the holding it is, if any). `ui/src/types/recommendations.ts` mirrors them. `ScanController` /
+`ScanService` serve `POST /api/scans` (JSON only, `{}`): `TwsReader.readScan()`, then `PortfolioSyncService.syncScan`, and
+200 with a `ScanRunResponse(scannedAt, candidateCount)`; `TwsBusyException` is 409, `TwsUnavailableException` 503, its
+user's message as the `detail`. `ScanService` is not `@Transactional`: no connection waits on TWS.
 
 The Overview's weight graphs and the holding drawer's Weight tab (2026-10-13) are worked out in the UI from what
 `/api/portfolio` already sends — no endpoint, nothing stored. Both show a row of tabs (`graphs/WeightsTabs.tsx`, hidden
@@ -598,6 +713,21 @@ Things that are easy to break:
   next to the teal 1st sector, where the ring closes on itself when there is no "No sector" slice — known, not fixed.
 - A `Tip` is placed over its parent, which must be `relative` and must not clip it: a `truncate` (or any
   `overflow-hidden`) element around it hides the bubble — the legend's name truncates inside its own inner span.
+
+The Recommendations page (`ui/src/pages/RecommendationsPage.tsx`, `/recommendations`, the fifth navigation item; its
+pieces in `ui/src/components/recommendations/`, built from Claude Design's third round — DESIGN_BRIEF.md §8, which
+designed the whole page and marked each piece [now] or [later]; only [now] is built): the scan card (`ScanCard`: the scan
+line — "Scanned … · 68 stocks · 34 hot, 19 too hot, 8 correcting, 7 in no list" — with Scan again and its status, then
+each investor's free cash from `/api/portfolio`), then Hot, Too hot and Correcting, each a `StockListCard` (a
+`ListHeading` with its meaning and a grey band — the lists are not tones —, then the table). The columns are defined
+like `POSITION_COLUMNS`, one entry each (`hotStockColumns.tsx`: `HOT_COLUMNS`, `TOO_HOT_COLUMNS`, `CORRECTING_COLUMNS`),
+cells on two lines, the figure then its mark: `InfoMark` (Pulled back, Moves together — grey, information) and
+`RiskSignTag` (Recovering, in the warning-sign tone: it is one of the five risk signs). The texts the lists and the
+drawer share are in `hotStockTexts.ts`. A row opens `CandidateDrawer` (`/recommendations/:candidateId`, the holding
+drawer's `DrawerFrame`; Summary — why it is in its list, the year, the stock, the holdings it moves with — and the
+existing `MomentumPanel`; ‹ › through the three lists). `useRecommendations` treats 503 as "no scan yet", not an error;
+`useScanAgain` runs `scanAgain()` then the reload, and tells 409 (another reading runs) from a failure by `ApiError.status`.
+`lib/drawerAddress.ts` (`idFromAddress`, `OPENED_FROM_TABLE`) is shared with Positions.
 
 `HoldingWriteController` serves the writes through `HoldingWriteService` (`@Transactional`, the write-side
 twin of `PortfolioReadService`): `PUT /api/holdings/{holdingId}/sector` (204), `POST
@@ -663,13 +793,19 @@ Things that are easy to break:
   `[db] TWS unreachable; serving the portfolio from the last sync, if any` when TWS could not be read; `[db error]` only
   when the sync itself fails, which is also the only case that still exits the app). The daily closes print
   `[ib] requesting a year of daily closes for N contracts` and `[ib] daily closes received for N of M contracts`. The
+  scan prints `[ib] scanning for hot stocks: …`, `[ib] requesting the contract details of N stocks`, `[ib] scans found N
+  stocks, M of them on NYSE or NASDAQ`, `[ib] left out, not on NYSE or NASDAQ: XYZ (ARCA), …` when any is, `[ib] scan
+  skipped: …` when none is due and `[ib] scan unavailable: no scan answered`; storing it, `[db] stored a scan of N stocks`.
+  The
   analysis prints `[ai] analysis ready` (or `[ai] analysis off: … is not set`) at startup, `[ai] analyzed N of M stocks:
   N Tavily credits, N input and N output tokens, $N` per run, and `[ai error] SYMBOL: why` for a stock that failed.
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
-  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`. `calculation`, `model` and `utils` print
-  nothing.
+  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`. `calculation`, `model`, `utils` and
+  `exceptions` print nothing.
 - Package dependencies point one way, with no cycle: `utils ← ai ← model ← calculation ← db ← api`, and `ib` — which
-  uses none of them — is used by `calculation`, `db` and `api`. `calculation` holds only what computes; the data it
+  uses none of them — is used by `calculation`, `db` and `api`. `exceptions` (2026-10-26, the user's request: the app's
+  own exceptions in one package — `TwsUnavailableException`, `TwsBusyException`) uses nothing and is used by `ib` and
+  `api`. `calculation` holds only what computes; the data it
   computes on lives where it comes from — IB's readings in `ib`, Claude's answer in `ai` — or, when the whole app shares
   it (an enum both an entity and the computation need, like `TradeSide`; a warning; a label), in `model`. `calculation`
   uses nothing of Spring, the database or the IB API — only those packages' records. Before 2026-10-08 three enums sat
@@ -687,9 +823,9 @@ Things that are easy to break:
   dialog's Delete. The one set of colors that only tells things apart is the sector ring's `chart-1` … `chart-4` (with
   the grey `chart-rest`): none of them green, red, yellow or orange, which already mean something. The stocks and the
   cash keep one color each wherever they appear side by side (`STOCKS_COLOR_CLASS`, `CASH_COLOR_CLASS`).
-- One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` owns the TWS
-  host/port/client id and the single `IbGateway`. Don't add a second entry point or a second place
-  that connects to TWS.
+- One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` runs the startup flow. `ib.TwsReader`
+  owns the TWS host/port/client id and opens each `IbGateway`, one at a time — the startup and the Scan again button
+  both read through it. Don't add a second entry point or a second place that connects to TWS.
 - API response types go in `portfolioboss.api.response`, request bodies in `portfolioboss.api.request`; the
   accessors, derived-math and write methods another package needs (`Holding.costBasis()`,
   `HoldingEntity.id()`/`sector()`/`trades()`/`toIbHolding()`/`changeSector()`, `TradeEntity`'s constructors and
@@ -706,11 +842,16 @@ Things that are easy to break:
   controllers' constructors and endpoint methods, and `TwsPortfolioRunner`'s constructor. JPA entities' empty
   constructors stay `protected`: Hibernate's lazy-loading stand-in subclass calls them (`private` broke tests). `static`
   only with a real reason — `main`, helper classes with a private constructor (`Utils`, `AppMetadata`, `Benchmark`,
-  `OrderCommission`), a factory that has to compute before the record exists (`HoldingHistory.of`, `Momentum.of`) — and
-  constants stay `static final`; a helper that doesn't touch fields is still an instance method, and a factory that only
-  copies fields is a constructor. A computation with several inputs is a record of those inputs with ordinary methods
-  (`InvestorSummaryCalculator`, `ConsensusCalculator(sources, marketPrice).consensus()`, `SignalCalculator`), not a
-  static method — the user's stated preference. A helper used by more than one layer —
+  `OrderCommission`, `HotStockScan`), a factory that has to compute before the record exists (`HoldingHistory.of`,
+  `Momentum.of`) — and constants stay `static final`; a helper that doesn't touch fields is still an instance method, and
+  a factory that only copies fields is a constructor. A computation with several inputs is a record of those inputs with
+  ordinary methods (`InvestorSummaryCalculator`, `ConsensusCalculator(sources, marketPrice).consensus()`,
+  `SignalCalculator`, `HotStockCalculator`, `ScanSchedule(lastScannedAt, now).isScanDue()`), not a
+  static method — the user's stated preference (repeated 2026-10-26: avoid static methods as far as possible). He also
+  asked for long, meaningful names over short ones, and rejected constructs he found unreadable — a generic method's
+  `private <K>` (so `RequestBatch` numbers its own requests and names its type parameters `<Key, Answer>`), and a class
+  named after a rule (`ScanSchedule`, not `ScanOncePerTradingDay`): explain an unfamiliar Java construct before using it.
+  A helper used by more than one layer —
   `portfolioboss.utils.Utils`, shared by `api`, `db`, `ai` and `calculation` — is the one exception to "narrow package,"
   and lives in its own package rather than being duplicated per layer.
 - Changelog: a notable change bumps `AppMetadata.VERSION` and adds an entry at the top of the
@@ -729,7 +870,8 @@ Things that are easy to break:
   manual positions) and the investors sharing the account are in, and so are the momentum score and the analysis of
   AI_ANALYSIS_TODO.md, backend and UI; the API reads only from the database. From Milestone 3, the weight of each holding
   and sector (TODO.md's principle 3) and a target-weight calculator are in — of the whole account and of each investor's
-  own money —, in the UI only.
+  own money —, in the UI only. RECOMMENDATIONS_TODO.md's scan, hot-stock lists and page (sessions 1 and 1b) are in; its
+  analysis, recommendation and measurement are next.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

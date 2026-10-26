@@ -10,7 +10,8 @@ the holding drawer, the Closed page, the Investors page, then the modals.
 **Status:** sections 1–6 were the **first round**: every screen in them was designed and then built on 2026-10-11, and
 they describe the UI as it was *before* that round. **Section 7 is the second round:** the weight graphs and the
 drawer's Weight tab, built on 2026-10-13 from the first round's tokens but without a design pass, then designed in
-Claude Design and rebuilt from it on 2026-10-25.
+Claude Design and rebuilt from it on 2026-10-25. **Section 8 is the third round** (2026-10-26): a new page,
+Recommendations, designed before it is built.
 
 ---
 
@@ -616,3 +617,224 @@ The tab is shown for open holdings only. The drawer's tabs are Summary · Moment
   - cash below zero and cash unknown
   - an investor's tab with nothing to weigh
   - every state of the Weight tab in 7.5
+
+---
+
+## 8. Third round: the Recommendations page
+
+A new, fifth page: **Overview · Positions · Closed · Investors · Recommendations.** It shows which US stocks are "hot"
+right now, why, and which few of them the code recommends looking at for a new investment, with what to know before
+buying. It is built in steps, and **the whole page is designed now, once**: every piece below is marked **[now]** (its
+data exists and the first build shows it) or **[later]** (its data comes in a later step, and until then the piece is
+simply not there). Design the [now] page so that the [later] pieces fit in without rearranging it.
+
+The rules of section 2 still hold, with one change: this page shows new data (a scan of the market). The rest stands:
+- **Nothing is bought:** PortfolioBoss never places an order. "Recommended" means picked by rules written in code, not a
+  price forecast.
+- **A paid run only from a button,** with its cost shown first (like Analyze in §5.4).
+
+### 8.1 What the page is built on
+
+- **The scan:** once a trading day, when `./run.sh` starts, PortfolioBoss asks IB for the US stocks that rose most over
+  the last 3 and 6 months (no penny stocks, no small companies, no funds: priced above $15, worth above $2 billion,
+  traded above a million shares a day). About 70 stocks.
+  - A **"Scan again"** button runs another scan on demand. It is free (IB only), and TWS must be open.
+- **"Hot"** is a long upward trend: the price above its 200-day average, and the 50-day average above the 200-day one.
+  Then where the price stands against its **50-day average** sorts the stocks into **three lists**:
+
+  | List | When | Means |
+  |---|---|---|
+  | **Hot** | 0–15% above the 50-day average | worth a look now |
+  | **Too hot** | more than 15% above it | went too far too fast: wait for a pullback |
+  | **Correcting** | below it | the pullback came and isn't over: wait for it to climb back above |
+
+  A stock without a long upward trend is in no list, and neither is one with fewer than 200 trading days (no 200-day
+  average yet). They are only counted.
+- **Two marks** on a stock:
+  - **Pulled back** (Hot list only): 5–15% below its highest close of the year. A small pullback is behind it, and
+    these come first in the Hot list.
+  - **Recovering:** lower than a year ago. After a crash the averages sink with the price, so a rebound looks like a
+    trend fast. It is a mark, not a filter.
+- **The order of the Hot list:** pulled back first, then the higher momentum score, then the less stretched above the
+  50-day average. Too hot and Correcting: the closest to the 50-day average first.
+- **[later] The analysis** (the button "Analyze & recommend", paid): the first 10 of the Hot list are analyzed — analyst
+  ratings and news, the next earnings date and four company figures. Then **the code picks** up to 3 by **five risk
+  signs**, and Claude only explains the pick:
+  - the risk signs, a point each: **Losing money** (negative net margin) · **High debt** (debt above 2× equity) ·
+    **Expensive** (P/E above 50) · **Revenue falling** (over the last 12 months) · **Recovering** (the mark above)
+  - only stocks with at most one sign; fewer signs first, then the Hot order; up to 3; none may qualify
+  - **a timing note, not a risk sign:** earnings in 14 days or less, "Wait for the report of 2026-11-03". It never
+    lowers a stock.
+  - the stocks not picked show their signs as the "why not", with no text from Claude
+
+### 8.2 The page, from the top (`/recommendations`)
+
+1. **The scan line** [now]: "Scanned 2026-10-23 23:05 · 68 stocks · 34 hot, 19 too hot, 8 correcting, 7 in no list".
+   - On its right, **Scan again** [now], with its states in 8.4.
+   - A quiet hint: "A new scan comes once a trading day, after the US market closes."
+2. **The recommendation** [later], a card above the lists:
+   - "Recommended 2026-10-24 09:12, from the scan of 2026-10-23 · 10 stocks analyzed"
+   - up to **3 picks, numbered in the code's order**. Each pick shows its symbol, name and IB sector, its risk signs
+     and timing note, and Claude's three short parts: **Why** (2–3 sentences) · **Main risk** · **What to watch**
+   - **a summary** of a sentence or two
+   - **Why not the others:** a compact line per stock analyzed but not picked, with its signs: "ZEPH: Losing money ·
+     Recovering"
+   - **When Claude's text is missing** (it failed, or is turned off), a pick shows a line the code writes from the
+     figures instead: "No risk signs · pulled back 7.4% from its high · earnings on 2026-11-12".
+   - **Before any recommendation:** the card is a calm invitation with the button **Analyze & recommend** and its
+     estimate (8.4).
+   - **No stock qualified:** "No stock qualified this time: every one analyzed has two risk signs or more."
+3. **The free cash** [now; its data exists]: each investor's cash, the account owner first ("Me 5,342.80 · Dana
+   7,065.00"); with one investor, just "Cash 12,407.80". It sits near the recommendation, since it is what a new
+   investment would be paid from.
+4. **Hot**, the main table, in the order of 8.1. Each row opens the stock's drawer (8.3).
+
+   | Column | When | Shows |
+   |---|---|---|
+   | Stock | [now] | symbol, with the company's name under it (IB's, in capitals: "KERVAN SYSTEMS INC") |
+   | Sector | [now] | IB's words: "Technology / Software" |
+   | Price | [now] | the last daily close |
+   | Above 50-day | [now] | "+6.1%" |
+   | From the high | [now] | "−7.4%" below the year's highest close; the **Pulled back** mark when 5–15% |
+   | Year | [now] | the year's return, "+62.3%"; for a stock that has traded less than a year, "+27.9% · 10 months"; the **Recovering** mark when below 0 |
+   | Biggest fall | [now] | the year's biggest fall from a peak to a trough, "18.5%" |
+   | Momentum | [now] | the existing momentum label and score, "STRONG 5/5" (§4) |
+   | Moves with | [now] | the holding it moves with most and the figure, "MSFT 0.81"; marked **Moves together** from 0.7; its hint lists the top 3 |
+   | In the portfolio | [now] | "Me" / "Me · Dana" when it is held already; empty otherwise |
+   | Risk signs | [later] | the signs as tags, and the timing note apart from them |
+   | Why it moves | [later] | one line from the news, with its source: "A contract win with a large bank (Example Wire)" |
+   | Analysts | [later] | the consensus rating and how far its target is, "BUY · +18.1%", and the trend |
+   | Earnings | [later] | the next date, "2026-11-12", stressed when within 14 days |
+   | Analyze | [later] | a small button to analyze this one stock (no new recommendation) |
+
+5. **Too hot** [now], a short list under a heading that says what it means: "Too hot: more than 15% above the 50-day
+   average — wait for a pullback". Per row: stock · price · above 50-day · year · momentum. [later] Analyze per row.
+6. **Correcting** [now], the same way: "Correcting: below the 50-day average — wait for it to climb back above". Per row:
+   stock · price · under 50-day ("−4.3%") · from the high · year · momentum.
+
+### 8.3 The stock's drawer (`/recommendations/:candidateId`)
+
+The same drawer as a holding's (§5.4), with tabs:
+- **Summary** [now]:
+  - why it is hot, as checks: "Above its 200-day average ✓ · 50-day above 200-day ✓ · 6.1% above its 50-day average
+    (Hot: 0–15%)"
+  - the marks, the year, the biggest fall, the year's high and where the price is from it
+  - IB's sector, the exchange, "In the portfolio: Me"
+  - **Moves with your holdings:** the top 3, each with its figure and the Moves together mark, and a hint: "1 = they
+    move exactly together, 0 = unrelated. From 0.7 a purchase adds little spread to what you hold."
+- **Momentum** [now]: the existing momentum box (§5.4), the same five checks.
+- **Analysts & news** [later]: the existing analysis box (§5.4), plus "Why it moves".
+- **Company** [later]: the next earnings date (with before / after the market's session), P/E, net margin, debt to
+  equity, revenue growth over 12 months, each marked when it raises a risk sign.
+- **If I buy** [later; its data exists]: an amount ("5,000") → whole shares at the last price, the commission, and
+  **the stock's and its sector's weight after**, on each tab (Portfolio · Me · Dana), with the cash checked like the
+  Weight tab's purchase (§7.5). The sector is picked from the user's own sector list; when IB's sector name matches one,
+  it is already picked. A calculation only: nothing is sold or bought.
+
+### 8.4 The buttons and their states
+
+- **Scan again** [now]: idle · scanning ("Scanning… about 10 seconds") · done (the page reloads with the new scan) ·
+  **TWS closed**: "TWS is not reachable: open TWS and log in, then scan again." · **already running**: "A scan is
+  already running."
+- **Analyze & recommend** [later], paid — a confirm first: "Analyze the first 10 hot stocks? About 50 Tavily credits
+  and $0.46." Then the same states as Analyze in §5.4 (running, done, done with a failure, error).
+- **Analyze** for one stock [later]: as Analyze for one holding, with its own estimate.
+
+### 8.5 Colors and words
+
+- **Risk signs** use the **warning-sign** tone (§4), **Recovering** included (it is one of the five).
+- **The timing note is not a risk sign:** it must not look like one (not the warning tone).
+- **Pulled back and Moves together are information,** not good or bad: no green or red.
+- **The three lists are lists, not tones:** Hot, Too hot and Correcting are not green, amber and red.
+- **Momentum** keeps its labels' tones (§4).
+- **Wording:** "hot", "too hot", "correcting", "pulled back", "recovering", "moves together", "risk signs" — the
+  words of this section, as the rest of the app uses them.
+
+### 8.6 Sample data (made up, the same account as §6)
+
+**The candidates are invented companies,** with invented symbols. GOOGL is the one stock the scan found that the
+account already holds (§6).
+
+**Scan:** 2026-10-23 23:05 · 68 stocks · 34 hot, 19 too hot, 8 correcting, 7 in no list. The rows below are the first
+of each list.
+
+**Hot**, in the page's order:
+
+| Stock | Sector (IB) | Price | Above 50-day | From the high | Year | Biggest fall | Momentum | Moves with | In the portfolio |
+|---|---|---|---|---|---|---|---|---|---|
+| KRVN · KERVAN SYSTEMS INC | Technology / Software | 84.20 | +6.1% | −7.4% pulled back | +62.3% | 18.5% | STRONG 5/5 | MSFT 0.81 together | |
+| TAMR · TAMARO HEALTH CORP | Healthcare / Medical devices | 132.75 | +4.8% | −9.9% pulled back | +41.0% | 14.2% | STRONG 4/5 | COST 0.32 | |
+| ORLX · ORLEX ENERGY INC | Energy / Oil & gas | 47.60 | +3.2% | −12.1% pulled back | +18.7% | 31.0% | NEUTRAL 3/5 | V 0.41 | |
+| GOOGL · ALPHABET INC-CL A | Technology / Internet | 196.10 | +8.9% | −1.2% | +38.5% | 21.7% | STRONG 5/5 | MSFT 0.74 together | Me |
+| BRDX · BRIDAX SEMICONDUCTOR | Technology / Semiconductors | 61.30 | +12.7% | −2.4% | +118.0% | 33.9% | STRONG 5/5 | ASML 0.88 together | |
+| ZEPH · ZEPHYR RETAIL GROUP | Consumer / Retail | 22.15 | +2.0% | −3.1% | −12.0% recovering | 64.5% | STRONG 4/5 | AMZN 0.47 | |
+| NWPT · NEWPORT FREIGHT CO | Industrials / Transportation | 28.90 | +0.6% | −4.1% | +27.9% · 10 months | 25.3% | NEUTRAL 2/5 | AMZN 0.22 | |
+
+**Too hot:**
+
+| Stock | Price | Above 50-day | Year | Momentum |
+|---|---|---|---|---|
+| QNTX · QUANTIX LABS INC | 214.00 | +38.6% | +305.0% | STRONG 5/5 |
+| SOLV · SOLVANE POWER CORP | 39.80 | +22.4% | +142.0% | STRONG 5/5 |
+| MRQE · MARQUEE MEDIA INC | 18.45 | +16.2% | +67.0% | STRONG 4/5 |
+
+**Correcting:**
+
+| Stock | Price | Under 50-day | From the high | Year | Momentum |
+|---|---|---|---|---|---|
+| HLMR · HOLMER TOOLS INC | 72.10 | −4.3% | −16.8% | +44.0% | NEUTRAL 2/5 |
+| VELD · VELDT BIOTECH | 33.40 | −11.9% | −27.5% | −21.0% recovering | WEAK 1/5 |
+
+**Free cash:** Me 5,342.80 · Dana 7,065.00.
+
+**[later] The recommendation:** 2026-10-24 09:12, from the scan of 2026-10-23 · 10 stocks analyzed.
+1. **KRVN**, no risk signs. *Why:* "Two analysts raised their targets this week after a contract win with a large
+   bank, and the news around it is positive; the consensus target is 18% above the price." *Main risk:* "Its P/E of 44
+   is near the expensive line, so a weak report would hit it hard." *What to watch:* "Earnings on 2026-11-12, after the
+   close."
+2. **TAMR**, no risk signs; timing note "Earnings in 6 days: wait for the report of 2026-10-30". *Why:* "A new device
+   approval drove the rise, and analysts followed with higher targets." *Main risk:* "A quarter that disappoints
+   right after the approval." *What to watch:* "The report on 2026-10-30, before the open."
+3. **ORLX**, one risk sign, High debt (debt 2.4× equity). *Why:* "It pulled back 12% from its high while the trend held,
+   and analysts kept their ratings." *Main risk:* "The debt: a fall in oil prices would weigh on it twice." *What to
+   watch:* "Oil prices, and the report on 2026-11-06."
+- *Summary:* "Two stocks with no risk signs and one with high debt, all three after a small pullback; TAMR reports next
+  week, so it can wait for the numbers."
+- *Why not the others:* GOOGL Expensive (P/E 52) · BRDX Expensive (P/E 88) · ZEPH Losing money, Recovering · NWPT
+  Revenue falling.
+
+**[later] KRVN's analysis and company figures:** consensus BUY · 22 analysts · target 99.40 (+18.1%) · trend IMPROVING,
+2 targets raised, 0 lowered · why it moves: "A contract win with a large bank" (Example Wire, 2026-10-20) · earnings
+2026-11-12, after the close · P/E 44.1 · net margin 12.4% · debt to equity 0.6 · revenue growth +21.0%.
+
+**KRVN's drawer:**
+- [now] Above its 200-day average ✓ · 50-day above 200-day ✓ · 6.1% above its 50-day average · pulled back 7.4% from its
+  year high of 90.95 · year +62.3% · biggest fall 18.5% · moves with MSFT 0.81 (together), AMZN 0.55, V 0.31
+- [later] **If I buy 5,000:**
+
+  | Tab | Shares | Cost | The stock after | Technology after (of the money in stocks) | Cash |
+  |---|---|---|---|---|---|
+  | Portfolio | 59 | ≈ 4,967.80 + 5.00 | 6.0% of the whole account | 29.8% → 34.4% | 12,407.80: enough |
+  | Dana | 59 | ≈ 4,967.80 + 5.00 | 22.8% of all of Dana's money | 63.6% → 72.8% | 7,065.00: enough |
+
+### 8.7 What to design
+
+- **The pieces, with their states:** the scan line with Scan again (8.4) · the recommendation card in its three states
+  (none yet, picks, no stock qualified), and a pick without Claude's text · the free cash · the Hot table · the Too
+  hot and Correcting lists · the drawer's tabs · the If I buy calculator.
+- **Two versions of the page:** the [now] page (no recommendation card, no analysis columns, no Analyze buttons) and the
+  full one. The [now] page must look finished on its own.
+- **What is open:** the designer may propose a better arrangement — for example, whether Too hot and Correcting sit
+  side by side under Hot or one under the other, or whether the free cash belongs in the scan line. The rules stay:
+  no figure the API won't provide, nothing bought.
+- **Edge cases:**
+  - before the first scan: "No scan yet. ./run.sh scans once a trading day, after the US market closes — or press Scan
+    again (TWS must be open)."
+  - an empty list ("No stock is correcting right now.")
+  - a stock with no company name or no sector from IB ("—")
+  - a young stock ("· 10 months")
+  - no correlation figure ("—"): the account holds no stocks, or none with 100 trading days in common
+  - a stock held by two investors ("Me · Dana")
+  - one investor (no tabs in If I buy, one cash figure) and several
+  - a long company name, a long "why it moves" line
+  - every state of the buttons in 8.4

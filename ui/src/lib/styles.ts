@@ -65,6 +65,10 @@ export const CARD_CLASS = 'rounded-lg border bg-surface';
 export const TAG_CLASS =
   'inline-flex h-[18px] items-center whitespace-nowrap rounded-sm bg-subtle px-1.5 text-caption font-medium text-muted';
 
+/** The number beside a card's title: how many items it lists. */
+export const COUNT_CHIP_CLASS =
+  'inline-flex h-5 min-w-[22px] items-center justify-center rounded-sm bg-subtle px-1.5 text-caption font-semibold';
+
 /** A small word in a tone, its colors given with it: a rating, a trend, STRONG 5/5. */
 export const CHIP_CLASS =
   'inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 text-[11px] font-semibold leading-4 ' +

@@ -4,6 +4,8 @@ import com.ib.client.Contract;
 import com.ib.client.EClientSocket;
 import com.ib.client.EJavaSignal;
 import com.ib.client.EReader;
+import com.ib.client.ScannerSubscription;
+import com.ib.client.TagValue;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -20,9 +22,6 @@ import java.util.concurrent.TimeUnit;
  * exposes no order-placement method.
  */
 public class IbGateway {
-
-    /** The daily-close requests are numbered from here; nothing else in PortfolioBoss uses request ids. */
-    private static final int FIRST_DAILY_CLOSE_REQUEST_ID = 1000;
 
     private final EJavaSignal signal = new EJavaSignal();
     private final PortfolioWrapper wrapper = new PortfolioWrapper();
@@ -80,20 +79,82 @@ public class IbGateway {
         return wrapper.snapshot();
     }
 
+    // ── the scans for hot stocks ────────────────────────────────────────────────────────────────
+
+    /**
+     * Asks IB for the stocks that rose most over the last 3 and 6 months, with the filters of {@link HotStockScan}. A
+     * scan answers with up to 50 rows and would then keep updating them; the wrapper cancels each one once its first
+     * answer has ended — one picture, not a subscription, a read like the portfolio.
+     */
+    public void requestHotStockScans() {
+        Map<Integer, String> scanCodeByRequestId = wrapper.scanRequests().expect(HotStockScan.SCAN_CODES);
+        System.out.println("[ib] scanning for hot stocks: " + String.join(", ", HotStockScan.SCAN_CODES));
+        scanCodeByRequestId.forEach((requestId, scanCode) -> client.reqScannerSubscription(
+                requestId, scannerSubscriptionOf(scanCode), null, hotStockScanFilters()));
+    }
+
+    /** Blocks until every scan has ended, or the timeout elapses. */
+    public boolean awaitScans(long timeout, TimeUnit unit) throws InterruptedException {
+        return wrapper.scanRequests().awaitAllFinished(timeout, unit);
+    }
+
+    /** Every row of every scan that has ended with at least one. */
+    public List<ScanRow> scanRows() {
+        return wrapper.scanRequests().answersOfFinishedRequests().values().stream()
+                .flatMap(List::stream)
+                .toList();
+    }
+
+    private ScannerSubscription scannerSubscriptionOf(String scanCode) {
+        ScannerSubscription subscription = new ScannerSubscription();
+        subscription.instrument(HotStockScan.INSTRUMENT);
+        subscription.locationCode(HotStockScan.LOCATION);
+        subscription.stockTypeFilter(HotStockScan.STOCK_TYPE);
+        subscription.scanCode(scanCode);
+        subscription.numberOfRows(HotStockScan.MOST_ROWS_PER_SCAN);
+        return subscription;
+    }
+
+    private List<TagValue> hotStockScanFilters() {
+        return List.of(
+                new TagValue("priceAbove", String.valueOf(HotStockScan.LOWEST_PRICE_DOLLARS)),
+                new TagValue("marketCapAbove1e6", String.valueOf(HotStockScan.LOWEST_MARKET_CAP_MILLIONS)),
+                new TagValue("avgVolumeAbove", String.valueOf(HotStockScan.LOWEST_AVERAGE_DAILY_VOLUME)));
+    }
+
+    // ── contract details ────────────────────────────────────────────────────────────────────────
+
+    /** Asks IB for the contract details of each stock — its exchange, name and sector —, one request per contract. */
+    public void requestStockDetails(Collection<Integer> conIds) {
+        Map<Integer, Integer> conIdByRequestId = wrapper.stockDetailsRequests().expect(conIds);
+        System.out.printf("[ib] requesting the contract details of %d stocks%n", conIds.size());
+        conIdByRequestId.forEach((requestId, conId) -> client.reqContractDetails(requestId, contractOf(conId)));
+    }
+
+    /** Blocks until every contract-details request has ended, or the timeout elapses. */
+    public boolean awaitStockDetails(long timeout, TimeUnit unit) throws InterruptedException {
+        return wrapper.stockDetailsRequests().awaitAllFinished(timeout, unit);
+    }
+
+    /** By contract id, the details that came; asked by contract id, IB answers with that one contract. */
+    public Map<Integer, StockDetails> stockDetails() {
+        Map<Integer, StockDetails> stockDetailsByConId = new LinkedHashMap<>();
+        wrapper.stockDetailsRequests().answersOfFinishedRequests()
+                .forEach((conId, answers) -> stockDetailsByConId.put(conId, answers.getFirst()));
+        return stockDetailsByConId;
+    }
+
+    // ── daily closes ────────────────────────────────────────────────────────────────────────────
+
     /**
      * Asks IB for a year of daily closing prices of each contract, by contract id — a read, like the portfolio. One
      * request per contract; the bars arrive on the reader thread, and {@link #awaitDailyCloses} waits for them.
      */
     public void requestDailyCloses(Collection<Integer> conIds) {
-        Map<Integer, Integer> conIdByRequestId = new LinkedHashMap<>();
-        int requestId = FIRST_DAILY_CLOSE_REQUEST_ID;
-        for (int conId : conIds) {
-            conIdByRequestId.put(requestId++, conId);
-        }
-        wrapper.expectDailyCloses(conIdByRequestId);
+        Map<Integer, Integer> conIdByRequestId = wrapper.dailyCloseRequests().expect(conIds);
         System.out.printf("[ib] requesting a year of daily closes for %d contracts%n", conIds.size());
-        conIdByRequestId.forEach((dailyCloseRequestId, conId) -> client.reqHistoricalData(
-                dailyCloseRequestId, contractOf(conId), "", "1 Y", "1 day", "TRADES",
+        conIdByRequestId.forEach((requestId, conId) -> client.reqHistoricalData(
+                requestId, contractOf(conId), "", "1 Y", "1 day", "TRADES",
                 1,       // regular trading hours only
                 1,       // dates as yyyyMMdd
                 false,   // one answer, not a live subscription
@@ -102,12 +163,12 @@ public class IbGateway {
 
     /** Blocks until every daily-close request has ended, or the timeout elapses. */
     public boolean awaitDailyCloses(long timeout, TimeUnit unit) throws InterruptedException {
-        return wrapper.awaitDailyCloses(timeout, unit);
+        return wrapper.dailyCloseRequests().awaitAllFinished(timeout, unit);
     }
 
     /** By contract id, the closes of the requests that have ended with at least one. */
     public Map<Integer, List<DailyClose>> dailyCloses() {
-        return wrapper.dailyCloses();
+        return wrapper.dailyCloseRequests().answersOfFinishedRequests();
     }
 
     /** A contract id and an exchange are all IB needs to know which contract is meant. */

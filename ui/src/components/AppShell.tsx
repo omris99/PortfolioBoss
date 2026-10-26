@@ -11,6 +11,7 @@ const NAVIGATION: { path: string; label: string }[] = [
   { path: '/positions', label: 'Positions' },
   { path: '/closed', label: 'Closed' },
   { path: '/investors', label: 'Investors' },
+  { path: '/recommendations', label: 'Recommendations' },
 ];
 
 const STATUS_DOT_CLASSES: Record<LoadStatus, string> = {

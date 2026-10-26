@@ -5,9 +5,20 @@ import type {
   NewManualPositionRequest,
   TradeRequest,
 } from '../types/portfolio';
+import type { ScanRun } from '../types/recommendations';
 
-/** A write the API refused or could not be reached for; `message` is meant to be shown to the user as it is. */
-export class ApiError extends Error {}
+/**
+ * A write the API refused or could not be reached for; `message` is meant to be shown to the user as it is. `status` is
+ * the HTTP status of a refusal (409, 503…), `null` when the API could not be reached at all.
+ */
+export class ApiError extends Error {
+  readonly status: number | null;
+
+  constructor(message: string, status: number | null = null) {
+    super(message);
+    this.status = status;
+  }
+}
 
 const API_UNREACHABLE_MESSAGE = 'Could not reach the PortfolioBoss API. Is ./run.sh running?';
 
@@ -83,6 +94,16 @@ export async function analyzeHoldings(holdingIds: number[] | null): Promise<Anal
   return (await response.json()) as AnalysisRun;
 }
 
+/**
+ * Asks for a new scan for hot stocks on demand: TWS must be open. Free (IB only); answers in about ten seconds, once the
+ * scan is stored. Refused with 503 when TWS can't be read or no scan answered, and with 409 while another reading runs.
+ * The body is `{}`: JSON only, so no other site can start one.
+ */
+export async function scanAgain(): Promise<ScanRun> {
+  const response = await sendRequest('POST', '/api/scans', {});
+  return (await response.json()) as ScanRun;
+}
+
 /** Sends one write whose answer is not needed: after a write the caller reloads the whole portfolio. */
 async function sendJson(method: 'PUT' | 'POST' | 'DELETE', url: string, body?: unknown): Promise<void> {
   await sendRequest(method, url, body);
@@ -101,7 +122,7 @@ async function sendRequest(method: 'PUT' | 'POST' | 'DELETE', url: string, body?
     throw new ApiError(API_UNREACHABLE_MESSAGE);
   }
   if (!response.ok) {
-    throw new ApiError(await readErrorMessage(response));
+    throw new ApiError(await readErrorMessage(response), response.status);
   }
   return response;
 }

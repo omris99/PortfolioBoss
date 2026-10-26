@@ -8,7 +8,8 @@ import java.time.LocalDate;
 /**
  * A holding's momentum as the UI receives it (AI_ANALYSIS_TODO.md, decision 5): the figures of {@link Momentum}, its
  * five checks — {@code null} where there were not enough closes —, how far below the 20-day high the last close is,
- * and the score with its label. The component names are JSON keys: added to, never renamed or removed.
+ * and the score with its label; then the year's figures (RECOMMENDATIONS_TODO.md, session 1), with how many months the
+ * year's return covers. The component names are JSON keys: added to, never renamed or removed.
  */
 public record MomentumResponse(
         LocalDate asOf,
@@ -26,7 +27,13 @@ public record MomentumResponse(
         Boolean beatsSpy,
         Double percentBelowHigh,
         Integer score,
-        MomentumLabel label) {
+        MomentumLabel label,
+        LocalDate firstCloseDate,
+        double high52Weeks,
+        Double yearReturnPercent,
+        double maxDrawdownPercent,
+        int monthsInMarket,
+        double percentBelowHigh52Weeks) {
 
     /** A holding without a single stored close has no momentum: {@code PortfolioReadService} leaves it null. */
     public MomentumResponse(Momentum momentum) {
@@ -46,6 +53,12 @@ public record MomentumResponse(
                 momentum.beatsSpy(),
                 momentum.percentBelowHigh(),
                 momentum.score(),
-                momentum.label());
+                momentum.label(),
+                momentum.firstCloseDate(),
+                momentum.high52Weeks(),
+                momentum.yearReturnPercent(),
+                momentum.maxDrawdownPercent(),
+                momentum.monthsInMarket(),
+                momentum.percentBelowHigh52Weeks());
     }
 }

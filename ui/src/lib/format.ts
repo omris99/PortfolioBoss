@@ -30,6 +30,20 @@ export function formatSignedPercent(percent: number | null): string {
   return `${sign}${Math.abs(percent).toFixed(2)}%`;
 }
 
+/** A stock's move, with one decimal place and its sign: "+6.1%", "−7.4%", and "0.0%" with no sign at all. */
+export function formatSignedPercentOneDecimal(percent: number | null): string {
+  if (percent === null) return EMPTY_VALUE;
+  const rounded = Math.abs(percent).toFixed(1);
+  if (Number(rounded) === 0) return `${rounded}%`;
+  return `${percent > 0 ? '+' : MINUS_SIGN}${rounded}%`;
+}
+
+/** A correlation between −1 and 1, with two decimals: "0.81", "−0.12". */
+export function formatCorrelation(coefficient: number): string {
+  const sign = coefficient < 0 ? MINUS_SIGN : '';
+  return `${sign}${Math.abs(coefficient).toFixed(2)}`;
+}
+
 /** A part of a whole, with one decimal place and a sign only when below zero: "24.1%", "−3.0%". */
 export function formatPercent(percent: number | null): string {
   if (percent === null) return EMPTY_VALUE;

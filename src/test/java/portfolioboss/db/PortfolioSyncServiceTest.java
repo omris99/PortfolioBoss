@@ -12,6 +12,9 @@ import portfolioboss.ib.Benchmark;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
+import portfolioboss.ib.Scan;
+import portfolioboss.ib.ScanRow;
+import portfolioboss.ib.StockDetails;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -42,6 +45,11 @@ class PortfolioSyncServiceTest {
     private static final Instant FIRST_RUN = Instant.parse("2026-09-21T08:00:00Z");
     private static final Instant SECOND_RUN = Instant.parse("2026-09-22T08:00:00Z");
     private static final Instant THIRD_RUN = Instant.parse("2026-09-23T08:00:00Z");
+    private static final String THREE_MONTH_SCAN = "SCAN_histPerfRatio3m_DESC";
+    private static final String SIX_MONTH_SCAN = "SCAN_histPerfRatio6m_DESC";
+    /** Made-up stocks a scan found. */
+    private static final int HOTA_CON_ID = 9001;
+    private static final int HOTB_CON_ID = 9002;
 
     @Autowired
     private PortfolioSyncService syncService;
@@ -196,6 +204,63 @@ class PortfolioSyncServiceTest {
         assertThat(storedClosesOf(APPLE_CON_ID)).containsExactly(close(2026, 9, 21, 150.0));
     }
 
+    // ── the scan for hot stocks ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Two made-up stocks: HOTA found by both scans, with closes read in the same run; HOTB found by one, its closes
+     * missing. Each candidate is stored with its last close — the price the measurement starts from.
+     */
+    @Test
+    void storesAScanWithEachCandidatesLastClose() {
+        Scan scan = new Scan(FIRST_RUN,
+                List.of(new ScanRow(THREE_MONTH_SCAN, 4, HOTA_CON_ID, "HOTA"),
+                        new ScanRow(SIX_MONTH_SCAN, 17, HOTA_CON_ID, "HOTA"),
+                        new ScanRow(SIX_MONTH_SCAN, 2, HOTB_CON_ID, "HOTB")),
+                Map.of(HOTA_CON_ID, new StockDetails(HOTA_CON_ID, "NASDAQ", "HOTA INC", "Technology", ""),
+                        HOTB_CON_ID, new StockDetails(HOTB_CON_ID, "NYSE", "HOTB CORP", "Industrials", "Machinery")));
+
+        syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)),
+                Map.of(HOTA_CON_ID, List.of(close(2026, 9, 18, 52.0), close(2026, 9, 17, 50.0))), scan);
+
+        entityManager.flush();
+        Map<String, Object> scanRow = jdbc.queryForMap(
+                "select scanned_at, scan_codes ->> 0 as first_scan_code, jsonb_array_length(scan_codes) as scan_count "
+                        + "from scan");
+        assertThat(instantOf(scanRow, "scanned_at")).isEqualTo(FIRST_RUN);
+        assertThat(scanRow).containsEntry("first_scan_code", THREE_MONTH_SCAN).containsEntry("scan_count", 2);
+        assertThat(candidateRowOf(HOTA_CON_ID))
+                .containsEntry("symbol", "HOTA")
+                .containsEntry("company_name", "HOTA INC")
+                .containsEntry("exchange", "NASDAQ")
+                .containsEntry("industry", "Technology")
+                .containsEntry("category", null)              // IB sent an empty text
+                .containsEntry("rank_in_six_month_scan", "17")
+                .containsEntry("close_at_scan", 52.0);
+        assertThat(candidateRowOf(HOTA_CON_ID).get("close_date")).hasToString("2026-09-18");
+        assertThat(candidateRowOf(HOTB_CON_ID))
+                .containsEntry("close_at_scan", null)
+                .containsEntry("close_date", null);
+    }
+
+    /** Every scan is kept for the measurement; the latest one's time decides whether the next run scans. */
+    @Test
+    void keepsEveryScanAndKnowsWhenTheLatestRan() {
+        syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)), Map.of(), scanOfOneStockAt(FIRST_RUN));
+        startNextRun();
+        syncService.sync(snapshotOf(SECOND_RUN, apple(10, 150.0)), Map.of(), scanOfOneStockAt(SECOND_RUN));
+
+        assertThat(countOf("select count(*) from scan")).isEqualTo(2);
+        assertThat(syncService.lastScannedAt()).contains(SECOND_RUN);
+    }
+
+    @Test
+    void aSyncWithoutAScanStoresNone() {
+        syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)));
+
+        assertThat(countOf("select count(*) from scan")).isZero();
+        assertThat(syncService.lastScannedAt()).isEmpty();
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
     /**
@@ -248,6 +313,18 @@ class PortfolioSyncServiceTest {
 
     private DailyClose close(int year, int month, int day, double price) {
         return new DailyClose(LocalDate.of(year, month, day), price);
+    }
+
+    /** A candidate's raw row, with where the 6-month scan placed it read out of the JSON column. */
+    private Map<String, Object> candidateRowOf(int conId) {
+        entityManager.flush();
+        return jdbc.queryForMap("select *, rank_by_scan_code ->> ? as rank_in_six_month_scan from scan_candidate "
+                + "where con_id = ?", SIX_MONTH_SCAN, conId);
+    }
+
+    private Scan scanOfOneStockAt(Instant scannedAt) {
+        return new Scan(scannedAt, List.of(new ScanRow(THREE_MONTH_SCAN, 0, HOTA_CON_ID, "HOTA")),
+                Map.of(HOTA_CON_ID, new StockDetails(HOTA_CON_ID, "NASDAQ", "HOTA INC", "Technology", "Software")));
     }
 
     private PortfolioSnapshot snapshotOf(Instant asOf, Holding... holdings) {
