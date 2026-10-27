@@ -282,10 +282,27 @@
 
 ## סשן 2 — Finnhub: הדוחות והנתונים הבסיסיים
 
-- `ai.FinnhubClient` (`RestClient`, כמו `TavilyClient` — `ai` הוא הבית של המקורות החיצוניים של הניתוח): `nextEarningsDate` ו-
-  `CompanyFacts(revenueGrowthPercent, netMarginPercent, debtToEquity, peRatio)` — השמות לפי סשן 0.
-- `FINNHUB_API_KEY` ב-`AiKeys`; חסר ← `[ai] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)`, והניתוח רץ בלי החלק הזה.
-- `FinnhubClientTest` מול Finnhub מזויף (`MockRestServiceServer`).
+> **סטטוס (27.10.2026): ✅ בוצע.** `mvn -q clean test` ירוק, 339 בדיקות; `./run.sh 7599` עם המפתח (בלי שורה) ובלעדיו
+> (`[stocks] Finnhub off: …`). שום קוד עוד לא קורא ל-Finnhub — זה סשן 3.
+>
+> **מהקריאות האמיתיות (27.10.2026, AAPL וסימבול שלא קיים):**
+> - שולי הרווח והצמיחה **באחוזים** (`27.62` = 27.62%); החוב להון **יחס** (`0.7844` — "פי 2" הוא `2.0`); ה-P/E יחס.
+> - לוח הדוחות **לא ממוין** (ינואר הגיע לפני נובמבר) — נבחר המוקדם. `hour` הוא `bmo` / `amc` / `dmh`, או `""` כשעוד לא
+>   ידוע ← `null`. טווח של 4 חודשים קדימה עובד במסלול החינמי.
+> - סימבול לא מוכר: 200, עם `"metric": {}` ו-`"earningsCalendar": []`. בלי מפתח: 401. המפתח עובר בכותרת
+>   `X-Finnhub-Token`, לא בכתובת.
+>
+> **שונה מהתוכנית (בחירת המשתמש):** חבילה חדשה, `stocks`, ולא `ai` — הנתונים האלה לא באים מ-Claude, ומשמשים את הקוד (סימני
+> הסיכון), לא רק את ה-AI. הטיפוס `Stock` מקבץ את מה ש-Finnhub יודע על מניה, וכך גם לתאריך הדוחות יש מקום ב-3.1. המפתח אצל
+> `FinnhubClient` עצמו, לא ב-`AiKeys`.
+
+- `stocks.FinnhubClient` (`RestClient`, כמו `TavilyClient`; `@Value("${FINNHUB_API_KEY:}")`, `hasApiKey()`):
+  `stock(symbol, today)` — שתי קריאות, `/calendar/earnings` מהיום עד 4 חודשים קדימה ו-`/stock/metric?metric=all` — מחזיר
+  `Stock(symbol, nextEarningsDate, companyFacts)`: `EarningsDate(date, hour)` ו-`CompanyFacts(revenueGrowthPercent,
+  netMarginPercent, debtToEquity, peRatio)`, מ-`revenueGrowthTTMYoy`, `netProfitMarginTTM`, `totalDebt/totalEquityQuarterly`
+  ו-`peTTM`. מספר ש-Finnhub לא נתן ← `null`.
+- מפתח חסר ← `[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)`, והניתוח ירוץ בלי החלק הזה.
+- `FinnhubClientTest` מול Finnhub מזויף (`MockRestServiceServer`), עם עותקים מקוצרים של התשובות האמיתיות.
 
 ---
 
@@ -301,7 +318,7 @@
 ### 3.1 🟡 מיגרציה `V10__recommendations.sql`
 
 - `stock_analysis`: `holding_id` הופך ל-nullable, `scan_candidate_id` נוסף, ובדיוק אחד מהם מלא (כמו ב-`trade`); `company_facts`
-  (`JSONB`) — מ-Finnhub, לא מ-Claude.
+  (`JSONB`) — ה-`stocks.Stock` של Finnhub (תאריך הדוחות והמספרים, סשן 2), לא מ-Claude.
 - `investment_recommendation` — `id`, `scan_id`, `recommended_at`, `picks` (בחירת הקוד, לפי הסדר — הבסיס למדידה), `model`,
   `result` (`JSONB` — ההסבר של Claude), טוקנים, `cost_usd`.
 

@@ -67,8 +67,10 @@ measurement of how the picks did. Its sessions 0 (the experiment), 1 (the scan i
 the correlations, `GET /api/recommendations`) and 1b (the page, designed first in Claude Design's third round —
 DESIGN_BRIEF.md §8, every piece marked [now] or [later] — and the Scan again button, `POST /api/scans`) are done and were
 checked against TWS and in the browser on 2026-10-26: 992 stocks passed the scan's filters, the two scans found 73, all
-73 on NYSE or NASDAQ by their contract details' `primaryExch`. Sessions 2 (Finnhub), 3 (the analysis and the
-recommendation), 4 (their UI, the [later] pieces) and 5 (the measurement) are next.
+73 on NYSE or NASDAQ by their contract details' `primaryExch`. Session 2 (2026-10-27) added Finnhub's client,
+`stocks.FinnhubClient` — a stock's next earnings date and four company figures —, which nothing calls yet. Sessions 3
+(the analysis and the recommendation, which will call it from Analyze), 4 (their UI, the [later] pieces) and 5 (the
+measurement) are next.
 
 ## Hard invariant: read-only
 
@@ -90,7 +92,8 @@ through `ManualPositionWriteController`, the investors with their deposits and w
 creates or deletes a holding (only the sync does). `AnalysisController` is the one endpoint that reaches outside the
 machine: it sends each stock's symbol to Tavily, and the symbol, currency, IB's price, today's date and the search results
 to Claude — **never** a quantity, a cost, an investor or the account number (AI_ANALYSIS_TODO.md, decision 8) — and it
-runs only when the user presses the button. `ScanController` (`POST /api/scans`, the Scan again button) is the one
+runs only when the user presses the button. `stocks.FinnhubClient` sends Finnhub only a symbol (RECOMMENDATIONS_TODO.md,
+decision 8); nothing calls it yet — session 3 will, from the same kind of button. `ScanController` (`POST /api/scans`, the Scan again button) is the one
 endpoint that reads TWS: a scan, read-only and free, through the same `ib.TwsReader` as `./run.sh`. `PortfolioController`
 and `RecommendationsController` stay GET-only (Spring answers 405 to every other method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
 `application.properties`), there is **no CORS configuration**, and every write endpoint with a body accepts
@@ -159,8 +162,8 @@ rolled back automatically. The write endpoints are tested in the same two halves
 codes, validation messages and the JSON-only rule, the `*WriteServiceTest`s for what is stored. `ClosedPositionTest`
 and `HoldingHistoryTest` cover the average-cost math, `InvestorSummaryCalculatorTest` (INVESTORS_TODO.md's worked
 example among them) and `PositionTradesTest` the split between investors, `OrderCommissionTest` the default commission,
-`UtilsTest` the trimming of typed text. The analysis: **no test calls Tavily or Claude** (it costs money and needs the
-network). `ConsensusCalculatorTest` (AAPL and TTWO of the live check, MarketBeat first, the 1–5 scale's limits),
+`UtilsTest` the trimming of typed text. The analysis: **no test calls Tavily, Claude or Finnhub** (it costs money or
+credits and needs the network). `ConsensusCalculatorTest` (AAPL and TTWO of the live check, MarketBeat first, the 1–5 scale's limits),
 `AnalystTrendCalculatorTest` (price-target moves only, on NVDA, INTC and TTWO of the first run from the UI) and
 `SignalCalculatorTest` cover the decisions; `SearchResultsTest` the symbol filter and the addresses it leaves out,
 `StockSearchesTest` the four searches together (credits, filter); `TavilyClientTest` the four searches
@@ -175,7 +178,9 @@ The Recommendations side: `RecommendationsReadServiceTest` (`@DataJpaTest`, six 
 shaped for their lists) the lists, the stocks in none, a correlation of 1, a stock already held;
 `RecommendationsControllerTest` its JSON, 503 and 405; `ScanServiceTest` (`@DataJpaTest`, `TwsReader` a `@MockitoBean`:
 **no test connects to TWS**) a scan stored with its closes, 409 and 503 storing nothing; `ScanControllerTest` the status
-codes and the JSON-only rule. After a
+codes and the JSON-only rule; `FinnhubClientTest` Finnhub's two calls against a fake Finnhub (`MockRestServiceServer`,
+shortened copies of its real answers): the earliest report of a calendar out of order, an hour not known yet, a missing
+figure, an unknown symbol, a refused call, a key of spaces. After a
 change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
 would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
 `target/surefire-reports/` keeps the reports of tests that have since been deleted.
@@ -193,7 +198,9 @@ environment variable of the same name wins. A missing key turns only the analysi
 `[ai] analysis off: TAVILY_API_KEY is not set (config/local.env)` instead of `[ai] analysis ready`, and `POST
 /api/analysis` answers 503 with that name. Claude never reads or prints the file — only checks a key's name and length.
 Tavily's free plan has 1,000 credits a month; a full run of 7 stocks is 35 credits and about $0.30 of Claude, so a run
-every day would pass the free plan and a few a week would not.
+every day would pass the free plan and a few a week would not. **Finnhub's key**, `FINNHUB_API_KEY`, goes in the same
+file and is optional too: without it the app prints `[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)`
+and only Finnhub's part is off. Its free plan allows 60 calls a minute; a stock is 2.
 
 **External dependency not in the repo:** the TWS API jar at `~/DevTools/twsapi/TwsApi.jar` (shared
 with IBBot). It is not on Maven Central, so `run.sh` registers it once in the local Maven repository
@@ -340,9 +347,10 @@ the reader loop's whole batch.
 `ib.Holding` is a record mirroring `updatePortfolio` exactly — the broker is the source of truth, so no
 field is hand-entered — plus `conId`, IB's stable contract id, its second component. Derived math
 (`costBasis`, `unrealizedPnlPercent`) lives on the record. `PortfolioSnapshot`, `DailyClose` and `Benchmark` sit next to
-it in `ib`, and so do the scan's: `ScanRow` (one row of one scan), `StockDetails` (exchange — `primaryExch`, not the
-scan row's `marketName`, which for many NYSE stocks is the symbol —, name, industry, category), `Scan` (the rows and the
-details, from which `candidates()` derives one `ScanCandidate` per stock, NYSE / NASDAQ only, with its place in each scan,
+it in `ib`, and so do the scan's: `ScanRow` (one row of one scan), `StockContractDetails` (exchange — `primaryExch`, not
+the scan row's `marketName`, which for many NYSE stocks is the symbol —, name, industry, category; named after
+`reqContractDetails`, and not plain `ContractDetails`, the IB class `PortfolioWrapper` reads it from), `Scan` (the rows
+and the contract details, from which `candidates()` derives one `ScanCandidate` per stock, NYSE / NASDAQ only, with its place in each scan,
 and `leftOutStocks()` the console line), and `TwsReading` / `ScanReading`. What IB reports lives with the code that reads
 it, and `calculation`, `db` and `api` use only these records, never the IB API itself.
 
@@ -613,6 +621,29 @@ fewer than two of the three are known. Things that are easy to break:
 - Tavily doesn't return the same chunks of a page every time, so a figure in a stored analysis may not show in a later
   search of the same page.
 
+Finnhub (RECOMMENDATIONS_TODO.md, session 2) lives in `portfolioboss.stocks` (console `[stocks]`) — its own package
+rather than `ai` (the user's call, 2026-10-27): its figures don't come from Claude, and the code computes on them (the risk
+signs of decision 5), not only Claude. `FinnhubClient` holds its own key (`@Value("${FINNHUB_API_KEY:}")`,
+`hasApiKey()`, the `[stocks] Finnhub off` line at startup) and has one public method, `stock(symbol, today)`: two GETs
+through Spring's `RestClient` (10 s each), with the key in the `X-Finnhub-Token` header, never in the address —
+`/calendar/earnings` from `today` (the caller's, so the tests don't depend on the clock) to four months ahead, and
+`/stock/metric?metric=all`. It returns a `Stock(symbol, nextEarningsDate, companyFacts)`: an `EarningsDate(date, hour)`,
+read straight from Finnhub's JSON (`hour` is `bmo` / `amc` / `dmh`, or `null`), and `CompanyFacts(revenueGrowthPercent,
+netMarginPercent, debtToEquity, peRatio)`, from Finnhub's `revenueGrowthTTMYoy`, `netProfitMarginTTM`,
+`totalDebt/totalEquityQuarterly` and `peTTM` (private records under Finnhub's names, the one with a "/" through
+`@JsonProperty`); a figure Finnhub doesn't give is `null`. `Stock` is what Finnhub knows about a stock — not its price,
+name or exchange, which come from IB (`ib.StockContractDetails`, renamed from `StockDetails` on 2026-10-27 so it isn't read
+as "the details of a `Stock`"). The two are deliberately not one type: IB's come with every scan for every stock found,
+Finnhub's only on Analyze for the short list, so half of a merged type would always be empty; they meet side by side in
+session 3 — a candidate and its `Stock` —, which stores the `Stock` in `stock_analysis.company_facts`. Nothing calls
+`FinnhubClient` yet. Things that are easy to break:
+- The units, read on AAPL (2026-10-27): the margin and the growth are **percent** (`27.62` is 27.62%), the debt to equity
+  a **ratio** (`0.7844`; "twice the equity" is `2.0`), the P/E a ratio.
+- The calendar is **not in date order** (AAPL's January report came before November's): the earliest is taken, not the
+  first. An hour not known yet comes as `""`, read as `null` by `EarningsDate`'s compact constructor.
+- An unknown symbol is a 200 with `"metric": {}` and `"earningsCalendar": []` — every figure `null` and no date —, not an
+  error; a missing or wrong key is a 401, which throws.
+
 `PortfolioController` (Spring MVC) serves `GET /api/portfolio` through `PortfolioReadService`
 (`@Transactional(readOnly = true)`, since `open-in-view=false` means entities must be read inside the
 transaction): 503 until a sync has ever stored an `account_state` row, then 200 with `Cache-Control:
@@ -799,14 +830,18 @@ Things that are easy to break:
   The
   analysis prints `[ai] analysis ready` (or `[ai] analysis off: … is not set`) at startup, `[ai] analyzed N of M stocks:
   N Tavily credits, N input and N output tokens, $N` per run, and `[ai error] SYMBOL: why` for a stock that failed.
+  Finnhub prints `[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)` at startup when its key is
+  missing, and nothing when it is set.
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
-  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`. `calculation`, `model`, `utils` and
-  `exceptions` print nothing.
+  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`, `stocks` / `[stocks]`. `calculation`,
+  `model`, `utils` and `exceptions` print nothing.
 - Package dependencies point one way, with no cycle: `utils ← ai ← model ← calculation ← db ← api`, and `ib` — which
   uses none of them — is used by `calculation`, `db` and `api`. `exceptions` (2026-10-26, the user's request: the app's
   own exceptions in one package — `TwsUnavailableException`, `TwsBusyException`) uses nothing and is used by `ib` and
-  `api`. `calculation` holds only what computes; the data it
-  computes on lives where it comes from — IB's readings in `ib`, Claude's answer in `ai` — or, when the whole app shares
+  `api`. `stocks` (2026-10-27: Finnhub's client and what it reads) uses only `utils`; like `ib` it is a source of data —
+  nothing uses it yet, and from session 3 `calculation`, `db` and `api` will. `calculation` holds only what computes; the
+  data it computes on lives where it comes from — IB's readings in `ib`, Claude's answer in `ai`, Finnhub's in `stocks` —
+  or, when the whole app shares
   it (an enum both an entity and the computation need, like `TradeSide`; a warning; a label), in `model`. `calculation`
   uses nothing of Spring, the database or the IB API — only those packages' records. Before 2026-10-08 three enums sat
   in `db` and the two packages depended on each other; until 2026-10-09 `calculation` also held all the data. The
@@ -870,8 +905,8 @@ Things that are easy to break:
   manual positions) and the investors sharing the account are in, and so are the momentum score and the analysis of
   AI_ANALYSIS_TODO.md, backend and UI; the API reads only from the database. From Milestone 3, the weight of each holding
   and sector (TODO.md's principle 3) and a target-weight calculator are in — of the whole account and of each investor's
-  own money —, in the UI only. RECOMMENDATIONS_TODO.md's scan, hot-stock lists and page (sessions 1 and 1b) are in; its
-  analysis, recommendation and measurement are next.
+  own money —, in the UI only. RECOMMENDATIONS_TODO.md's scan, hot-stock lists and page (sessions 1 and 1b) and Finnhub's
+  client (session 2) are in; its analysis, recommendation and measurement are next.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

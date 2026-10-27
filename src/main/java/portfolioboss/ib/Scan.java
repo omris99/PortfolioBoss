@@ -14,11 +14,12 @@ import java.util.stream.Collectors;
  * whichever scans found it, and only on NYSE or NASDAQ — a stock whose contract details did not come is left out, its
  * exchange unknown.
  *
- * @param scannedAt           when the scans answered
- * @param scanRows            every row of every scan that answered
- * @param stockDetailsByConId the contract details that came, by contract id
+ * @param scannedAt              when the scans answered
+ * @param scanRows               every row of every scan that answered
+ * @param contractDetailsByConId the contract details that came, by contract id
  */
-public record Scan(Instant scannedAt, List<ScanRow> scanRows, Map<Integer, StockDetails> stockDetailsByConId) {
+public record Scan(Instant scannedAt, List<ScanRow> scanRows,
+                   Map<Integer, StockContractDetails> contractDetailsByConId) {
 
     /** The scans that answered, in the order of their rows. */
     public List<String> scanCodes() {
@@ -31,7 +32,7 @@ public record Scan(Instant scannedAt, List<ScanRow> scanRows, Map<Integer, Stock
     public List<ScanCandidate> candidates() {
         return scanRowsByStock().values().stream()
                 .filter(scanRowsOfOneStock -> isOnAnAcceptedExchange(scanRowsOfOneStock.getFirst().conId()))
-                .map(this::candidateFromScanRowsAndStockDetails)
+                .map(this::candidateFromScanRowsAndContractDetails)
                 .sorted(Comparator.comparingInt(ScanCandidate::bestRank).thenComparing(ScanCandidate::symbol))
                 .toList();
     }
@@ -55,26 +56,26 @@ public record Scan(Instant scannedAt, List<ScanRow> scanRows, Map<Integer, Stock
     }
 
     private boolean isOnAnAcceptedExchange(int conId) {
-        StockDetails stockDetails = stockDetailsByConId.get(conId);
-        return stockDetails != null && HotStockScan.ACCEPTED_EXCHANGES.contains(stockDetails.exchange());
+        StockContractDetails contractDetails = contractDetailsByConId.get(conId);
+        return contractDetails != null && HotStockScan.ACCEPTED_EXCHANGES.contains(contractDetails.exchange());
     }
 
     /**
      * Makes one candidate of one stock's rows: its symbol from the rows, its name, exchange and sector from its contract
      * details, and where each scan placed it.
      */
-    private ScanCandidate candidateFromScanRowsAndStockDetails(List<ScanRow> scanRowsOfOneStock) {
+    private ScanCandidate candidateFromScanRowsAndContractDetails(List<ScanRow> scanRowsOfOneStock) {
         ScanRow firstScanRow = scanRowsOfOneStock.getFirst();
-        StockDetails stockDetails = stockDetailsByConId.get(firstScanRow.conId());
+        StockContractDetails contractDetails = contractDetailsByConId.get(firstScanRow.conId());
         Map<String, Integer> rankByScanCode = new LinkedHashMap<>();
         scanRowsOfOneStock.forEach(scanRow -> rankByScanCode.put(scanRow.scanCode(), scanRow.rank()));
-        return new ScanCandidate(firstScanRow.conId(), firstScanRow.symbol(), stockDetails.companyName(),
-                stockDetails.exchange(), stockDetails.industry(), stockDetails.category(), rankByScanCode);
+        return new ScanCandidate(firstScanRow.conId(), firstScanRow.symbol(), contractDetails.companyName(),
+                contractDetails.exchange(), contractDetails.industry(), contractDetails.category(), rankByScanCode);
     }
 
     private String symbolWithExchange(ScanRow scanRow) {
-        StockDetails stockDetails = stockDetailsByConId.get(scanRow.conId());
-        String exchange = stockDetails == null ? "no contract details" : stockDetails.exchange();
+        StockContractDetails contractDetails = contractDetailsByConId.get(scanRow.conId());
+        String exchange = contractDetails == null ? "no contract details" : contractDetails.exchange();
         return scanRow.symbol() + " (" + exchange + ")";
     }
 }

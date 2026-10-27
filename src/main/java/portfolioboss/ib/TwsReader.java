@@ -33,7 +33,7 @@ public class TwsReader {
     // Session 0 measured under a second a scan, four seconds for 71 stocks' contract details and three for 72
     // contracts' daily closes: the timeouts only matter when IB is slow.
     private static final int SCAN_TIMEOUT_SECONDS = 10;
-    private static final int STOCK_DETAILS_TIMEOUT_SECONDS = 15;
+    private static final int CONTRACT_DETAILS_TIMEOUT_SECONDS = 15;
     private static final int DAILY_CLOSES_TIMEOUT_SECONDS = 20;
     /** The Scan again button's answer when TWS can't be read; the console line says why. */
     private static final String TWS_NOT_REACHABLE = "TWS is not reachable: open TWS and log in, then scan again.";
@@ -148,12 +148,12 @@ public class TwsReader {
 
         Set<Integer> foundConIds = new LinkedHashSet<>();
         scanRows.forEach(scanRow -> foundConIds.add(scanRow.conId()));
-        gateway.requestStockDetails(foundConIds);
-        if (!gateway.awaitStockDetails(STOCK_DETAILS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            System.out.println("[ib] contract details still missing after " + STOCK_DETAILS_TIMEOUT_SECONDS
+        gateway.requestContractDetails(foundConIds);
+        if (!gateway.awaitContractDetails(CONTRACT_DETAILS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            System.out.println("[ib] contract details still missing after " + CONTRACT_DETAILS_TIMEOUT_SECONDS
                     + "s; keeping what arrived");
         }
-        Scan scan = new Scan(scannedAt, scanRows, gateway.stockDetails());
+        Scan scan = new Scan(scannedAt, scanRows, gateway.contractDetails());
         System.out.printf("[ib] scans found %d stocks, %d of them on NYSE or NASDAQ%n",
                 foundConIds.size(), scan.candidates().size());
         List<String> leftOutStocks = scan.leftOutStocks();

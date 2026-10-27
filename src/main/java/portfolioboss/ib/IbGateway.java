@@ -125,23 +125,23 @@ public class IbGateway {
     // ── contract details ────────────────────────────────────────────────────────────────────────
 
     /** Asks IB for the contract details of each stock — its exchange, name and sector —, one request per contract. */
-    public void requestStockDetails(Collection<Integer> conIds) {
-        Map<Integer, Integer> conIdByRequestId = wrapper.stockDetailsRequests().expect(conIds);
+    public void requestContractDetails(Collection<Integer> conIds) {
+        Map<Integer, Integer> conIdByRequestId = wrapper.contractDetailsRequests().expect(conIds);
         System.out.printf("[ib] requesting the contract details of %d stocks%n", conIds.size());
         conIdByRequestId.forEach((requestId, conId) -> client.reqContractDetails(requestId, contractOf(conId)));
     }
 
     /** Blocks until every contract-details request has ended, or the timeout elapses. */
-    public boolean awaitStockDetails(long timeout, TimeUnit unit) throws InterruptedException {
-        return wrapper.stockDetailsRequests().awaitAllFinished(timeout, unit);
+    public boolean awaitContractDetails(long timeout, TimeUnit unit) throws InterruptedException {
+        return wrapper.contractDetailsRequests().awaitAllFinished(timeout, unit);
     }
 
-    /** By contract id, the details that came; asked by contract id, IB answers with that one contract. */
-    public Map<Integer, StockDetails> stockDetails() {
-        Map<Integer, StockDetails> stockDetailsByConId = new LinkedHashMap<>();
-        wrapper.stockDetailsRequests().answersOfFinishedRequests()
-                .forEach((conId, answers) -> stockDetailsByConId.put(conId, answers.getFirst()));
-        return stockDetailsByConId;
+    /** By contract id, the contract details that came; asked by contract id, IB answers with that one contract. */
+    public Map<Integer, StockContractDetails> contractDetails() {
+        Map<Integer, StockContractDetails> contractDetailsByConId = new LinkedHashMap<>();
+        wrapper.contractDetailsRequests().answersOfFinishedRequests()
+                .forEach((conId, answers) -> contractDetailsByConId.put(conId, answers.getFirst()));
+        return contractDetailsByConId;
     }
 
     // ── daily closes ────────────────────────────────────────────────────────────────────────────

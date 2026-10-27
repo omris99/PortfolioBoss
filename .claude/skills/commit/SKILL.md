@@ -41,14 +41,16 @@ and per closed position, a Columns menu, forms in modals —, worked out in the 
 by sector and by holding with the cash, and the drawer's target-weight calculator — and the fifth page,
 Recommendations: IB's scan for hot stocks once a trading day in `./run.sh` and on demand (Scan again, `POST
 /api/scans`), the hot / too hot / correcting lists with their correlations to the holdings behind
-`GET /api/recommendations`, and a drawer per scanned stock):*
+`GET /api/recommendations`, and a drawer per scanned stock — and Finnhub's client for a stock's next earnings date and
+company figures, not called yet):*
 
 | Scope | Covers |
 |---|---|
-| `ib` | `IbGateway`, `PortfolioWrapper`, `RequestBatch`, `TwsReader` (the one class that connects to TWS: the startup's reading and Scan again's), `TwsPortfolioRunner` (the startup flow) — socket, reader loop, EWrapper callbacks (the portfolio's, the scans', the contract details' and the daily closes') — and what IB reports, as records (`Holding`, `PortfolioSnapshot`, `DailyClose`, `Benchmark`, `HotStockScan`, `ScanRow`, `StockDetails`, `ScanCandidate`, `Scan`, `TwsReading`, `ScanReading`) |
+| `ib` | `IbGateway`, `PortfolioWrapper`, `RequestBatch`, `TwsReader` (the one class that connects to TWS: the startup's reading and Scan again's), `TwsPortfolioRunner` (the startup flow) — socket, reader loop, EWrapper callbacks (the portfolio's, the scans', the contract details' and the daily closes') — and what IB reports, as records (`Holding`, `PortfolioSnapshot`, `DailyClose`, `Benchmark`, `HotStockScan`, `ScanRow`, `StockContractDetails`, `ScanCandidate`, `Scan`, `TwsReading`, `ScanReading`) |
 | `report` | the console snapshot report and its formatting |
 | `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`, which the service puts together), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `AnalysisController` + `AnalysisService` (`POST /api/analysis`: runs the analysis and stores it), `RecommendationsController` + `RecommendationsReadService` (`GET /api/recommendations`), `ScanController` + `ScanService` (`POST /api/scans`: a new scan through `TwsReader`), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
 | `ai` | `portfolioboss.ai` — `AiKeys` (the two API keys from `config/local.env`), `TavilyClient` + `SearchResult` / `SearchResults` / `StockSearches` (the four searches, the symbol filter, and what is kept with an analysis), `StockAnalyzer` + `StockToAnalyze` / `ClaudeReply` (the call to Claude), and the shape of Claude's answer (`StockAnalysisResult`, `SourceConsensus`, `RatingCounts`, `AnalystAction`, `Headline`, `AnalystRating`, `AnalystActionType`, `Sentiment`), which is also its JSON schema |
+| `stocks` | `portfolioboss.stocks` (since 2026-10-27) — `FinnhubClient` (Finnhub's two calls, with its own `FINNHUB_API_KEY` from `config/local.env`) and what Finnhub reports about a stock (`Stock`, `EarningsDate`, `CompanyFacts`) |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection, `JsonColumnMapper` for the `JSONB` column), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
 | `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`) and `AnalystConsensus` |
 | `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `OrderCommission`: derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score and the year's figures, the analysts' consensus and trend and the dot, the hot-stock rule and the page's order, the correlations, when a scan is due, the default commission — no Spring, no database |
@@ -86,8 +88,8 @@ Tests (`src/test/`) take the scope of the code they cover.
   order-related callback, an API endpoint that writes anything other than PortfolioBoss's own data (the hand-entered
   sector, trades, manual positions, investors and their deposits, the stock analyses and the scans), CORS configuration, a
   write endpoint that accepts something other than JSON, binding beyond localhost, a second place that connects to TWS
-  besides `ib.TwsReader`, or sending a quantity, a cost, an investor or the account number to Tavily or Claude is a signal
-  something is wrong; flag it instead of committing
+  besides `ib.TwsReader`, or sending a quantity, a cost, an investor or the account number to Tavily or Claude — or
+  anything but a symbol to Finnhub — is a signal something is wrong; flag it instead of committing
 - If `$ARGUMENTS` is provided, use it as the commit message (skip analysis)
 
 ## Arguments

@@ -14,7 +14,7 @@ import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
 import portfolioboss.ib.Scan;
 import portfolioboss.ib.ScanRow;
-import portfolioboss.ib.StockDetails;
+import portfolioboss.ib.StockContractDetails;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -216,8 +216,10 @@ class PortfolioSyncServiceTest {
                 List.of(new ScanRow(THREE_MONTH_SCAN, 4, HOTA_CON_ID, "HOTA"),
                         new ScanRow(SIX_MONTH_SCAN, 17, HOTA_CON_ID, "HOTA"),
                         new ScanRow(SIX_MONTH_SCAN, 2, HOTB_CON_ID, "HOTB")),
-                Map.of(HOTA_CON_ID, new StockDetails(HOTA_CON_ID, "NASDAQ", "HOTA INC", "Technology", ""),
-                        HOTB_CON_ID, new StockDetails(HOTB_CON_ID, "NYSE", "HOTB CORP", "Industrials", "Machinery")));
+                Map.of(HOTA_CON_ID,
+                        new StockContractDetails(HOTA_CON_ID, "NASDAQ", "HOTA INC", "Technology", ""),
+                        HOTB_CON_ID,
+                        new StockContractDetails(HOTB_CON_ID, "NYSE", "HOTB CORP", "Industrials", "Machinery")));
 
         syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)),
                 Map.of(HOTA_CON_ID, List.of(close(2026, 9, 18, 52.0), close(2026, 9, 17, 50.0))), scan);
@@ -324,7 +326,8 @@ class PortfolioSyncServiceTest {
 
     private Scan scanOfOneStockAt(Instant scannedAt) {
         return new Scan(scannedAt, List.of(new ScanRow(THREE_MONTH_SCAN, 0, HOTA_CON_ID, "HOTA")),
-                Map.of(HOTA_CON_ID, new StockDetails(HOTA_CON_ID, "NASDAQ", "HOTA INC", "Technology", "Software")));
+                Map.of(HOTA_CON_ID,
+                        new StockContractDetails(HOTA_CON_ID, "NASDAQ", "HOTA INC", "Technology", "Software")));
     }
 
     private PortfolioSnapshot snapshotOf(Instant asOf, Holding... holdings) {

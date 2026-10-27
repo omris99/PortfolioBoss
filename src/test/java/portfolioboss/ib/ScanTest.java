@@ -23,7 +23,7 @@ class ScanTest {
                 List.of(new ScanRow(THREE_MONTH_SCAN, 4, 1, "AAA"),
                         new ScanRow(SIX_MONTH_SCAN, 17, 1, "AAA"),
                         new ScanRow(SIX_MONTH_SCAN, 2, 2, "BBB")),
-                Map.of(1, details(1, "NASDAQ"), 2, details(2, "NYSE")));
+                Map.of(1, contractDetails(1, "NASDAQ"), 2, contractDetails(2, "NYSE")));
 
         List<ScanCandidate> candidates = scan.candidates();
 
@@ -46,7 +46,7 @@ class ScanTest {
                 List.of(new ScanRow(THREE_MONTH_SCAN, 0, 1, "AAA"),
                         new ScanRow(THREE_MONTH_SCAN, 1, 2, "BBB"),
                         new ScanRow(THREE_MONTH_SCAN, 2, 3, "CCC")),
-                Map.of(1, details(1, "NYSE"), 2, details(2, "ARCA")));
+                Map.of(1, contractDetails(1, "NYSE"), 2, contractDetails(2, "ARCA")));
 
         assertThat(scan.candidates()).extracting(ScanCandidate::symbol).containsExactly("AAA");
         assertThat(scan.leftOutStocks()).containsExactly("BBB (ARCA)", "CCC (no contract details)");
@@ -56,12 +56,12 @@ class ScanTest {
     void stocksPlacedEquallyGoBySymbol() {
         Scan scan = new Scan(SCANNED_AT,
                 List.of(new ScanRow(THREE_MONTH_SCAN, 0, 1, "ZZZ"), new ScanRow(SIX_MONTH_SCAN, 0, 2, "MMM")),
-                Map.of(1, details(1, "NYSE"), 2, details(2, "NYSE")));
+                Map.of(1, contractDetails(1, "NYSE"), 2, contractDetails(2, "NYSE")));
 
         assertThat(scan.candidates()).extracting(ScanCandidate::symbol).containsExactly("MMM", "ZZZ");
     }
 
-    private StockDetails details(int conId, String exchange) {
-        return new StockDetails(conId, exchange, "Company " + conId, "Technology", "Software");
+    private StockContractDetails contractDetails(int conId, String exchange) {
+        return new StockContractDetails(conId, exchange, "Company " + conId, "Technology", "Software");
     }
 }

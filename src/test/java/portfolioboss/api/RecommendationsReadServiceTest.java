@@ -17,7 +17,7 @@ import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
 import portfolioboss.ib.Scan;
 import portfolioboss.ib.ScanRow;
-import portfolioboss.ib.StockDetails;
+import portfolioboss.ib.StockContractDetails;
 import portfolioboss.model.HotStockLabel;
 
 import java.time.Instant;
@@ -153,10 +153,11 @@ class RecommendationsReadServiceTest {
         symbolByConId.put(FALLING_CON_ID, "FALLING");
         symbolByConId.put(NO_CLOSES_CON_ID, "NOCLOSES");
         List<ScanRow> scanRows = new ArrayList<>();
-        Map<Integer, StockDetails> stockDetailsByConId = new HashMap<>();
+        Map<Integer, StockContractDetails> contractDetailsByConId = new HashMap<>();
         symbolByConId.forEach((conId, symbol) -> {
             scanRows.add(new ScanRow(THREE_MONTH_SCAN, scanRows.size(), conId, symbol));
-            stockDetailsByConId.put(conId, new StockDetails(conId, "NASDAQ", symbol + " INC", "Technology", "Software"));
+            contractDetailsByConId.put(conId,
+                    new StockContractDetails(conId, "NASDAQ", symbol + " INC", "Technology", "Software"));
         });
 
         syncService.sync(snapshotWithApple(), Map.of(
@@ -165,7 +166,7 @@ class RecommendationsReadServiceTest {
                 TOO_HOT_CON_ID, series(this::flatThenSharpRise),
                 CORRECTING_CON_ID, series(this::riseThenPullback),
                 FALLING_CON_ID, series(day -> 200 - day * 0.4)),
-                new Scan(SYNCED_AT, scanRows, stockDetailsByConId));
+                new Scan(SYNCED_AT, scanRows, contractDetailsByConId));
     }
 
     /**

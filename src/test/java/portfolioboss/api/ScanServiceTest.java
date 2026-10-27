@@ -20,7 +20,7 @@ import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Scan;
 import portfolioboss.ib.ScanReading;
 import portfolioboss.ib.ScanRow;
-import portfolioboss.ib.StockDetails;
+import portfolioboss.ib.StockContractDetails;
 import portfolioboss.ib.TwsReader;
 
 import java.time.Instant;
@@ -108,8 +108,10 @@ class ScanServiceTest {
         return new Scan(SCANNED_AT,
                 List.of(new ScanRow(THREE_MONTH_SCAN, 0, HOTA_CON_ID, "HOTA"),
                         new ScanRow(THREE_MONTH_SCAN, 1, HOTB_CON_ID, "HOTB")),
-                Map.of(HOTA_CON_ID, new StockDetails(HOTA_CON_ID, "NASDAQ", "HOTA INC", "Technology", "Software"),
-                        HOTB_CON_ID, new StockDetails(HOTB_CON_ID, "NYSE", "HOTB CORP", "Industrials", "Machinery")));
+                Map.of(HOTA_CON_ID,
+                        new StockContractDetails(HOTA_CON_ID, "NASDAQ", "HOTA INC", "Technology", "Software"),
+                        HOTB_CON_ID,
+                        new StockContractDetails(HOTB_CON_ID, "NYSE", "HOTB CORP", "Industrials", "Machinery")));
     }
 
     private int countOf(String countQuery) {

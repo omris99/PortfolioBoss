@@ -30,7 +30,7 @@ class PortfolioWrapperTest {
     // A batch numbers its requests in the order expected, from its first request id.
     private static final int THREE_MONTH_SCAN_REQUEST_ID = PortfolioWrapper.FIRST_SCAN_REQUEST_ID;
     private static final int SIX_MONTH_SCAN_REQUEST_ID = PortfolioWrapper.FIRST_SCAN_REQUEST_ID + 1;
-    private static final int APPLE_DETAILS_REQUEST_ID = PortfolioWrapper.FIRST_STOCK_DETAILS_REQUEST_ID;
+    private static final int APPLE_DETAILS_REQUEST_ID = PortfolioWrapper.FIRST_CONTRACT_DETAILS_REQUEST_ID;
     private static final int APPLE_CLOSES_REQUEST_ID = PortfolioWrapper.FIRST_DAILY_CLOSE_REQUEST_ID;
     private static final int SPY_CLOSES_REQUEST_ID = PortfolioWrapper.FIRST_DAILY_CLOSE_REQUEST_ID + 1;
 
@@ -129,15 +129,15 @@ class PortfolioWrapperTest {
 
     @Test
     void collectsTheContractDetailsOfEachStock() throws InterruptedException {
-        wrapper.stockDetailsRequests().expect(List.of(APPLE_CON_ID));
+        wrapper.contractDetailsRequests().expect(List.of(APPLE_CON_ID));
 
         wrapper.contractDetails(APPLE_DETAILS_REQUEST_ID, contractDetails(APPLE_CON_ID, "NASDAQ", "APPLE INC",
                 "Technology", "Computers"));
         wrapper.contractDetailsEnd(APPLE_DETAILS_REQUEST_ID);
 
-        assertThat(wrapper.stockDetailsRequests().awaitAllFinished(0, TimeUnit.SECONDS)).isTrue();
-        assertThat(wrapper.stockDetailsRequests().answersOfFinishedRequests()).isEqualTo(Map.of(APPLE_CON_ID,
-                List.of(new StockDetails(APPLE_CON_ID, "NASDAQ", "APPLE INC", "Technology", "Computers"))));
+        assertThat(wrapper.contractDetailsRequests().awaitAllFinished(0, TimeUnit.SECONDS)).isTrue();
+        assertThat(wrapper.contractDetailsRequests().answersOfFinishedRequests()).isEqualTo(Map.of(APPLE_CON_ID,
+                List.of(new StockContractDetails(APPLE_CON_ID, "NASDAQ", "APPLE INC", "Technology", "Computers"))));
     }
 
     // ── daily closes ────────────────────────────────────────────────────────────────────────────

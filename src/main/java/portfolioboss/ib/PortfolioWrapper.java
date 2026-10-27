@@ -55,10 +55,10 @@ public class PortfolioWrapper extends DefaultEWrapper {
     // holding, SPY and stock found. Nothing else in PortfolioBoss uses request ids.
     protected static final int FIRST_SCAN_REQUEST_ID = 100;
     protected static final int FIRST_DAILY_CLOSE_REQUEST_ID = 1000;
-    protected static final int FIRST_STOCK_DETAILS_REQUEST_ID = 5000;
+    protected static final int FIRST_CONTRACT_DETAILS_REQUEST_ID = 5000;
     private final RequestBatch<String, ScanRow> scanRequests = new RequestBatch<>("scan", FIRST_SCAN_REQUEST_ID);
-    private final RequestBatch<Integer, StockDetails> stockDetailsRequests =
-            new RequestBatch<>("contract details of contract", FIRST_STOCK_DETAILS_REQUEST_ID);
+    private final RequestBatch<Integer, StockContractDetails> contractDetailsRequests =
+            new RequestBatch<>("contract details of contract", FIRST_CONTRACT_DETAILS_REQUEST_ID);
     private final RequestBatch<Integer, DailyClose> dailyCloseRequests =
             new RequestBatch<>("daily closes of contract", FIRST_DAILY_CLOSE_REQUEST_ID);
 
@@ -85,8 +85,8 @@ public class PortfolioWrapper extends DefaultEWrapper {
         return scanRequests;
     }
 
-    protected RequestBatch<Integer, StockDetails> stockDetailsRequests() {
-        return stockDetailsRequests;
+    protected RequestBatch<Integer, StockContractDetails> contractDetailsRequests() {
+        return contractDetailsRequests;
     }
 
     protected RequestBatch<Integer, DailyClose> dailyCloseRequests() {
@@ -175,16 +175,17 @@ public class PortfolioWrapper extends DefaultEWrapper {
 
     @Override
     public void contractDetails(int requestId, ContractDetails contractDetails) {
-        Integer conId = stockDetailsRequests.keyOf(requestId);
+        Integer conId = contractDetailsRequests.keyOf(requestId);
         if (conId != null) {
-            stockDetailsRequests.addAnswer(requestId, new StockDetails(conId, contractDetails.contract().primaryExch(),
-                    contractDetails.longName(), contractDetails.industry(), contractDetails.category()));
+            contractDetailsRequests.addAnswer(requestId, new StockContractDetails(conId,
+                    contractDetails.contract().primaryExch(), contractDetails.longName(), contractDetails.industry(),
+                    contractDetails.category()));
         }
     }
 
     @Override
     public void contractDetailsEnd(int requestId) {
-        stockDetailsRequests.finish(requestId);
+        contractDetailsRequests.finish(requestId);
     }
 
     // ── daily closes (for the momentum) ─────────────────────────────────────────────────────────
@@ -225,7 +226,7 @@ public class PortfolioWrapper extends DefaultEWrapper {
         }
         // An error for one request of a batch ends only that request — e.g. 162, no market data permission for one
         // contract, which then keeps the closes of an earlier sync.
-        for (RequestBatch<?, ?> requestBatch : List.of(scanRequests, stockDetailsRequests, dailyCloseRequests)) {
+        for (RequestBatch<?, ?> requestBatch : List.of(scanRequests, contractDetailsRequests, dailyCloseRequests)) {
             if (requestBatch.finishWithError(requestId, errorCode, errorMessage)) {
                 return;
             }

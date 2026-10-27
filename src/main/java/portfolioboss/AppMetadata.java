@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.23.0";
+    public static final String VERSION = "0.24.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,11 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.24.0: [Earnings dates and company figures from Finnhub]
+ * FinnhubClient added (new package stocks): a stock's next earnings date and four company figures from Finnhub's free plan, sending only the symbol; nothing calls it yet, the analysis will.
+ * Stock added: what Finnhub knows about a stock — its next EarningsDate (the day, before the open or after the close) and CompanyFacts (revenue growth %, net margin %, debt to equity, P/E).
+ * FINNHUB_API_KEY: optional, in config/local.env; without it the app starts as usual and prints "[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)".
+ *
  * VERSION 0.23.0: [Hot stocks from IB's scan]
  * RecommendationsPage added: a fifth page lists the US stocks IB's scan finds in a long upward trend, as Hot, Too hot and Correcting, with each investor's free cash above them.
  * CandidateDrawer added: a scanned stock's drawer with why it is in its list, its year, IB's sector and exchange, the holdings it moves with, and its momentum checks.
