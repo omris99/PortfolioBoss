@@ -300,6 +300,45 @@ export interface StockAnalysis {
   raisedTargetCount: number;
   /** The price targets lowered. */
   loweredTargetCount: number;
+  /** Why the price has been moving, from the news; `null` when the news doesn't say, and before 2026-10-27. */
+  moveReason: MoveReason | null;
+  /** The week's events in the news, each once; none before 2026-10-27. */
+  newsEvents: NewsEvent[];
+}
+
+/** What kind of event the news reports; whether it is good or bad is the API's, by the kind. */
+export type NewsEventType =
+  | 'PARTNERSHIP'
+  | 'MAJOR_CONTRACT'
+  | 'PRODUCT_LAUNCH'
+  | 'GUIDANCE_RAISED'
+  | 'EARNINGS_BEAT'
+  | 'REGULATORY_APPROVAL'
+  | 'GUIDANCE_CUT'
+  | 'EARNINGS_MISS'
+  | 'SHARE_OFFERING'
+  | 'LAWSUIT_OR_REGULATION'
+  | 'NOT_IN_THE_LIST';
+
+/** One event the week's news reports about the stock, with the result it comes from. */
+export interface NewsEvent {
+  type: NewsEventType;
+  /** Only for a partnership or a major contract; null for every other kind. */
+  magnitude: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+  /** One short sentence in English. */
+  summary: string;
+  /** The result's title, word for word. */
+  title: string;
+  url: string;
+}
+
+/** Why a stock's price has been moving, as the week's news explains it, with the result it rests on. */
+export interface MoveReason {
+  /** One short sentence in English. */
+  reason: string;
+  /** The title of the result it rests on, word for word. */
+  title: string;
+  url: string;
 }
 
 /**

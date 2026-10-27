@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.24.0";
+    public static final String VERSION = "0.25.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,17 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.25.0: [Analysis and recommendation of hot stocks]
+ * POST /api/recommendations/analysis added: analyzes the Recommendations short list (the first 10 Hot) or one stock with Tavily, Claude and Finnhub, then the code picks up to 3.
+ * RecommendationCalculator added: picks stocks with Finnhub's figures whose risk signs weigh 2 at most, ordered by the news score less the risks; Claude never picks.
+ * RiskSign and RecommendationCandidate added: loses money, high debt, expensive, revenue falling, recovering, each with its own weight; a figure Finnhub didn't give raises no sign.
+ * NewsScoreCalculator added: weighs the week's news events (deals by size, outlook, earnings, approvals, offerings, lawsuits) and the analysts' up/downgrades with a target from 30 days.
+ * StockAnalysisResult: Claude also reports moveReason (why the price moved, with its headline) and newsEvents (kind, size for deals only, NOT_IN_THE_LIST when no kind fits).
+ * StockAnalysisPipeline added: the four searches and Claude for every stock at once, shared by the holdings' Analyze and the Recommendations page's.
+ * V10: stock_analysis also holds a scanned stock's analysis, with Finnhub's answer; V11: investment_recommendation keeps every full run's picks for the measurement, none too.
+ * GET /api/recommendations: each stock's latest analysis by contract id from any scan, Finnhub's figures, risk signs, news score and timing note, and the latest recommendation.
+ * Console: "[ai] recommended …" or "[ai] no recommendation: …" after a full run, and "[stocks error] SYMBOL: why" when a call to Finnhub fails.
+ *
  * VERSION 0.24.0: [Earnings dates and company figures from Finnhub]
  * FinnhubClient added (new package stocks): a stock's next earnings date and four company figures from Finnhub's free plan, sending only the symbol; nothing calls it yet, the analysis will.
  * Stock added: what Finnhub knows about a stock — its next EarningsDate (the day, before the open or after the close) and CompanyFacts (revenue growth %, net margin %, debt to equity, P/E).

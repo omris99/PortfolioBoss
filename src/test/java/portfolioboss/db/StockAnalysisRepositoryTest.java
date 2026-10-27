@@ -5,12 +5,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import portfolioboss.ai.AnalystAction;
 import portfolioboss.ai.AnalystActionType;
 import portfolioboss.ai.AnalystRating;
+import portfolioboss.ai.EventMagnitude;
 import portfolioboss.ai.Headline;
+import portfolioboss.ai.MoveReason;
+import portfolioboss.ai.NewsEvent;
+import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.RatingCounts;
 import portfolioboss.ai.SearchResult;
 import portfolioboss.ai.SearchResults;
@@ -18,6 +23,9 @@ import portfolioboss.ai.Sentiment;
 import portfolioboss.ai.SourceConsensus;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.ai.StockSearches;
+import portfolioboss.stocks.CompanyFacts;
+import portfolioboss.stocks.EarningsDate;
+import portfolioboss.stocks.Stock;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -26,11 +34,12 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The {@code stock_analysis} table against the real PostgreSQL test database, like {@code PortfolioSyncServiceTest}:
- * that Claude's result goes into the {@code JSONB} column and comes back the same, and that the latest analysis of
- * every holding is found in one query.
+ * that Claude's result goes into the {@code JSONB} column and comes back the same, that the latest analysis of every
+ * holding is found in one query, and that a row is a holding's or a scanned stock's (V10).
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -83,8 +92,8 @@ class StockAnalysisRepositoryTest {
         String publishedDate = jdbc.queryForObject(
                 "select result -> 'consensusBySource' -> 0 ->> 'publishedDate' from stock_analysis", String.class);
 
-        assertThat(resultKeys).containsExactly("consensusBySource", "headlines", "recentActions", "sentiment",
-                "sentimentReason");
+        assertThat(resultKeys).containsExactly("consensusBySource", "headlines", "moveReason", "newsEvents",
+                "recentActions", "sentiment", "sentimentReason");
         assertThat(sourceKeys).containsExactly("analystCount", "averageTarget", "publishedDate", "ratingCounts",
                 "ratingLabel", "sourceUrl");
         assertThat(publishedDate).isEqualTo("2026-10-05");
@@ -92,8 +101,9 @@ class StockAnalysisRepositoryTest {
 
     /**
      * An analysis stored on 2026-10-09 is shaped as the record was then: it holds Claude's own trend, which the code
-     * works out now (decision 18), its actions have no result date (decision 20), and no search results were kept with
-     * it (decision 22). The extra key is skipped and the missing ones read as {@code null} — Jackson's defaults — and
+     * works out now (decision 18), its actions have no result date (decision 20), no search results were kept with it
+     * (decision 22), and it has no move reason nor news events (RECOMMENDATIONS_TODO.md, decisions 4 and 13). The extra
+     * key is skipped and the missing ones read as {@code null} — Jackson's defaults —, the missing events as none, and
      * the rest comes back.
      */
     @Test
@@ -117,7 +127,7 @@ class StockAnalysisRepositoryTest {
                 AnalystActionType.TARGET_LOWERED, "Hold", "Hold", 109.0, 92.0,
                 "https://stockanalysis.com/stocks/intc/forecast", null);
         assertThat(readBack.result()).isEqualTo(new StockAnalysisResult(List.of(), List.of(mizuho), List.of(),
-                Sentiment.POSITIVE, "Strong quarter."));
+                Sentiment.POSITIVE, "Strong quarter.", null, List.of()));
         assertThat(readBack.searchResults()).isNull();
     }
 
@@ -141,6 +151,66 @@ class StockAnalysisRepositoryTest {
 
         assertThat(readBack.marketBeatActions().droppedUrls()).isEmpty();
         assertThat(readBack.credits()).isEqualTo(5);
+    }
+
+    /** A scanned stock's analysis (V10): its row in the scan instead of a holding, and Finnhub's answer with it. */
+    @Test
+    void aScannedStocksAnalysisComesBackWithFinnhubsAnswer() {
+        ScanCandidateEntity candidate = insertScanCandidate(9001, "HOTA");
+        Stock finnhubStock = new Stock("HOTA", new EarningsDate(LocalDate.of(2026, 11, 18), "amc"),
+                new CompanyFacts(62.5, 55.6, 0.12, 48.3));
+        StockAnalysisEntity stored = stockAnalysisRepository.save(
+                candidateAnalysisOf(candidate, finnhubStock, MONDAY));
+        startReadingFromTheDatabase();
+
+        StockAnalysisEntity readBack = stockAnalysisRepository.findById(stored.id()).orElseThrow();
+        String earningsDate = jdbc.queryForObject(
+                "select finnhub_stock -> 'nextEarningsDate' ->> 'date' from stock_analysis", String.class);
+
+        assertThat(readBack.scanCandidateId()).isEqualTo(candidate.id());
+        assertThat(readBack.holdingId()).isNull();
+        assertThat(readBack.finnhubStock()).isEqualTo(finnhubStock);
+        assertThat(readBack.result()).isEqualTo(appleResult());
+        assertThat(earningsDate).isEqualTo("2026-11-18");
+    }
+
+    /** Without Finnhub's answer — no key, or the call failed — the analysis is stored all the same. */
+    @Test
+    void aScannedStocksAnalysisWithoutFinnhubsAnswerIsStored() {
+        ScanCandidateEntity candidate = insertScanCandidate(9001, "HOTA");
+        StockAnalysisEntity stored = stockAnalysisRepository.save(candidateAnalysisOf(candidate, null, MONDAY));
+        startReadingFromTheDatabase();
+
+        assertThat(stockAnalysisRepository.findById(stored.id()).orElseThrow().finnhubStock()).isNull();
+    }
+
+    @Test
+    void theLatestAnalysisOfEveryHoldingLeavesOutTheScannedStocks() {
+        long appleHoldingId = insertHolding(265598, "AAPL");
+        stockAnalysisRepository.save(analysisOf(appleHoldingId, MONDAY, appleResult()));
+        stockAnalysisRepository.save(candidateAnalysisOf(insertScanCandidate(9001, "HOTA"), null, TUESDAY));
+        stockAnalysisRepository.save(candidateAnalysisOf(insertScanCandidate(9002, "HOTB"), null, TUESDAY));
+        startReadingFromTheDatabase();
+
+        List<StockAnalysisEntity> latest = stockAnalysisRepository.findLatestOfEveryHolding();
+
+        assertThat(latest).extracting(StockAnalysisEntity::holdingId).containsExactly(appleHoldingId);
+    }
+
+    /** The table itself keeps a row to one of the two, like a trade's holding or manual position. */
+    @Test
+    void theTableRefusesARowOfBothAHoldingAndAScannedStock() {
+        long appleHoldingId = insertHolding(265598, "AAPL");
+        long candidateId = insertScanCandidate(9001, "HOTA").id();
+
+        assertThatThrownBy(() -> insertAnalysisRow(appleHoldingId, candidateId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void theTableRefusesARowOfNeitherAHoldingNorAScannedStock() {
+        assertThatThrownBy(() -> insertAnalysisRow(null, null))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -171,7 +241,13 @@ class StockAnalysisRepositoryTest {
                         LocalDate.of(2026, 10, 4))),
                 List.of(new Headline(null, "Apple unveils a new product", "Reuters", "https://example.com/news")),
                 Sentiment.NEUTRAL,
-                null);
+                null,
+                new MoveReason("The new product lifted the shares.", "Apple unveils a new product",
+                        "https://example.com/news"),
+                List.of(new NewsEvent(NewsEventType.PARTNERSHIP, EventMagnitude.HIGH,
+                                "Apple partnered with a giant.", "Apple partners with a giant", "https://example.com/p"),
+                        new NewsEvent(NewsEventType.PRODUCT_LAUNCH, null, "Apple unveiled a new product.",
+                                "Apple unveils a new product", "https://example.com/news")));
     }
 
     /** One result in each of the four searches, Tavily's date written its own way, and one with no date at all. */
@@ -190,6 +266,34 @@ class StockAnalysisRepositoryTest {
     private StockAnalysisEntity analysisOf(long holdingId, Instant analyzedAt, StockAnalysisResult result) {
         return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, appleSearches(), 10500, 900,
                 5, new BigDecimal("0.030000"));
+    }
+
+    private StockAnalysisEntity candidateAnalysisOf(ScanCandidateEntity candidate, Stock finnhubStock,
+                                                    Instant analyzedAt) {
+        return new StockAnalysisEntity(candidate, finnhubStock, analyzedAt, "claude-sonnet-5-5", appleResult(),
+                appleSearches(), 10500, 900, 5, new BigDecimal("0.030000"));
+    }
+
+    /** A scan of one stock, and that stock's row in it, read back as Hibernate's entity. */
+    private ScanCandidateEntity insertScanCandidate(int conId, String symbol) {
+        long scanId = jdbc.queryForObject("""
+                insert into scan (scanned_at, scan_codes) values (?, '["SCAN_histPerfRatio3m_DESC"]'::jsonb)
+                returning id
+                """, Long.class, Timestamp.from(MONDAY));
+        long candidateId = jdbc.queryForObject("""
+                insert into scan_candidate (scan_id, con_id, symbol, exchange, rank_by_scan_code)
+                values (?, ?, ?, 'NASDAQ', '{"SCAN_histPerfRatio3m_DESC": 0}'::jsonb) returning id
+                """, Long.class, scanId, conId, symbol);
+        return entityManager.find(ScanCandidateEntity.class, candidateId);
+    }
+
+    /** A row written straight to the table, past the entity's constructors. */
+    private void insertAnalysisRow(Long holdingId, Long scanCandidateId) {
+        jdbc.update("""
+                insert into stock_analysis (holding_id, scan_candidate_id, analyzed_at, model, result, input_tokens,
+                                            output_tokens, tavily_credits, cost_usd)
+                values (?, ?, ?, 'claude-sonnet-5-5', '{}'::jsonb, 10500, 900, 5, 0.03)
+                """, holdingId, scanCandidateId, Timestamp.from(MONDAY));
     }
 
     private long insertHolding(int conId, String symbol) {

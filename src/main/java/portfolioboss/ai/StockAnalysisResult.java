@@ -6,7 +6,8 @@ import java.util.List;
 
 /**
  * What Claude found about one stock in its search results (AI_ANALYSIS_TODO.md, 2.2): the analysts' consensus source by
- * source and their latest moves, the week's headlines and how they read. This record is the one definition of that
+ * source and their latest moves, the week's headlines and how they read, and why the price has been moving (the
+ * Recommendations page's, RECOMMENDATIONS_TODO.md, decision 4). This record is the one definition of that
  * shape: the SDK turns it into the JSON schema Claude must answer in, the {@code stock_analysis} table stores it as
  * JSON, and the API sends it on. What is decided from it — which source's consensus to show, which way the analysts are
  * going, the dot's color — is worked out by {@code calculation.ConsensusCalculator}, {@code AnalystTrendCalculator} and
@@ -20,11 +21,21 @@ import java.util.List;
  * @param recentActions     up to 10 from the last 90 days, the newest first (5 until 2026-10-10)
  * @param headlines         up to 3, the most important of the last 14 days
  * @param sentimentReason   one short sentence in English
+ * @param moveReason        why the price has been moving, from the news (RECOMMENDATIONS_TODO.md, decision 4);
+ *                          {@code null} when the news doesn't say, and in analyses stored before 2026-10-27
+ * @param newsEvents        the week's events in the news, each once (RECOMMENDATIONS_TODO.md, decision 13)
  */
 public record StockAnalysisResult(
         List<SourceConsensus> consensusBySource,
         List<AnalystAction> recentActions,
         List<Headline> headlines,
         @Nullable Sentiment sentiment,
-        @Nullable String sentimentReason) {
+        @Nullable String sentimentReason,
+        @Nullable MoveReason moveReason,
+        List<NewsEvent> newsEvents) {
+
+    /** An analysis stored before 2026-10-27 has no {@code newsEvents} key, which reads as {@code null}: none known. */
+    public StockAnalysisResult {
+        newsEvents = newsEvents == null ? List.of() : newsEvents;
+    }
 }

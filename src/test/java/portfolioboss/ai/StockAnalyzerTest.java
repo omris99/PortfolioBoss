@@ -159,6 +159,67 @@ class StockAnalyzerTest {
     }
 
     /**
+     * RECOMMENDATIONS_TODO.md, decision 4: why the price has been moving, from the news only, with the result it rests
+     * on — and a report of the price move alone is no reason.
+     */
+    @Test
+    void theInstructionsTakeTheMoveReasonFromTheNewsOnly() {
+        String instructions = emptyRequestForApple().system().orElseThrow().asString();
+
+        assertThat(instructions)
+                .contains("moveReason: why the stock's price has been moving, as the news in news_search_results "
+                        + "explains it")
+                .contains("with the title of the result it rests on, word for word, and its url")
+                .contains("A result that only reports the price moving, without a cause, doesn't explain it.");
+    }
+
+    /**
+     * RECOMMENDATIONS_TODO.md, decision 13: the week's events from the news, each once, and their magnitude by what the
+     * result says — the other company's size may be known, never anything of this stock.
+     */
+    @Test
+    void theInstructionsClassifyTheNewsEventsAndTheirMagnitude() {
+        String instructions = emptyRequestForApple().system().orElseThrow().asString();
+
+        assertThat(instructions)
+                .contains("newsEvents: each event about this stock that news_search_results reports")
+                .contains("An event reported by several results is listed once.")
+                .contains("magnitude, only for PARTNERSHIP and MAJOR_CONTRACT: HIGH when the result names one of the "
+                        + "world's largest companies as the partner or customer")
+                .contains("For every other type magnitude is null.")
+                .contains("never what you know of this stock");
+    }
+
+    /**
+     * The stability check of 2026-10-27: Claude gave a downgrade a different magnitude each time and once took a debt
+     * offering for a share offering. Analysts' moves are left to recentActions, and debt is named as no share offering.
+     */
+    @Test
+    void theNewsEventsLeaveAnalystsToTheActionsAndDebtOutOfTheShareOfferings() {
+        String instructions = emptyRequestForApple().system().orElseThrow().asString();
+
+        assertThat(instructions)
+                .contains("SHARE_OFFERING (the company selling new shares — notes, bonds, loans and other debt are "
+                        + "not)")
+                .contains("An analyst's rating or price target (those are recentActions)")
+                .doesNotContain("ANALYST_UPGRADE");
+    }
+
+    /**
+     * An FDA approval came back as a partnership, the closest type then: an approval has a type of its own now, and an
+     * event no type fits is NOT_IN_THE_LIST — never the closest type (the user's rule).
+     */
+    @Test
+    void anEventNoTypeFitsIsNotInTheListRatherThanTheClosestType() {
+        String instructions = emptyRequestForApple().system().orElseThrow().asString();
+
+        assertThat(instructions)
+                .contains("REGULATORY_APPROVAL (a regulator's approval or clearance)")
+                .contains("LAWSUIT_OR_REGULATION (a lawsuit, an investigation, a fine, or a regulator's refusal)")
+                .contains("An event that none of these types fits is NOT_IN_THE_LIST: never the closest type.");
+    }
+
+    /**
      * The schema the SDK derives from {@link StockAnalysisResult}: every field required, {@code null} allowed exactly
      * where the record says {@code @Nullable} — and no more than the 16 such fields Claude accepts in one schema.
      */
@@ -176,13 +237,15 @@ class StockAnalyzerTest {
                 "consensusBySource[].ratingCounts",
                 "consensusBySource[].ratingLabel",
                 "headlines[].date",
+                "newsEvents[].magnitude",
                 "recentActions[].fromRating",
                 "recentActions[].previousPriceTarget",
                 "recentActions[].priceTarget",
                 "recentActions[].sourcePublishedDate",
                 "recentActions[].toRating",
                 "sentiment",
-                "sentimentReason");
+                "sentimentReason",
+                "moveReason");
         assertThat(nullableFields).hasSizeLessThanOrEqualTo(16);
         assertThat(schema.path("additionalProperties").asBoolean(true)).isFalse();
     }

@@ -2,6 +2,8 @@ package portfolioboss.api.response;
 
 import portfolioboss.ai.AnalystAction;
 import portfolioboss.ai.Headline;
+import portfolioboss.ai.MoveReason;
+import portfolioboss.ai.NewsEvent;
 import portfolioboss.ai.Sentiment;
 import portfolioboss.ai.SourceConsensus;
 import portfolioboss.calculation.AnalystTrendCalculator;
@@ -22,6 +24,8 @@ import java.util.List;
  * @param analystTrend       {@code null} while no action states a price target (Claude's own until 2026-10-09)
  * @param raisedTargetCount  the price targets raised among {@code recentActions}, which the trend weighs against
  * @param loweredTargetCount the price targets lowered
+ * @param moveReason         {@code null} when the news doesn't say why the price moved, and before 2026-10-27
+ * @param newsEvents         the week's events in the news (RECOMMENDATIONS_TODO.md, decision 13); none before 2026-10-27
  */
 public record StockAnalysisResponse(
         Instant analyzedAt,
@@ -34,7 +38,9 @@ public record StockAnalysisResponse(
         Sentiment sentiment,
         String sentimentReason,
         int raisedTargetCount,
-        int loweredTargetCount) {
+        int loweredTargetCount,
+        MoveReason moveReason,
+        List<NewsEvent> newsEvents) {
 
     /** {@code consensus} and the trend are worked out by {@code PortfolioReadService} on every read, never stored. */
     public StockAnalysisResponse(StockAnalysisEntity analysis, AnalystConsensus consensus,
@@ -50,6 +56,8 @@ public record StockAnalysisResponse(
                 analysis.result().sentiment(),
                 analysis.result().sentimentReason(),
                 analystTrend.raisedTargetCount(),
-                analystTrend.loweredTargetCount());
+                analystTrend.loweredTargetCount(),
+                analysis.result().moveReason(),
+                analysis.result().newsEvents());
     }
 }

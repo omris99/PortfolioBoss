@@ -12,11 +12,13 @@ import java.util.List;
  * @param hotStocks      0–15% above the 50-day average: worth a look now
  * @param tooHotStocks   more than 15% above it: wait for a pullback
  * @param correctingStocks below it: wait for the close to climb back above
+ * @param latestRecommendation the code's latest picks, from whichever scan; {@code null} before the first full run
  */
 public record RecommendationsResponse(
         Instant scannedAt,
         int candidateCount,
         List<HotStockResponse> hotStocks,
         List<HotStockResponse> tooHotStocks,
-        List<HotStockResponse> correctingStocks) {
+        List<HotStockResponse> correctingStocks,
+        LatestRecommendationResponse latestRecommendation) {
 }

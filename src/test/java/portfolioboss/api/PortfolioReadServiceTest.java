@@ -558,14 +558,15 @@ class PortfolioReadServiceTest {
         AnalystAction action = new AnalystAction(LocalDate.of(2026, 9, 15), "Some Firm", actionType, null, "Buy",
                 previousPriceTarget, priceTarget, "https://example.com/action", LocalDate.of(2026, 9, 18));
         StockAnalysisResult result = new StockAnalysisResult(List.of(source), List.of(action), List.of(), sentiment,
-                null);
+                null, null, List.of());
         return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, null, 10_500, 900, 3,
                 new BigDecimal("0.030000"));
     }
 
     /** An analysis that found nothing and cost {@code tavilyCredits} and {@code costUsd} — all a cost test needs. */
     private StockAnalysisEntity analysisCosting(long holdingId, Instant analyzedAt, int tavilyCredits, String costUsd) {
-        StockAnalysisResult result = new StockAnalysisResult(List.of(), List.of(), List.of(), null, null);
+        StockAnalysisResult result =
+                new StockAnalysisResult(List.of(), List.of(), List.of(), null, null, null, List.of());
         return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, null, 10_500, 900,
                 tavilyCredits, new BigDecimal(costUsd));
     }

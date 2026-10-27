@@ -18,6 +18,7 @@ import portfolioboss.ai.SearchResult;
 import portfolioboss.ai.SearchResults;
 import portfolioboss.ai.Sentiment;
 import portfolioboss.ai.StockAnalysisResult;
+import portfolioboss.ai.StockAnalysisPipeline;
 import portfolioboss.ai.StockAnalyzer;
 import portfolioboss.ai.StockSearches;
 import portfolioboss.ai.StockToAnalyze;
@@ -51,14 +52,15 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
-@Import(AnalysisService.class)
+@Import({AnalysisService.class, StockAnalysisPipeline.class})
 class AnalysisServiceTest {
 
     private static final Instant SYNCED_AT = Instant.parse("2026-10-08T07:00:00Z");
     private static final StockAnalysisResult FOUND_NOTHING =
-            new StockAnalysisResult(List.of(), List.of(), List.of(), null, null);
+            new StockAnalysisResult(List.of(), List.of(), List.of(), null, null, null, List.of());
     private static final ClaudeReply REPLY = new ClaudeReply(new StockAnalysisResult(List.of(), List.of(), List.of(),
-            Sentiment.NEUTRAL, "Nothing new."), "claude-sonnet-5-5", 10_500, 900, new BigDecimal("0.030000"));
+            Sentiment.NEUTRAL, "Nothing new.", null, List.of()), "claude-sonnet-5-5", 10_500, 900,
+            new BigDecimal("0.030000"));
 
     @Autowired
     private AnalysisService analysisService;

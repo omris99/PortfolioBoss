@@ -1,5 +1,7 @@
 package portfolioboss.api.response;
 
+import portfolioboss.ai.StockAnalysisRun;
+
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -20,4 +22,16 @@ public record AnalysisRunResponse(
         long inputTokens,
         long outputTokens,
         BigDecimal costUsd) {
+
+    public AnalysisRunResponse(StockAnalysisRun run) {
+        this(
+                run.analyzedOutcomes().size(),
+                run.failedOutcomes().stream()
+                        .map(outcome -> new FailedAnalysisResponse(outcome.symbol(), outcome.failureMessage()))
+                        .toList(),
+                run.tavilyCredits(),
+                run.inputTokens(),
+                run.outputTokens(),
+                run.costUsd());
+    }
 }

@@ -1,5 +1,6 @@
 package portfolioboss.db;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -32,6 +33,13 @@ public class ScanCandidateEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "scan_id")
     private ScanEntity scan;
+
+    /**
+     * The same column again, as a plain id, so that which scan the stock belongs to can be read without loading the scan
+     * — after the transaction too. Read only ({@code insertable} and {@code updatable} false): {@code scan} writes it.
+     */
+    @Column(name = "scan_id", insertable = false, updatable = false)
+    private Long scanId;
 
     private int conId;
     private String symbol;
@@ -70,6 +78,10 @@ public class ScanCandidateEntity {
 
     public Long id() {
         return id;
+    }
+
+    public Long scanId() {
+        return scanId;
     }
 
     public int conId() {

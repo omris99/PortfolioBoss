@@ -9,6 +9,9 @@ import portfolioboss.ai.AnalystAction;
 import portfolioboss.ai.AnalystActionType;
 import portfolioboss.ai.AnalystRating;
 import portfolioboss.ai.Headline;
+import portfolioboss.ai.MoveReason;
+import portfolioboss.ai.NewsEvent;
+import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.RatingCounts;
 import portfolioboss.ai.Sentiment;
 import portfolioboss.ai.SourceConsensus;
@@ -301,7 +304,17 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].analysis.headlines[0].url").value("https://example.com/news"))
                 .andExpect(jsonPath("$.holdings[0].analysis.sentiment").value("NEUTRAL"))
                 .andExpect(jsonPath("$.holdings[0].analysis.sentimentReason")
-                        .value("Product news without surprises."));
+                        .value("Product news without surprises."))
+                .andExpect(jsonPath("$.holdings[0].analysis.moveReason.reason")
+                        .value("The new product lifted the shares."))
+                .andExpect(jsonPath("$.holdings[0].analysis.moveReason.title").value("Apple unveils a new product"))
+                .andExpect(jsonPath("$.holdings[0].analysis.moveReason.url").value("https://example.com/news"))
+                .andExpect(jsonPath("$.holdings[0].analysis.newsEvents[0].type").value("PRODUCT_LAUNCH"))
+                .andExpect(jsonPath("$.holdings[0].analysis.newsEvents[0].magnitude").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].analysis.newsEvents[0].summary")
+                        .value("Apple unveiled a new product."))
+                .andExpect(jsonPath("$.holdings[0].analysis.newsEvents[0].title").value("Apple unveils a new product"))
+                .andExpect(jsonPath("$.holdings[0].analysis.newsEvents[0].url").value("https://example.com/news"));
     }
 
     @Test
@@ -422,7 +435,11 @@ class PortfolioControllerTest {
         return new StockAnalysisResponse(Instant.parse("2026-10-09T07:30:00Z"), "claude-sonnet-5-5",
                 new AnalystConsensus(AnalystRating.BUY, 48, 328.22, 64.11, FINANCHILL, 328.09, 340.02, 4),
                 List.of(financhill), AnalystTrend.DETERIORATING, List.of(targetLowered), List.of(headline),
-                Sentiment.NEUTRAL, "Product news without surprises.", 0, 1);
+                Sentiment.NEUTRAL, "Product news without surprises.", 0, 1,
+                new MoveReason("The new product lifted the shares.", "Apple unveils a new product",
+                        "https://example.com/news"),
+                List.of(new NewsEvent(NewsEventType.PRODUCT_LAUNCH, null, "Apple unveiled a new product.",
+                        "Apple unveils a new product", "https://example.com/news")));
     }
 
     /** IB sent a position but no cost or price figures for it, no sector and no trades entered. */
