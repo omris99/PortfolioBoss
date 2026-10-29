@@ -8,6 +8,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.Benchmark;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
@@ -19,6 +20,7 @@ import portfolioboss.ib.StockContractDetails;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -263,6 +265,28 @@ class PortfolioSyncServiceTest {
         assertThat(syncService.lastScannedAt()).isEmpty();
     }
 
+    /**
+     * Decision 14: a scan stores the targets in its stocks' Dow Jones headlines. The next scan read HOTA's headlines
+     * again — they hold one target now — and HOTB's didn't come: HOTA's are replaced, HOTB's kept.
+     */
+    @Test
+    void storesTheScansPriceTargetsAndReplacesAStocksOnTheNextScan() {
+        syncService.syncScan(scanOfOneStockAt(FIRST_RUN).withAnalystPriceTargets(Map.of(
+                HOTA_CON_ID, List.of(priceTarget("Wells Fargo", 130.0), priceTarget("Barclays", 120.0)),
+                HOTB_CON_ID, List.of(priceTarget("Needham", 80.0)))), Map.of());
+        startNextRun();
+        syncService.syncScan(scanOfOneStockAt(SECOND_RUN).withAnalystPriceTargets(Map.of(
+                HOTA_CON_ID, List.of(priceTarget("Wells Fargo", 140.0)))), Map.of());
+
+        assertThat(countOf("select count(*) from analyst_price_target where con_id = " + HOTA_CON_ID)).isEqualTo(1);
+        assertThat(jdbc.queryForMap("select * from analyst_price_target where con_id = ?", HOTA_CON_ID))
+                .containsEntry("firm", "Wells Fargo")
+                .containsEntry("price_target", 140.0)
+                .containsEntry("previous_price_target", 125.0)
+                .containsEntry("headline", "HOTA Price Target Raised to $140.00/Share From $125.00 by Wells Fargo");
+        assertThat(countOf("select count(*) from analyst_price_target where con_id = " + HOTB_CON_ID)).isEqualTo(1);
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
     /**
@@ -322,6 +346,12 @@ class PortfolioSyncServiceTest {
         entityManager.flush();
         return jdbc.queryForMap("select *, rank_by_scan_code ->> ? as rank_in_six_month_scan from scan_candidate "
                 + "where con_id = ?", SIX_MONTH_SCAN, conId);
+    }
+
+    /** Raised from 125, on the day of the first run. */
+    private AnalystPriceTarget priceTarget(String firm, double target) {
+        return new AnalystPriceTarget(LocalDateTime.of(2026, 9, 18, 14, 0), firm, target, 125.0,
+                "HOTA Price Target Raised to $%.2f/Share From $125.00 by %s".formatted(target, firm));
     }
 
     private Scan scanOfOneStockAt(Instant scannedAt) {

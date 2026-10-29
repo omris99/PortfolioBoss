@@ -10,16 +10,31 @@ import java.util.stream.Collectors;
 
 /**
  * One run of the hot-stock scans (RECOMMENDATIONS_TODO.md, decisions 2 and 3): what IB sent — the rows of every scan
- * that answered, and the contract details of the stocks in them. The candidates are derived from those: one per stock,
+ * that answered, the contract details of the stocks in them, and the analysts' price targets in the candidates' Dow
+ * Jones headlines (decision 14). The candidates are derived from the rows and the contract details: one per stock,
  * whichever scans found it, and only on NYSE or NASDAQ — a stock whose contract details did not come is left out, its
  * exchange unknown.
  *
- * @param scannedAt              when the scans answered
- * @param scanRows               every row of every scan that answered
- * @param contractDetailsByConId the contract details that came, by contract id
+ * @param scannedAt                  when the scans answered
+ * @param scanRows                   every row of every scan that answered
+ * @param contractDetailsByConId     the contract details that came, by contract id
+ * @param analystPriceTargetsByConId by contract id, the price targets in each candidate's Dow Jones headlines — an
+ *                                   empty list when its headlines hold none; a candidate whose headlines did not come
+ *                                   is missing, and keeps the targets stored before
  */
 public record Scan(Instant scannedAt, List<ScanRow> scanRows,
-                   Map<Integer, StockContractDetails> contractDetailsByConId) {
+                   Map<Integer, StockContractDetails> contractDetailsByConId,
+                   Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId) {
+
+    /** Before the candidates' headlines are read: no targets yet. */
+    public Scan(Instant scannedAt, List<ScanRow> scanRows, Map<Integer, StockContractDetails> contractDetailsByConId) {
+        this(scannedAt, scanRows, contractDetailsByConId, Map.of());
+    }
+
+    /** The same scan, with the price targets read from its candidates' headlines. */
+    public Scan withAnalystPriceTargets(Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId) {
+        return new Scan(scannedAt, scanRows, contractDetailsByConId, analystPriceTargetsByConId);
+    }
 
     /** The scans that answered, in the order of their rows. */
     public List<String> scanCodes() {

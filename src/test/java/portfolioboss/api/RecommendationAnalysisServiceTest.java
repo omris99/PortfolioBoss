@@ -28,6 +28,7 @@ import portfolioboss.api.response.FailedAnalysisResponse;
 import portfolioboss.api.response.RecommendationAnalysisRunResponse;
 import portfolioboss.api.response.RecommendationPickResponse;
 import portfolioboss.db.PortfolioSyncService;
+import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Scan;
 import portfolioboss.ib.ScanRow;
@@ -40,6 +41,7 @@ import portfolioboss.stocks.Stock;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -50,6 +52,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -69,7 +72,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
  *   list.</li>
  *   <li>TOOHOT — flat, then up 2% a day for 50 days. FALLING — down all year: in no list.</li>
  * </ul>
- * Finnhub gives every stock the figures of a healthy company, unless a test says otherwise.
+ * Three firms put every stock's target 30% above its last close, and Finnhub gives every stock the figures of a healthy
+ * company, unless a test says otherwise.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -92,6 +96,8 @@ class RecommendationAnalysisServiceTest {
     private static final ClaudeReply REPLY = new ClaudeReply(new StockAnalysisResult(List.of(), List.of(), List.of(),
             Sentiment.NEUTRAL, "Nothing new.", null, List.of()), "claude-sonnet-5-5", 10_500, 900,
             new BigDecimal("0.030000"));
+    /** Each stock's three firms put its target this many times its last close: 30% above it. */
+    private static final double TARGET_TIMES_THE_CLOSE = 1.3;
 
     @Autowired
     private RecommendationAnalysisService recommendationAnalysisService;
@@ -146,6 +152,44 @@ class RecommendationAnalysisServiceTest {
         assertThat(response.picks().getFirst().riskSigns()).isEmpty();
         then(tavilyClient).should(never()).searchNews("HOT11");
         then(tavilyClient).should(never()).searchNews("TOOHOT");
+    }
+
+    /**
+     * Decision 14: HOT01's firms put its target 10% above its price and HOT03's below it, so neither is analyzed, and
+     * the short list is the nine other HOT stocks — HOT11, the eleventh, among them.
+     */
+    @Test
+    void theShortListTakesOnlyTheStocksWithTheAnalystsTarget15PercentAbove() {
+        changeTargetOf("HOT01", 1.1);
+        changeTargetOf("HOT03", 0.9);
+
+        recommendationAnalysisService.analyze(null);
+
+        assertThat(storedAnalysisSymbols()).containsExactly("HOT02", "HOT04", "HOT05", "HOT06", "HOT07", "HOT08",
+                "HOT09", "HOT10", "HOT11");
+    }
+
+    /** No stock with enough upside: nothing is searched or asked, and "no recommendation this time" is stored. */
+    @Test
+    void withoutAStockWithEnoughUpsideNothingIsPaidForAndNoRecommendationIsStored() {
+        jdbc.update("update analyst_price_target set price_target = 1");
+
+        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        entityManager.flush();
+
+        assertThat(response.analysis().analyzed()).isZero();
+        assertThat(response.picks()).isEmpty();
+        verifyNoInteractions(tavilyClient, stockAnalyzer);
+        then(finnhubClient).should(never()).stock(anyString(), any());
+        assertThat(jdbc.queryForObject("select picks::text from investment_recommendation", String.class))
+                .isEqualTo("[]");
+    }
+
+    @Test
+    void aPickCarriesHowFarTheAnalystsTargetIsAboveItsPrice() {
+        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+
+        assertThat(response.picks().getFirst().targetUpsidePercent()).isCloseTo(30, within(1e-9));
     }
 
     /** V11: the full run's picks are kept, in their order, with the scan they came from — for the measurement. */
@@ -364,14 +408,35 @@ class RecommendationAnalysisServiceTest {
 
         List<ScanRow> scanRows = new ArrayList<>();
         Map<Integer, StockContractDetails> contractDetailsByConId = new HashMap<>();
+        Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId = new HashMap<>();
         symbolByConId.forEach((conId, symbol) -> {
             scanRows.add(new ScanRow(THREE_MONTH_SCAN, scanRows.size(), conId, symbol));
             contractDetailsByConId.put(conId,
                     new StockContractDetails(conId, "NASDAQ", symbol + " INC", "Technology", "Software"));
+            double lastClose = dailyCloses.get(conId).getLast().close();
+            analystPriceTargetsByConId.put(conId, threeFirmsTargets(lastClose * TARGET_TIMES_THE_CLOSE));
         });
-        syncService.syncScan(new Scan(SCANNED_AT, scanRows, contractDetailsByConId), dailyCloses);
+        Scan scan = new Scan(SCANNED_AT, scanRows, contractDetailsByConId)
+                .withAnalystPriceTargets(analystPriceTargetsByConId);
+        syncService.syncScan(scan, dailyCloses);
         entityManager.flush();
         entityManager.clear();
+    }
+
+    /** The same target from three firms, a week before the scan. */
+    private List<AnalystPriceTarget> threeFirmsTargets(double priceTarget) {
+        LocalDateTime aWeekBeforeTheScan = LocalDateTime.of(2026, 5, 1, 12, 0);
+        return List.of("Wells Fargo", "Barclays", "Needham").stream()
+                .map(firm -> new AnalystPriceTarget(aWeekBeforeTheScan, firm, priceTarget, null, "A headline"))
+                .toList();
+    }
+
+    /** Every firm's target of the stock becomes this many times its last close. */
+    private void changeTargetOf(String symbol, double timesTheClose) {
+        int hotStockNumber = Integer.parseInt(symbol.substring("HOT".length()));
+        double lastClose = hotClose(hotStockNumber, YEAR_OF_CLOSES - 1);
+        jdbc.update("update analyst_price_target set price_target = ? where con_id = ?",
+                lastClose * timesTheClose, FIRST_HOT_CON_ID + hotStockNumber - 1);
     }
 
     /** A rise with small waves, 0.1 a day steeper with each {@code steepness}: a little more above the 50-day average. */

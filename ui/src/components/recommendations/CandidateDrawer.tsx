@@ -18,6 +18,7 @@ import type { InvestmentsAndCash } from '../graphs/investmentsAndCash';
 import { useInvestors } from '../InvestorsContext';
 import { MomentumPanel } from '../Momentum';
 import { IfIBuyPanel } from '../weightCalculator/IfIBuyPanel';
+import { AnalystTargetSection } from './AnalystTarget';
 import { AnalyzeCandidateButton } from './AnalyzeButtons';
 import { CompanyPanel } from './CompanyPanel';
 import {
@@ -328,20 +329,23 @@ export function CandidateDrawer({
         return <MomentumPanel momentum={stock.momentum} />;
       case 'analysis':
         return (
-          <AnalysisPanel
-            analysis={stock.analysis}
-            analyzeButton={
-              <AnalyzeCandidateButton
-                stock={stock}
-                estimate={estimate}
-                analysisState={analysisState}
-                onAnalyze={onAnalyze}
-              />
-            }
-            notAnalyzedText={NOT_ANALYZED_TEXT}
-          >
-            <NewsScoreSection stock={stock} />
-          </AnalysisPanel>
+          <>
+            <AnalystTargetSection analystTarget={stock.analystTarget} />
+            <AnalysisPanel
+              analysis={stock.analysis}
+              analyzeButton={
+                <AnalyzeCandidateButton
+                  stock={stock}
+                  estimate={estimate}
+                  analysisState={analysisState}
+                  onAnalyze={onAnalyze}
+                />
+              }
+              notAnalyzedText={NOT_ANALYZED_TEXT}
+            >
+              <NewsScoreSection stock={stock} />
+            </AnalysisPanel>
+          </>
         );
       case 'company':
         return <CompanyPanel stock={stock} />;

@@ -44,6 +44,40 @@ export interface WeighedAnalystMove {
   points: number;
 }
 
+/**
+ * Why the recommendation can't pick a stock, in the order the checks run: the analysts' target first — known for every
+ * stock before anything is paid for —, then Finnhub's figures.
+ */
+export type NotPickableReason = 'NO_ANALYST_TARGET' | 'TARGET_TOO_CLOSE' | 'NO_COMPANY_FACTS' | 'RISK_SIGNS_TOO_HEAVY';
+
+/** One firm's price target, read from one Dow Jones headline. */
+export interface AnalystPriceTarget {
+  /** 'yyyy-MM-ddTHH:mm:ss', in IB's time zone. */
+  publishedAt: string;
+  /** As Dow Jones names it: "Piper Sandler", "B of A Securities". */
+  firm: string;
+  priceTarget: number;
+  /** The target it replaced; null when the headline names none ("Maintained", "Announced"). */
+  previousPriceTarget: number | null;
+  headline: string;
+}
+
+/**
+ * The analysts' target from a stock's Dow Jones headlines (RECOMMENDATIONS_TODO.md, decision 14): the median of each
+ * firm's latest target of the half year before the scan — the API's, never worked out here.
+ */
+export interface AnalystTarget {
+  /** null under three firms: an opinion, not a target. */
+  medianTarget: number | null;
+  /** How far it is above the last close, in percent; null without a target. */
+  upsidePercent: number | null;
+  /** 15% or more above the last close: the stock can be on the short list. */
+  hasEnoughUpside: boolean;
+  firmCount: number;
+  /** The newest first. */
+  latestTargetOfEachFirm: AnalystPriceTarget[];
+}
+
 /** How closely a scanned stock moves with one open holding: 1 exactly together, 0 unrelated, −1 opposite. */
 export interface Correlation {
   holdingId: number;
@@ -99,8 +133,14 @@ export interface HotStock {
   riskWeight: number | null;
   /** The news score less `riskWeight`: what the picks are ordered by; null when the signs were never checked. */
   score: number | null;
-  /** Finnhub's figures are there and the signs weigh 2 at most: the recommendation could pick it on its score. */
+  /** No reason against it (`reasonsNotPickable` empty): the recommendation could pick it on its score. */
   canBePicked: boolean;
+  /** Known before any analysis, from the headlines read with the scan. */
+  analystTarget: AnalystTarget;
+  /** Among the first 10 hot stocks with enough upside: the full run analyzes it. */
+  inShortList: boolean;
+  /** Empty when it can be picked. */
+  reasonsNotPickable: NotPickableReason[];
 }
 
 /** One stock the code picked, in the recommendation's order. */
@@ -114,6 +154,8 @@ export interface RecommendationPick {
   newsScore: number;
   /** The news score less the risks' weight: what the picks are ordered by. */
   score: number;
+  /** How far the analysts' median target is above the last close, in percent: 15 or more. */
+  targetUpsidePercent: number;
 }
 
 /** What `POST /api/recommendations/analysis` answers: the run, as for the holdings, and the picks. */

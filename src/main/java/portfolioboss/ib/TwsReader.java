@@ -6,10 +6,14 @@ import portfolioboss.exceptions.TwsBusyException;
 import portfolioboss.exceptions.TwsUnavailableException;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -35,6 +39,10 @@ public class TwsReader {
     private static final int SCAN_TIMEOUT_SECONDS = 10;
     private static final int CONTRACT_DETAILS_TIMEOUT_SECONDS = 15;
     private static final int DAILY_CLOSES_TIMEOUT_SECONDS = 20;
+    // Read one at a time on 2026-10-29, a page of headlines took a fifth of a second; a busy stock has some 1,200 Dow
+    // Jones headlines in half a year (CRWD) — four pages.
+    private static final int NEWS_ROUND_TIMEOUT_SECONDS = 20;
+    private static final int MOST_NEWS_ROUNDS = 8;
     /** The Scan again button's answer when TWS can't be read; the console line says why. */
     private static final String TWS_NOT_REACHABLE = "TWS is not reachable: open TWS and log in, then scan again.";
 
@@ -132,7 +140,8 @@ public class TwsReader {
 
     /**
      * Still connected, after the portfolio: the scans for hot stocks, then the contract details of the stocks they
-     * found — their exchange and sector. {@code null} when no scan answered.
+     * found — their exchange and sector —, then the analysts' price targets in the Dow Jones headlines of the stocks
+     * kept. {@code null} when no scan answered.
      */
     private Scan readHotStockScan(IbGateway gateway) throws InterruptedException {
         gateway.requestHotStockScans();
@@ -160,7 +169,56 @@ public class TwsReader {
         if (!leftOutStocks.isEmpty()) {
             System.out.println("[ib] left out, not on NYSE or NASDAQ: " + String.join(", ", leftOutStocks));
         }
-        return scan;
+        return scan.withAnalystPriceTargets(readAnalystPriceTargets(gateway, scan.candidates(), scannedAt));
+    }
+
+    /**
+     * Still connected: half a year of each candidate's Dow Jones headlines, page by page, and the analysts' price targets
+     * in them (decision 14). A stock whose headlines fail or come late keeps the targets an earlier scan stored.
+     */
+    private Map<Integer, List<AnalystPriceTarget>> readAnalystPriceTargets(IbGateway gateway,
+                                                                          List<ScanCandidate> candidates,
+                                                                          Instant scannedAt)
+            throws InterruptedException {
+        LocalDateTime oldestWanted = scannedAt.atZone(ZoneId.systemDefault()).toLocalDate()
+                .minusMonths(AnalystPriceTarget.MONTHS_COUNTED)
+                .atStartOfDay();
+        NewsHeadlinePaging paging =
+                new NewsHeadlinePaging(candidates.stream().map(ScanCandidate::conId).toList(), oldestWanted);
+        System.out.printf("[ib] requesting half a year of Dow Jones headlines for %d stocks%n", candidates.size());
+        for (int round = 1; round <= MOST_NEWS_ROUNDS && paging.hasStocksToRead(); round++) {
+            Map<Integer, LocalDateTime> nextPages = paging.nextPages();
+            gateway.requestNewsHeadlines(nextPages);
+            if (!gateway.awaitNewsHeadlines(NEWS_ROUND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                System.out.println("[ib] Dow Jones headlines still missing after " + NEWS_ROUND_TIMEOUT_SECONDS
+                        + "s; keeping what arrived");
+            }
+            Map<Integer, List<NewsHeadline>> pages = gateway.newsHeadlines();
+            nextPages.keySet().forEach(conId -> paging.addPage(conId, pages.getOrDefault(conId, List.of())));
+        }
+
+        Map<Integer, List<AnalystPriceTarget>> targetsByConId = priceTargetsIn(paging.headlinesByConId(), candidates);
+        int targetCount = targetsByConId.values().stream().mapToInt(List::size).sum();
+        System.out.printf("[ib] analysts' price targets: %d in the Dow Jones headlines of %d of %d stocks%n",
+                targetCount, targetsByConId.size(), candidates.size());
+        return targetsByConId;
+    }
+
+    /** Each candidate's own targets, read with its IB name: other companies' headlines in its feed are left out. */
+    private Map<Integer, List<AnalystPriceTarget>> priceTargetsIn(Map<Integer, List<NewsHeadline>> headlinesByConId,
+                                                                  List<ScanCandidate> candidates) {
+        Map<Integer, List<AnalystPriceTarget>> targetsByConId = new LinkedHashMap<>();
+        for (ScanCandidate candidate : candidates) {
+            List<NewsHeadline> headlines = headlinesByConId.get(candidate.conId());
+            if (headlines != null) {
+                PriceTargetHeadlineReader headlineReader = new PriceTargetHeadlineReader(candidate.companyName());
+                targetsByConId.put(candidate.conId(), headlines.stream()
+                        .map(headlineReader::priceTargetIn)
+                        .flatMap(Optional::stream)
+                        .toList());
+            }
+        }
+        return targetsByConId;
     }
 
     /**

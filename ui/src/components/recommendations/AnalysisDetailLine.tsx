@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
-import { EMPTY_VALUE, formatSignedPercentOneDecimal } from '../../lib/format';
+import { EMPTY_VALUE } from '../../lib/format';
 import { RATING_TONES, textClassOf, TREND_TONES } from '../../lib/signalColors';
 import type { HotStock } from '../../types/recommendations';
 import { siteOf } from '../AnalysisPanel';
@@ -9,24 +9,22 @@ import { earningsText, TimingNote } from './TimingNote';
 
 /**
  * The line under an analyzed row of the Hot list: its risk signs, the analysts, the next earnings and the news score,
- * each named in the line itself — "Risk signs [Expensive] · Analysts BUY +2.4% IMPROVING · Earnings 2026-11-04 · News
- * +2" —, and under it why the price moves, in full, when the news says. The columns above don't move.
+ * each named in the line itself — "Risk signs [Expensive] · Analysts BUY IMPROVING · Earnings 2026-11-04 · News +2" —,
+ * and under it why the price moves, in full, when the news says. The columns above don't move.
  */
 
-/** "BUY +18.1% IMPROVING": the consensus, how far its target is from the price, and the trend — each in its tone. */
+/**
+ * "BUY IMPROVING": the consensus and the trend, each in its tone. The target's upside is the row's own column, from
+ * Dow Jones — the one the rule counts —, so the analysis's MarketBeat figure stays in the drawer and not here.
+ */
 function AnalystsPart({ stock }: { stock: HotStock }) {
   const analysis = stock.analysis;
   const consensus = analysis?.consensus ?? null;
-  if (analysis === null || (consensus === null && analysis.analystTrend === null)) return <>{EMPTY_VALUE}</>;
+  if (analysis === null || (consensus?.rating == null && analysis.analystTrend === null)) return <>{EMPTY_VALUE}</>;
   return (
     <span className="inline-flex gap-x-1.5 font-medium">
       {consensus?.rating != null && (
         <span className={textClassOf(consensus.rating, RATING_TONES)}>{consensus.rating.replace('_', ' ')}</span>
-      )}
-      {consensus?.targetUpsidePercent != null && (
-        <span title="How far the consensus target is from the last close">
-          {formatSignedPercentOneDecimal(consensus.targetUpsidePercent)}
-        </span>
       )}
       {analysis.analystTrend !== null && (
         <span className={textClassOf(analysis.analystTrend, TREND_TONES)}>{analysis.analystTrend}</span>

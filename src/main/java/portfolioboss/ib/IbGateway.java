@@ -7,6 +7,7 @@ import com.ib.client.EReader;
 import com.ib.client.ScannerSubscription;
 import com.ib.client.TagValue;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +23,9 @@ import java.util.concurrent.TimeUnit;
  * exposes no order-placement method.
  */
 public class IbGateway {
+
+    /** Dow Jones Global Equity Trader: the feed whose headlines carry the analysts' price targets (decision 14). */
+    private static final String DOW_JONES_NEWS = "DJ-N";
 
     private final EJavaSignal signal = new EJavaSignal();
     private final PortfolioWrapper wrapper = new PortfolioWrapper();
@@ -142,6 +146,36 @@ public class IbGateway {
         wrapper.contractDetailsRequests().answersOfFinishedRequests()
                 .forEach((conId, answers) -> contractDetailsByConId.put(conId, answers.getFirst()));
         return contractDetailsByConId;
+    }
+
+    // ── Dow Jones's headlines ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Asks IB for one page of Dow Jones headlines of each contract — a read, like the closes: up to 300, newest first,
+     * from before the time given, or the newest when it is {@code null}. IB answers with the headlines published
+     * <em>before</em> {@code startDateTime} and ignores {@code endDateTime} — the opposite of what their names say, as
+     * tried against TWS on 2026-10-29 —, so the time goes in {@code startDateTime}.
+     */
+    public void requestNewsHeadlines(Map<Integer, LocalDateTime> olderThanByConId) {
+        RequestBatch<Integer, NewsHeadline> newsRound = wrapper.startNewsRound();
+        Map<Integer, Integer> conIdByRequestId = newsRound.expect(olderThanByConId.keySet());
+        conIdByRequestId.forEach((requestId, conId) -> client.reqHistoricalNews(requestId, conId, DOW_JONES_NEWS,
+                ibTimeOf(olderThanByConId.get(conId)), "", NewsHeadlinePaging.HEADLINES_PER_PAGE, null));
+    }
+
+    /** Blocks until every headline request of the round has ended, or the timeout elapses. */
+    public boolean awaitNewsHeadlines(long timeout, TimeUnit unit) throws InterruptedException {
+        return wrapper.newsRequests().awaitAllFinished(timeout, unit);
+    }
+
+    /** By contract id, the headlines of the round's requests that have ended with at least one. */
+    public Map<Integer, List<NewsHeadline>> newsHeadlines() {
+        return wrapper.newsRequests().answersOfFinishedRequests();
+    }
+
+    /** An empty text asks for the newest headlines. */
+    private String ibTimeOf(LocalDateTime olderThan) {
+        return olderThan == null ? "" : olderThan.format(NewsHeadline.TIME_FORMAT);
     }
 
     // ── daily closes ────────────────────────────────────────────────────────────────────────────

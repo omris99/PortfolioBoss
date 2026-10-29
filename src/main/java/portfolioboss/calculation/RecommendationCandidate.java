@@ -13,16 +13,19 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 /**
- * A scanned stock that was analyzed, as the recommendation sees it (RECOMMENDATIONS_TODO.md, decisions 5 and 13): its
- * risk signs, whether Finnhub gave any of its figures at all, its news score and the timing note. A figure Finnhub
- * didn't give raises no sign — a loss-making company has no P/E, and is only marked as losing money.
+ * A scanned stock, as the recommendation sees it (RECOMMENDATIONS_TODO.md, decisions 5, 13 and 14): its analysts'
+ * target, its risk signs, whether Finnhub gave any of its figures at all, its news score and the timing note. A figure
+ * Finnhub didn't give raises no sign — a loss-making company has no P/E, and is only marked as losing money.
  *
- * @param candidateId the stock's row in its scan ({@code scan_candidate}), so that a pick can be told apart
- * @param hotStock    what the rule of decision 1 says about its closes: its place in its list, whether it is recovering
- * @param stock       what Finnhub answered; {@code null} without an answer — no key, or the call failed
- * @param analysis    what Claude found in the news and about the analysts; {@code null} while never analyzed
+ * @param candidateId   the stock's row in its scan ({@code scan_candidate}), so that a pick can be told apart
+ * @param hotStock      what the rule of decision 1 says about its closes: its place in its list, whether it is
+ *                      recovering
+ * @param analystTarget the analysts' target from its Dow Jones headlines (decision 14), against its last close
+ * @param stock         what Finnhub answered; {@code null} without an answer — no key, or the call failed
+ * @param analysis      what Claude found in the news and about the analysts; {@code null} while never analyzed
  */
-public record RecommendationCandidate(long candidateId, HotStockCalculator hotStock, Stock stock,
+public record RecommendationCandidate(long candidateId, HotStockCalculator hotStock,
+                                      AnalystTargetCalculator analystTarget, Stock stock,
                                       StockAnalysisResult analysis) {
 
     /** "A debt more than twice the equity" — an opening number (decision 5), like the next two. */

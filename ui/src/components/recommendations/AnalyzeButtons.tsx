@@ -16,14 +16,35 @@ import { ConfirmBeforeRun, CostSentence, estimatedCostText, RunningIcon, RunOutc
  * runs, every other button waits.
  */
 
-/** How many of the Hot list the full run analyzes — the API's short list; copied here for the confirm's words. */
-export const SHORT_LIST_SIZE = 10;
-
 const ANOTHER_RUN_HINT = 'Another analysis is running: wait for it to finish.';
 
-/** The run of the short list analyzes this many: the first 10 hot stocks, or every one when there are fewer. */
-export function shortListSizeOf(hotStockCount: number): number {
-  return Math.min(SHORT_LIST_SIZE, hotStockCount);
+/**
+ * The short list the full run analyzes, counted from the API's marks (RECOMMENDATIONS_TODO.md, decision 14): the first
+ * 10 hot stocks whose analysts' target is 15% or more above the price — `withEnoughUpside` more when over 10 have one.
+ */
+export interface ShortListCounts {
+  analyzed: number;
+  withEnoughUpside: number;
+}
+
+export function shortListCountsOf(hotStocks: HotStock[]): ShortListCounts {
+  return {
+    analyzed: hotStocks.filter((stock) => stock.inShortList).length,
+    withEnoughUpside: hotStocks.filter((stock) => stock.analystTarget.hasEnoughUpside).length,
+  };
+}
+
+/**
+ * "the 7 hot stocks whose analysts' target is 15% or more above the price" — or "the first 10 of the 12 …" when more
+ * have one than the run takes.
+ */
+export function shortListWords(shortList: ShortListCounts): string {
+  const whoseTarget = 'whose analysts’ target is 15% or more above the price';
+  if (shortList.withEnoughUpside > shortList.analyzed) {
+    return `the first ${shortList.analyzed} of the ${shortList.withEnoughUpside} hot stocks ${whoseTarget}`;
+  }
+  if (shortList.analyzed === 1) return `the one hot stock ${whoseTarget}`;
+  return `the ${shortList.analyzed} hot stocks ${whoseTarget}`;
 }
 
 /** What one stock's Analyze does and costs, on hover. */
@@ -49,28 +70,31 @@ function failureOf(analysisState: RecommendationAnalysisState, stock: HotStock):
 
 /** What Analyze & recommend does and costs, on hover — or why it waits. */
 function shortListHintOf(
-  stockCount: number,
+  shortList: ShortListCounts,
   estimate: EstimatedAnalysisCost | null,
   isOtherRunRunning: boolean,
 ): string {
-  if (stockCount === 0) return 'No stock is hot right now: nothing to analyze.';
+  if (shortList.analyzed === 0) {
+    return 'No hot stock has the analysts’ target 15% or more above its price: nothing to analyze.';
+  }
   if (isOtherRunRunning) return ANOTHER_RUN_HINT;
-  const costText = estimatedCostText(estimate, stockCount) ?? 'what it costs shows once a stock has been analyzed';
-  return `Analyze the first ${stockCount} hot stocks and pick up to 3 by the rules: ${costText}.`;
+  const costText =
+    estimatedCostText(estimate, shortList.analyzed) ?? 'what it costs shows once a stock has been analyzed';
+  return `Analyze ${shortListWords(shortList)}, and pick up to 3 by the rules: ${costText}.`;
 }
 
 function ShortListConfirmText({
-  stockCount,
+  shortList,
   estimate,
 }: {
-  stockCount: number;
+  shortList: ShortListCounts;
   estimate: EstimatedAnalysisCost | null;
 }) {
   return (
     <>
-      <p className="text-body font-semibold">Analyze the first {stockCount} hot stocks?</p>
+      <p className="text-body font-semibold">Analyze {shortListWords(shortList)}?</p>
       <p className="mt-1 text-muted">
-        <CostSentence estimate={estimate} stockCount={stockCount} />
+        <CostSentence estimate={estimate} stockCount={shortList.analyzed} />
         It searches the web for each one’s analyst ratings and news and asks Finnhub for its company figures; then the
         code picks up to 3. It takes about a minute.
       </p>
@@ -83,19 +107,19 @@ function ShortListConfirmText({
  * recommendation; secondary in its head afterwards. Its outcome sits to its left.
  */
 export function AnalyzeShortListControl({
-  hotStockCount,
+  shortList,
   estimate,
   analysisState,
   onAnalyze,
   isPrimary,
 }: {
-  hotStockCount: number;
+  shortList: ShortListCounts;
   estimate: EstimatedAnalysisCost | null;
   analysisState: RecommendationAnalysisState;
   onAnalyze: (candidateId: number | null) => void;
   isPrimary: boolean;
 }) {
-  const stockCount = shortListSizeOf(hotStockCount);
+  const stockCount = shortList.analyzed;
   const outcome = runOutcomeOf(analysisState, null);
   const isOtherRunRunning = isAnalysisRunning(analysisState) && !outcome.isRunning;
   return (
@@ -111,7 +135,7 @@ export function AnalyzeShortListControl({
           <button
             type="button"
             disabled={stockCount === 0 || isAnalysisRunning(analysisState)}
-            title={shortListHintOf(stockCount, estimate, isOtherRunRunning)}
+            title={shortListHintOf(shortList, estimate, isOtherRunRunning)}
             className={`shrink-0 ${isPrimary ? PRIMARY_BUTTON_CLASS : SECONDARY_BUTTON_CLASS}`}
           >
             <RunningIcon isRunning={outcome.isRunning} size={16} />
@@ -122,7 +146,7 @@ export function AnalyzeShortListControl({
         onConfirm={() => onAnalyze(null)}
         align="end"
       >
-        <ShortListConfirmText stockCount={stockCount} estimate={estimate} />
+        <ShortListConfirmText shortList={shortList} estimate={estimate} />
       </ConfirmBeforeRun>
     </span>
   );

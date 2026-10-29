@@ -12,6 +12,8 @@ import java.util.List;
  * @param reportsWithin14Days the timing note: wait for its report, due 0 to 14 days after the run
  * @param newsScore           the week's news events and the analysts' moves weighed; above 0 the good outweighs the bad
  * @param score               the news score less the risks' weight — what the picks are ordered by
+ * @param targetUpsidePercent how far the analysts' median target is above the last close, in percent — at least 15
+ *                            (decision 14)
  */
 public record RecommendationPickResponse(
         long candidateId,
@@ -19,5 +21,6 @@ public record RecommendationPickResponse(
         List<RiskSign> riskSigns,
         boolean reportsWithin14Days,
         int newsScore,
-        int score) {
+        int score,
+        double targetUpsidePercent) {
 }

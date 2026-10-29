@@ -50,8 +50,8 @@ class RecommendationAnalysisControllerTest {
     @Test
     void anEmptyBodyAnalyzesTheShortListAndAnswersWithThePicks() throws Exception {
         given(recommendationAnalysisService.analyze(null)).willReturn(new RecommendationAnalysisRunResponse(
-                TEN_ANALYZED, List.of(new RecommendationPickResponse(41, "WXYZ", List.of(), false, 3, 3),
-                        new RecommendationPickResponse(43, "EFGH", List.of(RiskSign.LOSES_MONEY), true, 0, -1))));
+                TEN_ANALYZED, List.of(new RecommendationPickResponse(41, "WXYZ", List.of(), false, 3, 3, 27.1),
+                        new RecommendationPickResponse(43, "EFGH", List.of(RiskSign.LOSES_MONEY), true, 0, -1, 18.2))));
 
         postAnalysis("{}")
                 .andExpect(status().isOk())
@@ -68,6 +68,7 @@ class RecommendationAnalysisControllerTest {
                 .andExpect(jsonPath("$.picks[0].reportsWithin14Days").value(false))
                 .andExpect(jsonPath("$.picks[0].newsScore").value(3))
                 .andExpect(jsonPath("$.picks[0].score").value(3))
+                .andExpect(jsonPath("$.picks[0].targetUpsidePercent").value(27.1))
                 .andExpect(jsonPath("$.picks[1].riskSigns[0]").value("LOSES_MONEY"))
                 .andExpect(jsonPath("$.picks[1].reportsWithin14Days").value(true))
                 .andExpect(jsonPath("$.picks[1].score").value(-1));

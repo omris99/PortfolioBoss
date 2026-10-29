@@ -9,6 +9,7 @@ import com.ib.client.EClientSocket;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
@@ -23,9 +24,9 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Extends {@link DefaultEWrapper} (empty implementations of every callback) and overrides only
  * the handful of methods needed to read the account's portfolio, then the scans for hot stocks with the contract details
- * of the stocks they found, and then the daily closes of the holdings, of SPY and of those stocks for the momentum. It
- * requests one snapshot of the holdings, prints them, then unsubscribes — and one picture of each scan, then cancels it.
- * It never places, modifies, or cancels an order.
+ * of the stocks they found and their Dow Jones headlines (the analysts' price targets), and then the daily closes of the
+ * holdings, of SPY and of those stocks for the momentum. It requests one snapshot of the holdings, prints them, then
+ * unsubscribes — and one picture of each scan, then cancels it. It never places, modifies, or cancels an order.
  */
 public class PortfolioWrapper extends DefaultEWrapper {
 
@@ -49,18 +50,27 @@ public class PortfolioWrapper extends DefaultEWrapper {
     private volatile boolean connectionFailed = false;
     private volatile PortfolioSnapshot snapshot;
 
-    // After the portfolio, three batches of requests: the scans (by scan code), the contract details of the stocks they
-    // found and the daily closes (both by contract id). Each batch numbers its requests from its own start, far enough
-    // apart never to meet: two scans, a contract-details request for each stock found, a daily-close request for each
-    // holding, SPY and stock found. Nothing else in PortfolioBoss uses request ids.
+    // After the portfolio, four kinds of requests: the scans (by scan code), the contract details of the stocks they
+    // found, their Dow Jones headlines and the daily closes (all three by contract id). Each batch numbers its requests
+    // from its own start, far enough apart never to meet: two scans, a contract-details request for each stock found, a
+    // daily-close request for each holding, SPY and stock found, and a round of headline requests for each page.
+    // Nothing else in PortfolioBoss uses request ids.
     protected static final int FIRST_SCAN_REQUEST_ID = 100;
     protected static final int FIRST_DAILY_CLOSE_REQUEST_ID = 1000;
     protected static final int FIRST_CONTRACT_DETAILS_REQUEST_ID = 5000;
+    protected static final int FIRST_NEWS_REQUEST_ID = 10_000;
+    /** Each round of headline requests numbers from its own thousand: a scan finds at most 100 stocks. */
+    protected static final int NEWS_REQUEST_IDS_PER_ROUND = 1_000;
+    private static final String WHAT_A_NEWS_REQUEST_READS = "Dow Jones headlines of contract";
     private final RequestBatch<String, ScanRow> scanRequests = new RequestBatch<>("scan", FIRST_SCAN_REQUEST_ID);
     private final RequestBatch<Integer, StockContractDetails> contractDetailsRequests =
             new RequestBatch<>("contract details of contract", FIRST_CONTRACT_DETAILS_REQUEST_ID);
     private final RequestBatch<Integer, DailyClose> dailyCloseRequests =
             new RequestBatch<>("daily closes of contract", FIRST_DAILY_CLOSE_REQUEST_ID);
+    /** The current round of headline requests — one round per page, each replacing the one before. */
+    private volatile RequestBatch<Integer, NewsHeadline> newsRequests =
+            new RequestBatch<>(WHAT_A_NEWS_REQUEST_READS, FIRST_NEWS_REQUEST_ID);
+    private int newsRoundsStarted = 0;
 
     protected void setClient(EClientSocket client) {
         this.client = client;
@@ -91,6 +101,21 @@ public class PortfolioWrapper extends DefaultEWrapper {
 
     protected RequestBatch<Integer, DailyClose> dailyCloseRequests() {
         return dailyCloseRequests;
+    }
+
+    protected RequestBatch<Integer, NewsHeadline> newsRequests() {
+        return newsRequests;
+    }
+
+    /**
+     * A new round of headline requests, in place of the previous one. Its request ids come after the previous round's,
+     * so that a late answer to an earlier round can't land in this one: it is dropped, its id unknown here.
+     */
+    protected RequestBatch<Integer, NewsHeadline> startNewsRound() {
+        newsRequests = new RequestBatch<>(WHAT_A_NEWS_REQUEST_READS,
+                FIRST_NEWS_REQUEST_ID + newsRoundsStarted * NEWS_REQUEST_IDS_PER_ROUND);
+        newsRoundsStarted++;
+        return newsRequests;
     }
 
     // ── connection lifecycle ────────────────────────────────────────────────────────────────────
@@ -188,6 +213,33 @@ public class PortfolioWrapper extends DefaultEWrapper {
         contractDetailsRequests.finish(requestId);
     }
 
+    // ── Dow Jones's headlines (the analysts' price targets of the stocks found) ─────────────────
+
+    @Override
+    public void historicalNews(int requestId, String time, String providerCode, String articleId, String headline) {
+        LocalDateTime publishedAt = publishedAtOf(time);
+        if (publishedAt != null) {
+            newsRequests.addAnswer(requestId, new NewsHeadline(publishedAt, articleId, headline));
+        }
+    }
+
+    @Override
+    public void historicalNewsEnd(int requestId, boolean hasMore) {
+        newsRequests.finish(requestId);
+    }
+
+    /**
+     * {@code null} (the headline is skipped) when IB's time can't be read — an exception here would stop the reader
+     * loop's whole batch of messages.
+     */
+    private LocalDateTime publishedAtOf(String time) {
+        try {
+            return time == null ? null : LocalDateTime.parse(time, NewsHeadline.TIME_FORMAT);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
     // ── daily closes (for the momentum) ─────────────────────────────────────────────────────────
 
     @Override
@@ -226,7 +278,8 @@ public class PortfolioWrapper extends DefaultEWrapper {
         }
         // An error for one request of a batch ends only that request — e.g. 162, no market data permission for one
         // contract, which then keeps the closes of an earlier sync.
-        for (RequestBatch<?, ?> requestBatch : List.of(scanRequests, contractDetailsRequests, dailyCloseRequests)) {
+        for (RequestBatch<?, ?> requestBatch :
+                List.of(scanRequests, contractDetailsRequests, newsRequests, dailyCloseRequests)) {
             if (requestBatch.finishWithError(requestId, errorCode, errorMessage)) {
                 return;
             }

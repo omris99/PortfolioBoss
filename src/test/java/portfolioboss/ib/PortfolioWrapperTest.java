@@ -7,6 +7,7 @@ import com.ib.client.Decimal;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -14,8 +15,8 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Feeds {@link PortfolioWrapper} the callbacks IB would send, so the way it collects positions, scans, contract details
- * and daily closes is tested without a TWS. No socket is needed: the wrapper only uses its client to unsubscribe and to
+ * Feeds {@link PortfolioWrapper} the callbacks IB would send, so the way it collects positions, scans, contract details,
+ * Dow Jones headlines and daily closes is tested without a TWS. No socket is needed: the wrapper only uses its client to unsubscribe and to
  * cancel a scan when one is set.
  */
 class PortfolioWrapperTest {
@@ -197,6 +198,57 @@ class PortfolioWrapperTest {
 
         assertThat(wrapper.dailyCloseRequests().answersOfFinishedRequests().get(APPLE_CON_ID))
                 .containsExactly(new DailyClose(LocalDate.of(2026, 10, 6), 335.0));
+    }
+
+    // ── Dow Jones's headlines ───────────────────────────────────────────────────────────────────
+
+    @Test
+    void collectsEachContractsHeadlinesWithTheirTime() throws InterruptedException {
+        RequestBatch<Integer, NewsHeadline> newsRound = wrapper.startNewsRound();
+        newsRound.expect(List.of(APPLE_CON_ID, MICROSOFT_CON_ID));
+        int appleRequestId = PortfolioWrapper.FIRST_NEWS_REQUEST_ID;
+        int microsoftRequestId = PortfolioWrapper.FIRST_NEWS_REQUEST_ID + 1;
+
+        wrapper.historicalNews(appleRequestId, "2026-10-12 10:25:00.0", "DJ-N", "DJ-N$1",
+                "{A:800015:L:en}Apple Price Target Raised to $300.00/Share From $280.00 by Wedbush");
+        wrapper.historicalNewsEnd(appleRequestId, false);
+        wrapper.historicalNewsEnd(microsoftRequestId, false);   // no headline at all
+
+        assertThat(wrapper.newsRequests().awaitAllFinished(0, TimeUnit.SECONDS)).isTrue();
+        assertThat(wrapper.newsRequests().answersOfFinishedRequests()).containsOnlyKeys(APPLE_CON_ID);
+        assertThat(wrapper.newsRequests().answersOfFinishedRequests().get(APPLE_CON_ID).getFirst().publishedAt())
+                .isEqualTo(LocalDateTime.of(2026, 10, 12, 10, 25));
+    }
+
+    /** A page comes after the previous one's end: its round numbers its requests past the previous round's. */
+    @Test
+    void aLateHeadlineOfAnEarlierRoundIsDropped() {
+        wrapper.startNewsRound().expect(List.of(APPLE_CON_ID));
+        int firstRoundRequestId = PortfolioWrapper.FIRST_NEWS_REQUEST_ID;
+        wrapper.startNewsRound().expect(List.of(APPLE_CON_ID));
+        int secondRoundRequestId = PortfolioWrapper.FIRST_NEWS_REQUEST_ID + PortfolioWrapper.NEWS_REQUEST_IDS_PER_ROUND;
+
+        wrapper.historicalNews(firstRoundRequestId, "2026-10-12 10:25:00.0", "DJ-N", "DJ-N$late", "A late one");
+        wrapper.historicalNews(secondRoundRequestId, "2026-05-28 09:00:00.0", "DJ-N", "DJ-N$old", "An older one");
+        wrapper.historicalNewsEnd(secondRoundRequestId, false);
+
+        assertThat(wrapper.newsRequests().answersOfFinishedRequests().get(APPLE_CON_ID))
+                .extracting(NewsHeadline::articleId)
+                .containsExactly("DJ-N$old");
+    }
+
+    @Test
+    void skipsAHeadlineWhoseTimeCannotBeRead() {
+        wrapper.startNewsRound().expect(List.of(APPLE_CON_ID));
+        int requestId = PortfolioWrapper.FIRST_NEWS_REQUEST_ID;
+
+        wrapper.historicalNews(requestId, "not a time", "DJ-N", "DJ-N$1", "A headline");
+        wrapper.historicalNews(requestId, "2026-10-12 10:25:00.0", "DJ-N", "DJ-N$2", "Another headline");
+        wrapper.historicalNewsEnd(requestId, false);
+
+        assertThat(wrapper.newsRequests().answersOfFinishedRequests().get(APPLE_CON_ID))
+                .extracting(NewsHeadline::articleId)
+                .containsExactly("DJ-N$2");
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────

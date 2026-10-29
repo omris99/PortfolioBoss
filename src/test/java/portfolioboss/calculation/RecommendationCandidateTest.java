@@ -26,6 +26,8 @@ class RecommendationCandidateTest {
     /** Growing, profitable, little debt, a P/E of 30: no sign. */
     private static final CompanyFacts HEALTHY_COMPANY = new CompanyFacts(10.0, 20.0, 0.5, 30.0);
     private static final Double UP_IN_A_YEAR = 20.0;
+    /** The analysts' target is AnalystTargetCalculatorTest's: these tests are about the signs and the timing note. */
+    private static final AnalystTargetCalculator NO_TARGETS = new AnalystTargetCalculator(List.of(), 100.0, TODAY);
 
     @Test
     void aHealthyCompanyRisingForAYearHasNoSign() {
@@ -91,7 +93,8 @@ class RecommendationCandidateTest {
     /** No key, or Finnhub's call failed: only the closes are checked, and there are no figures. */
     @Test
     void withoutFinnhubsAnswerOnlyTheClosesAreChecked() {
-        RecommendationCandidate withoutAnswer = new RecommendationCandidate(1, hotStock(-20.0), null, null);
+        RecommendationCandidate withoutAnswer =
+                new RecommendationCandidate(1, hotStock(-20.0), NO_TARGETS, null, null);
 
         assertThat(withoutAnswer.riskSigns()).containsExactly(RiskSign.RECOVERING);
         assertThat(withoutAnswer.hasCompanyFacts()).isFalse();
@@ -114,7 +117,7 @@ class RecommendationCandidateTest {
         assertThat(candidateReportingOn(TODAY.plusDays(15)).reportsWithin14Days(TODAY)).isFalse();
         assertThat(candidateReportingOn(TODAY.minusDays(1)).reportsWithin14Days(TODAY)).isFalse();
         Stock withoutAReport = new Stock("ABCD", null, HEALTHY_COMPANY);
-        assertThat(new RecommendationCandidate(1, hotStock(UP_IN_A_YEAR), withoutAReport, null)
+        assertThat(new RecommendationCandidate(1, hotStock(UP_IN_A_YEAR), NO_TARGETS, withoutAReport, null)
                 .reportsWithin14Days(TODAY)).isFalse();
     }
 
@@ -127,9 +130,11 @@ class RecommendationCandidateTest {
                 List.of(partnership));
         Stock stock = new Stock("ABCD", null, HEALTHY_COMPANY);
 
-        assertThat(new RecommendationCandidate(1, hotStock(UP_IN_A_YEAR), stock, analysis).newsScore(TODAY))
+        assertThat(new RecommendationCandidate(1, hotStock(UP_IN_A_YEAR), NO_TARGETS, stock, analysis)
+                .newsScore(TODAY))
                 .isEqualTo(3);
-        assertThat(new RecommendationCandidate(1, hotStock(UP_IN_A_YEAR), stock, null).newsScore(TODAY)).isZero();
+        assertThat(new RecommendationCandidate(1, hotStock(UP_IN_A_YEAR), NO_TARGETS, stock, null).newsScore(TODAY))
+                .isZero();
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
@@ -139,13 +144,13 @@ class RecommendationCandidateTest {
     }
 
     private RecommendationCandidate candidateWith(CompanyFacts companyFacts, Double yearReturnPercent) {
-        return new RecommendationCandidate(1, hotStock(yearReturnPercent), new Stock("ABCD", null, companyFacts),
-                null);
+        return new RecommendationCandidate(1, hotStock(yearReturnPercent), NO_TARGETS,
+                new Stock("ABCD", null, companyFacts), null);
     }
 
     private RecommendationCandidate candidateReportingOn(LocalDate reportDate) {
         Stock stock = new Stock("ABCD", new EarningsDate(reportDate, "amc"), HEALTHY_COMPANY);
-        return new RecommendationCandidate(1, hotStock(UP_IN_A_YEAR), stock, null);
+        return new RecommendationCandidate(1, hotStock(UP_IN_A_YEAR), NO_TARGETS, stock, null);
     }
 
     /** A last close of 100, 5% above its 50-day average, with the long trend and at its year high. */

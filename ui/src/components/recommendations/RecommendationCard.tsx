@@ -6,22 +6,24 @@ import { CARD_CLASS } from '../../lib/styles';
 import type { EstimatedAnalysisCost } from '../../types/portfolio';
 import type { HotStock, LatestRecommendation, PickedStock, Recommendations } from '../../types/recommendations';
 import { costEstimateOf } from '../AnalyzeControls';
-import { AnalyzeShortListControl, SHORT_LIST_SIZE, shortListSizeOf } from './AnalyzeButtons';
+import { TargetUpside } from './AnalystTarget';
+import { AnalyzeShortListControl, shortListCountsOf, shortListWords, type ShortListCounts } from './AnalyzeButtons';
 import { formatPoints, NEWS_SCORE_HINT, NewsScoreParts, pointsColorClass } from './NewsScore';
+import { NotPickableReasons } from './NotPickableReasons';
 import { RiskSigns } from './RiskSignTag';
 import { earningsText, TimingNote } from './TimingNote';
 import { sectorText } from './hotStockTexts';
 
 /**
- * The recommendation (DESIGN_BRIEF.md §8.2; RECOMMENDATIONS_TODO.md, decisions 5, 12 and 13): up to 3 stocks the code
- * picked from the short list, in its order, each with what the figures say about it and the news that raised it — no
- * text from Claude, who only reads the news. The latest recommendation stays even after a newer scan, with the date of
- * its own. Recommended means picked by rules in code, not a price forecast; nothing is bought.
+ * The recommendation (DESIGN_BRIEF.md §8.2; RECOMMENDATIONS_TODO.md, decisions 5, 12, 13 and 14): up to 3 stocks the
+ * code picked from the short list, in its order, each with what the figures say about it and the news that raised it —
+ * no text from Claude, who only reads the news. The latest recommendation stays even after a newer scan, with the date
+ * of its own. Recommended means picked by rules in code, not a price forecast; nothing is bought.
  */
 
 const FOOT_TEXT =
-  'Picked by rules in code — the risk signs first, then the news score — not a price forecast. Claude only reads the ' +
-  'news. Nothing is bought.';
+  'Picked by rules in code — the analysts’ target first, then the risk signs, then the news score — not a price ' +
+  'forecast. Claude only reads the news. Nothing is bought.';
 
 function sameInstant(firstIsoInstant: string, secondIsoInstant: string): boolean {
   return Date.parse(firstIsoInstant) === Date.parse(secondIsoInstant);
@@ -56,16 +58,19 @@ function SymbolButton({
 // ── one pick ────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * "Pulled back 7.4% from its high · the analysts' target 18.1% above the price · earnings on 2026-11-12, after the
- * close": what the figures add to the signs, written by the code.
+ * "Pulled back 7.4% from its high · the analysts' target 27.1% above the price, of 36 firms · earnings on 2026-11-12,
+ * after the close": what the figures add to the signs, written by the code. The target is Dow Jones's, the rule's.
  */
 function pickFactsText(stock: HotStock): string {
   const facts: string[] = [];
   if (stock.pulledBack) facts.push(`pulled back ${stock.momentum.percentBelowHigh52Weeks.toFixed(1)}% from its high`);
-  const targetUpside = stock.analysis?.consensus?.targetUpsidePercent ?? null;
+  const targetUpside = stock.analystTarget.upsidePercent;
   if (targetUpside !== null) {
     const side = targetUpside >= 0 ? 'above' : 'below';
-    facts.push(`the analysts’ target ${Math.abs(targetUpside).toFixed(1)}% ${side} the price`);
+    facts.push(
+      `the analysts’ target ${Math.abs(targetUpside).toFixed(1)}% ${side} the price, of ` +
+        `${stock.analystTarget.firmCount} firms`,
+    );
   }
   if (stock.nextEarningsDate !== null) facts.push(`earnings on ${earningsText(stock.nextEarningsDate)}`);
   if (facts.length === 0) return 'Nothing more in the figures.';
@@ -157,21 +162,13 @@ function wasAnalyzedAgainSince(stock: HotStock, recommendation: LatestRecommenda
   return stock.analysis !== null && Date.parse(stock.analysis.analyzedAt) > Date.parse(recommendation.recommendedAt);
 }
 
-/** Why the code passed over a stock of the short list, by the rule — from its analysis, as the page reads it today. */
+/** Why the code passed over a stock it analyzed, by the rule — from its analysis, as the page reads it today. */
 function NotPickedReason({ stock }: { stock: HotStock }) {
   if (stock.analysis === null) return <span className="text-muted">not analyzed: its analysis failed</span>;
-  if (stock.riskSigns === null) return <span className="text-muted">not checked: no figures from Finnhub</span>;
-  if (!stock.canBePicked) {
-    return (
-      <>
-        <RiskSigns stock={stock} showFigures />
-        <span className="text-muted">weigh {stock.riskWeight}; a pick’s weigh 2 at most</span>
-      </>
-    );
-  }
+  if (!stock.canBePicked) return <NotPickableReasons stock={stock} />;
   return (
     <>
-      {stock.riskSigns.length > 0 && <RiskSigns stock={stock} showFigures />}
+      {stock.riskSigns !== null && stock.riskSigns.length > 0 && <RiskSigns stock={stock} showFigures />}
       <span className="text-muted">
         score {stock.score === null ? EMPTY_VALUE : formatPoints(stock.score)}, below the picks
       </span>
@@ -179,9 +176,36 @@ function NotPickedReason({ stock }: { stock: HotStock }) {
   );
 }
 
+/** One reason for many stocks, in a row: "Analysts' target under +15%: SNAP +4.2% …", each symbol opening its drawer. */
+function StocksPassedOver({
+  reason,
+  stocks,
+  showsUpside,
+  onOpen,
+}: {
+  reason: string;
+  stocks: HotStock[];
+  showsUpside: boolean;
+  onOpen: (candidateId: number) => void;
+}) {
+  if (stocks.length === 0) return null;
+  return (
+    <li className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-caption">
+      <span className="text-muted">{reason}:</span>
+      {stocks.map((stock) => (
+        <span key={stock.candidateId} className="inline-flex items-baseline gap-1">
+          <SymbolButton stock={stock} onOpen={onOpen} className="text-[13px]" />
+          {showsUpside && <TargetUpside analystTarget={stock.analystTarget} />}
+        </span>
+      ))}
+    </li>
+  );
+}
+
 /**
- * "Why not the others": each stock of the short list the code didn't pick, with its reason — no text from Claude. The
- * short list is the first 10 of today's Hot list, which is the recommendation's only while it is of the latest scan.
+ * "Why not the others": every hot stock the code didn't pick, with its reason — no text from Claude. The ones it
+ * analyzed one by one; the rest by their analysts' target, which kept them off the short list (decision 14). Today's
+ * lists are the recommendation's only while it is of the latest scan.
  */
 function WhyNotTheOthers({
   recommendation,
@@ -193,19 +217,37 @@ function WhyNotTheOthers({
   onOpen: (candidateId: number) => void;
 }) {
   const pickedConIds = new Set(recommendation.picks.map((pick) => pick.conId));
-  const notPicked = hotStocks.slice(0, SHORT_LIST_SIZE).filter((stock) => !pickedConIds.has(stock.conId));
+  const notPicked = hotStocks.filter((stock) => !pickedConIds.has(stock.conId));
   if (notPicked.length === 0) return null;
+  const analyzed = notPicked.filter((stock) => stock.inShortList);
+  const offTheShortList = notPicked.filter((stock) => !stock.inShortList);
+  const pastTheFirstTen = offTheShortList.filter((stock) => stock.analystTarget.hasEnoughUpside);
+  const targetTooClose = offTheShortList.filter((stock) => stock.reasonsNotPickable.includes('TARGET_TOO_CLOSE'));
+  const withoutATarget = offTheShortList.filter((stock) => stock.reasonsNotPickable.includes('NO_ANALYST_TARGET'));
   return (
     <div className="border-t px-5 py-3">
       <h3 className="mb-1.5 text-caption font-semibold text-muted">Why not the others</h3>
       <ul className="flex flex-col gap-1">
-        {notPicked.map((stock) => (
+        {analyzed.map((stock) => (
           <li key={stock.candidateId} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
             <SymbolButton stock={stock} onOpen={onOpen} className="w-14 text-left text-[13px]" />
             <NotPickedReason stock={stock} />
             {wasAnalyzedAgainSince(stock, recommendation) && <span className="text-faint">· analyzed again since</span>}
           </li>
         ))}
+        <StocksPassedOver
+          reason="Past the first 10 with the analysts’ target 15%+ above the price"
+          stocks={pastTheFirstTen}
+          showsUpside
+          onOpen={onOpen}
+        />
+        <StocksPassedOver reason="Analysts’ target under +15%" stocks={targetTooClose} showsUpside onOpen={onOpen} />
+        <StocksPassedOver
+          reason="No analysts’ target, fewer than 3 firms"
+          stocks={withoutATarget}
+          showsUpside={false}
+          onOpen={onOpen}
+        />
       </ul>
     </div>
   );
@@ -224,16 +266,15 @@ function CardFoot() {
 
 /** Before any recommendation: a calm invitation, with the button and what it should cost. */
 function NoRecommendationYet({
-  hotStockCount,
+  shortList,
   estimate,
   analyze,
 }: {
-  hotStockCount: number;
+  shortList: ShortListCounts;
   estimate: EstimatedAnalysisCost | null;
   analyze: ReactNode;
 }) {
-  const stockCount = shortListSizeOf(hotStockCount);
-  const cost = costEstimateOf(estimate, stockCount);
+  const cost = costEstimateOf(estimate, shortList.analyzed);
   return (
     <section aria-label="Recommendation" className={CARD_CLASS}>
       <div className="flex items-center gap-4 px-5 py-4">
@@ -243,17 +284,21 @@ function NoRecommendationYet({
         <div className="min-w-0">
           <h2 className="text-section-title">No recommendation yet</h2>
           <p className="mt-0.5 text-[13px] text-muted">
-            Analyze & recommend reads the analyst ratings, the news and the company figures of the first{' '}
-            {stockCount || SHORT_LIST_SIZE} hot stocks; then the code picks up to 3 by their risk signs and news score.
+            {shortList.analyzed === 0
+              ? 'No hot stock has the analysts’ target 15% or more above its price: nothing to analyze.'
+              : `Analyze & recommend reads the analyst ratings, the news and the company figures of ` +
+                `${shortListWords(shortList)}; then the code picks up to 3 by their risk signs and news score.`}
           </p>
         </div>
         <div className="ml-auto flex shrink-0 flex-col items-end gap-1">
           {analyze}
-          <span className="text-caption text-faint">
-            {cost === null
-              ? 'What it costs shows once a stock has been analyzed'
-              : `About ${cost.credits} Tavily credits and $${cost.dollars}`}
-          </span>
+          {shortList.analyzed > 0 && (
+            <span className="text-caption text-faint">
+              {cost === null
+                ? 'What it costs shows once a stock has been analyzed'
+                : `About ${cost.credits} Tavily credits and $${cost.dollars}`}
+            </span>
+          )}
         </div>
       </div>
     </section>
@@ -289,8 +334,8 @@ function NoStockQualified() {
   return (
     <p className="mx-5 my-4 flex items-start gap-2 rounded-md bg-subtle px-3 py-2.5">
       <Info size={16} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
-      No stock qualified this time: every one analyzed has risk signs that weigh more than 2, or no figures from
-      Finnhub.
+      No stock qualified this time: none had the analysts’ target 15% or more above its price, or every one analyzed
+      had risk signs that weigh more than 2, or no figures from Finnhub.
     </p>
   );
 }
@@ -313,10 +358,10 @@ export function RecommendationCard({
   onOpen: (candidateId: number) => void;
 }) {
   const recommendation = recommendations.latestRecommendation;
-  const hotStockCount = recommendations.hotStocks.length;
+  const shortList = shortListCountsOf(recommendations.hotStocks);
   const analyzeControl = (isPrimary: boolean) => (
     <AnalyzeShortListControl
-      hotStockCount={hotStockCount}
+      shortList={shortList}
       estimate={estimate}
       analysisState={analysisState}
       onAnalyze={onAnalyze}
@@ -325,7 +370,7 @@ export function RecommendationCard({
   );
 
   if (recommendation === null) {
-    return <NoRecommendationYet hotStockCount={hotStockCount} estimate={estimate} analyze={analyzeControl(true)} />;
+    return <NoRecommendationYet shortList={shortList} estimate={estimate} analyze={analyzeControl(true)} />;
   }
 
   const { hotStocks, tooHotStocks, correctingStocks } = recommendations;

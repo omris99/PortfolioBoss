@@ -18,7 +18,6 @@ import portfolioboss.db.InvestmentRecommendationEntity;
 import portfolioboss.db.InvestmentRecommendationRepository;
 import portfolioboss.db.StockAnalysisEntity;
 import portfolioboss.db.StockAnalysisRepository;
-import portfolioboss.model.HotStockLabel;
 import portfolioboss.stocks.FinnhubClient;
 import portfolioboss.stocks.Stock;
 
@@ -34,11 +33,12 @@ import java.util.stream.Collectors;
 
 /**
  * The Recommendations page's paid run (RECOMMENDATIONS_TODO.md, session 3), started only by the user's button: the
- * short list — the first HOT candidates of the latest scan — or one candidate of its lists goes through
- * {@link StockAnalysisPipeline}, Finnhub is asked about each beside it, and every analysis that succeeded is stored as a
- * {@code stock_analysis} row of its candidate. After the short list the code picks the recommendation
- * ({@link RecommendationCalculator}) and stores it as an {@code investment_recommendation} row; one candidate's analysis
- * picks nothing. It writes nothing else, and never reaches Interactive Brokers.
+ * short list — the first HOT candidates of the latest scan whose analysts' target is at least 15% above the last close
+ * (decision 14) — or one candidate of its lists goes through {@link StockAnalysisPipeline}, Finnhub is asked about each
+ * beside it, and every analysis that succeeded is stored as a {@code stock_analysis} row of its candidate. After the
+ * short list the code picks the recommendation ({@link RecommendationCalculator}) and stores it as an
+ * {@code investment_recommendation} row — an empty one too, when no stock had enough upside and nothing was paid for;
+ * one candidate's analysis picks nothing. It writes nothing else, and never reaches Interactive Brokers.
  *
  * <p>Not {@code @Transactional}, like {@code AnalysisService}: no database connection waits on the network. Finnhub and
  * Tavily are sent only the symbol, and Claude the symbol, the currency and the last close — never anything about the
@@ -47,8 +47,6 @@ import java.util.stream.Collectors;
 @Service
 public class RecommendationAnalysisService {
 
-    /** The first HOT candidates, in the page's order, are the short list the full run analyzes (decision 1). */
-    private static final int SHORT_LIST_SIZE = 10;
     /** The scan keeps stocks on NYSE and NASDAQ only (decision 2): every one is priced in dollars. */
     private static final String CURRENCY = "USD";
 
@@ -80,8 +78,9 @@ public class RecommendationAnalysisService {
     public RecommendationAnalysisRunResponse analyze(Long candidateId) {
         boolean recommending = candidateId == null;
         refuseWhileAKeyIsMissing(recommending);
+        ShortList shortList = recommending ? recommendationsReadService.shortListOfLatestScan() : null;
         List<CandidateWithItsList> candidates =
-                recommending ? shortList() : List.of(findCandidateInTheLists(candidateId));
+                recommending ? shortList.candidates() : List.of(findCandidateInTheLists(candidateId));
         Instant analyzedAt = Instant.now();
         LocalDate today = analyzedAt.atZone(ZoneId.systemDefault()).toLocalDate();
 
@@ -97,20 +96,18 @@ public class RecommendationAnalysisService {
         List<Stock> finnhubStocks = pendingFinnhubStocks.stream().map(Future::resultNow).toList();
 
         stockAnalysisRepository.saveAll(analysesToStore(candidates, finnhubStocks, run, analyzedAt));
-        List<RecommendationPickResponse> picks = recommending ? pick(candidates, finnhubStocks, run, today) : null;
-        if (recommending && !candidates.isEmpty()) {
-            storeTheRecommendation(candidates, picks, analyzedAt);
+        List<RecommendationPickResponse> picks = recommending ? pick(shortList, finnhubStocks, run, today) : null;
+        if (recommending && shortList.scanId() != null) {
+            storeTheRecommendation(shortList.scanId(), picks, analyzedAt);
         }
         return new RecommendationAnalysisRunResponse(new AnalysisRunResponse(run), picks);
     }
 
     /**
      * Every full run's picks are kept, an empty list too — "no recommendation this time" is an answer the measurement
-     * counts (decision 9). The short list is all of one scan, the latest.
+     * counts (decision 9), also when no stock had enough upside and none was analyzed.
      */
-    private void storeTheRecommendation(List<CandidateWithItsList> candidates, List<RecommendationPickResponse> picks,
-                                        Instant recommendedAt) {
-        long scanId = candidates.getFirst().candidate().scanId();
+    private void storeTheRecommendation(long scanId, List<RecommendationPickResponse> picks, Instant recommendedAt) {
         List<Long> pickedCandidateIds = picks.stream().map(RecommendationPickResponse::candidateId).toList();
         investmentRecommendationRepository.save(
                 new InvestmentRecommendationEntity(scanId, recommendedAt, pickedCandidateIds));
@@ -128,13 +125,6 @@ public class RecommendationAnalysisService {
                     "The recommendation is off: FINNHUB_API_KEY is not set in config/local.env, and without the "
                             + "company figures no stock can be picked");
         }
-    }
-
-    private List<CandidateWithItsList> shortList() {
-        return recommendationsReadService.candidatesWithTheirListsOfLatestScan().stream()
-                .filter(candidateWithItsList -> candidateWithItsList.hotStock().label() == HotStockLabel.HOT)
-                .limit(SHORT_LIST_SIZE)
-                .toList();
     }
 
     private CandidateWithItsList findCandidateInTheLists(long candidateId) {
@@ -189,38 +179,48 @@ public class RecommendationAnalysisService {
     }
 
     /** Only the stocks analyzed can be picked: one that failed has no analysis to show beside the pick. */
-    private List<RecommendationPickResponse> pick(List<CandidateWithItsList> candidates, List<Stock> finnhubStocks,
-                                                  StockAnalysisRun run, LocalDate today) {
+    private List<RecommendationPickResponse> pick(ShortList shortList, List<Stock> finnhubStocks, StockAnalysisRun run,
+                                                  LocalDate today) {
+        List<CandidateWithItsList> candidates = shortList.candidates();
         List<RecommendationCandidate> analyzedCandidates = new ArrayList<>();
         for (int index = 0; index < candidates.size(); index++) {
             StockAnalysisOutcome outcome = run.outcomes().get(index);
             if (outcome.succeeded()) {
                 CandidateWithItsList candidateWithItsList = candidates.get(index);
                 analyzedCandidates.add(new RecommendationCandidate(candidateWithItsList.candidate().id(),
-                        candidateWithItsList.hotStock(), finnhubStocks.get(index), outcome.reply().result()));
+                        candidateWithItsList.hotStock(), candidateWithItsList.analystTarget(), finnhubStocks.get(index),
+                        outcome.reply().result()));
             }
         }
         RecommendationCalculator recommendationCalculator = new RecommendationCalculator(analyzedCandidates, today);
         List<RecommendationCandidate> picks = recommendationCalculator.picks();
-        printPicks(picks, analyzedCandidates.size());
+        printPicks(picks, analyzedCandidates.size(), shortList);
         return picks.stream().map(pick -> pickResponseOf(pick, recommendationCalculator, today)).toList();
     }
 
-    /** A pick always has Finnhub's answer: a stock without its figures is never picked. */
+    /**
+     * A pick always has Finnhub's answer and a target with enough upside: a stock without either is never picked.
+     */
     private RecommendationPickResponse pickResponseOf(RecommendationCandidate pick,
                                                       RecommendationCalculator recommendationCalculator,
                                                       LocalDate today) {
         return new RecommendationPickResponse(pick.candidateId(), pick.stock().symbol(), pick.riskSigns(),
-                pick.reportsWithin14Days(today), pick.newsScore(today), recommendationCalculator.scoreOf(pick));
+                pick.reportsWithin14Days(today), pick.newsScore(today), recommendationCalculator.scoreOf(pick),
+                pick.analystTarget().upsidePercent());
     }
 
-    /** For example "[ai] recommended ABCD, WXYZ (of 10 analyzed)", or "[ai] no recommendation: none of 10 qualified". */
-    private void printPicks(List<RecommendationCandidate> picks, int analyzedCount) {
+    /**
+     * For example "[ai] recommended ABCD, WXYZ (of 7 analyzed; 7 of 41 hot stocks have the analysts' target 15% above
+     * the price)", or "[ai] no recommendation: none of 7 qualified (…)".
+     */
+    private void printPicks(List<RecommendationCandidate> picks, int analyzedCount, ShortList shortList) {
+        String upsideCounts = shortList.withEnoughUpsideCount() + " of " + shortList.hotStockCount()
+                + " hot stocks have the analysts' target 15% above the price";
         if (picks.isEmpty()) {
-            System.out.println("[ai] no recommendation: none of " + analyzedCount + " qualified");
+            System.out.println("[ai] no recommendation: none of " + analyzedCount + " qualified (" + upsideCounts + ")");
             return;
         }
         String symbols = picks.stream().map(pick -> pick.stock().symbol()).collect(Collectors.joining(", "));
-        System.out.println("[ai] recommended " + symbols + " (of " + analyzedCount + " analyzed)");
+        System.out.println("[ai] recommended " + symbols + " (of " + analyzedCount + " analyzed; " + upsideCounts + ")");
     }
 }

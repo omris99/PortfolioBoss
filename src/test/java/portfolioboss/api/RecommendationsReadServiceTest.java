@@ -14,6 +14,7 @@ import portfolioboss.ai.EventMagnitude;
 import portfolioboss.ai.NewsEvent;
 import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.StockAnalysisResult;
+import portfolioboss.api.response.AnalystTargetResponse;
 import portfolioboss.api.response.CorrelationResponse;
 import portfolioboss.api.response.HotStockResponse;
 import portfolioboss.api.response.LatestRecommendationResponse;
@@ -26,6 +27,7 @@ import portfolioboss.db.PortfolioSyncService;
 import portfolioboss.db.ScanCandidateEntity;
 import portfolioboss.db.StockAnalysisEntity;
 import portfolioboss.db.StockAnalysisRepository;
+import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
@@ -33,6 +35,7 @@ import portfolioboss.ib.Scan;
 import portfolioboss.ib.ScanRow;
 import portfolioboss.ib.StockContractDetails;
 import portfolioboss.model.HotStockLabel;
+import portfolioboss.model.NotPickableReason;
 import portfolioboss.model.RiskSign;
 import portfolioboss.model.WeighedAnalystMove;
 import portfolioboss.model.WeighedNewsEvent;
@@ -43,6 +46,7 @@ import portfolioboss.stocks.Stock;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -67,6 +71,7 @@ import static org.assertj.core.api.Assertions.within;
  *   <li>CORRECTING — up from 100 to 200, then down to 180: under its 50-day average, still above the 200-day one.</li>
  *   <li>FALLING — down all year: no long upward trend, in no list. NOCLOSES — none came: in no list either.</li>
  * </ul>
+ * Only HOTA has analysts' targets in its Dow Jones headlines: three firms, 30% above its last close.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -199,6 +204,7 @@ class RecommendationsReadServiceTest {
         assertThat(hota.riskWeight()).isEqualTo(2);
         assertThat(hota.score()).isEqualTo(-2);
         assertThat(hota.canBePicked()).isTrue();
+        assertThat(hota.reasonsNotPickable()).isEmpty();
     }
 
     /**
@@ -247,6 +253,53 @@ class RecommendationsReadServiceTest {
         assertThat(tooHot.weighedNewsEvents()).isEmpty();
         assertThat(tooHot.countedAnalystMoves()).isEmpty();
         assertThat(tooHot.canBePicked()).isFalse();
+        assertThat(tooHot.reasonsNotPickable())
+                .containsExactly(NotPickableReason.NO_ANALYST_TARGET, NotPickableReason.NO_COMPANY_FACTS);
+    }
+
+    /** Decision 14: the median of the stored targets against the last close; a stock without any has none. */
+    @Test
+    void aStockShowsItsAnalystsTargetFromTheStoredTargets() {
+        storeTheScan();
+
+        AnalystTargetResponse hotaTarget = stockNamed("HOTA").analystTarget();
+        AnalystTargetResponse appleTarget = stockNamed("AAPL").analystTarget();
+
+        assertThat(hotaTarget.firmCount()).isEqualTo(3);
+        assertThat(hotaTarget.medianTarget()).isCloseTo(hotaLastClose() * 1.3, within(1e-9));
+        assertThat(hotaTarget.upsidePercent()).isCloseTo(30, within(1e-9));
+        assertThat(hotaTarget.hasEnoughUpside()).isTrue();
+        assertThat(hotaTarget.latestTargetOfEachFirm()).extracting(AnalystPriceTarget::firm)
+                .containsExactlyInAnyOrder("Wells Fargo", "Barclays", "Needham");
+        assertThat(appleTarget.firmCount()).isZero();
+        assertThat(appleTarget.medianTarget()).isNull();
+        assertThat(appleTarget.hasEnoughUpside()).isFalse();
+    }
+
+    /** Of the two HOT stocks only HOTA has enough upside: the short list, the same the page marks. */
+    @Test
+    void theShortListIsTheHotStocksWithEnoughUpside() {
+        storeTheScan();
+        long scanId = jdbc.queryForObject("select id from scan", Long.class);
+
+        ShortList shortList = recommendationsReadService.shortListOfLatestScan();
+
+        assertThat(shortList.scanId()).isEqualTo(scanId);
+        assertThat(shortList.hotStockCount()).isEqualTo(2);
+        assertThat(shortList.withEnoughUpsideCount()).isEqualTo(1);
+        assertThat(shortList.candidates())
+                .extracting(candidateWithItsList -> candidateWithItsList.candidate().symbol())
+                .containsExactly("HOTA");
+        assertThat(stockNamed("HOTA").inShortList()).isTrue();
+        assertThat(stockNamed("AAPL").inShortList()).isFalse();
+    }
+
+    @Test
+    void beforeTheFirstScanTheShortListIsEmpty() {
+        ShortList shortList = recommendationsReadService.shortListOfLatestScan();
+
+        assertThat(shortList.scanId()).isNull();
+        assertThat(shortList.candidates()).isEmpty();
     }
 
     /**
@@ -317,13 +370,25 @@ class RecommendationsReadServiceTest {
                     new StockContractDetails(conId, "NASDAQ", symbol + " INC", "Technology", "Software"));
         });
 
+        Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId =
+                Map.of(HOTA_CON_ID, threeFirmsTargets(hotaLastClose() * 1.3));
+
         syncService.sync(snapshotWithApple(), Map.of(
                 APPLE_CON_ID, series(this::appleClose),
-                HOTA_CON_ID, series(day -> appleClose(day) / 2),
+                HOTA_CON_ID, series(this::hotaClose),
                 TOO_HOT_CON_ID, series(this::flatThenSharpRise),
                 CORRECTING_CON_ID, series(this::riseThenPullback),
                 FALLING_CON_ID, series(day -> 200 - day * 0.4)),
-                new Scan(scannedAt, scanRows, contractDetailsByConId));
+                new Scan(scannedAt, scanRows, contractDetailsByConId)
+                        .withAnalystPriceTargets(analystPriceTargetsByConId));
+    }
+
+    /** The same target from three firms, a week before the first scan. */
+    private List<AnalystPriceTarget> threeFirmsTargets(double priceTarget) {
+        LocalDateTime aWeekBeforeTheScan = LocalDateTime.of(2026, 5, 1, 12, 0);
+        return Stream.of("Wells Fargo", "Barclays", "Needham")
+                .map(firm -> new AnalystPriceTarget(aWeekBeforeTheScan, firm, priceTarget, null, "A headline"))
+                .toList();
     }
 
     /** The stock's row in the only scan stored so far. */
@@ -368,6 +433,15 @@ class RecommendationsReadServiceTest {
 
     private double appleClose(int day) {
         return 100 + day * 0.2 + 3 * Math.sin(day / 3.0);
+    }
+
+    /** AAPL's closes at half the price. */
+    private double hotaClose(int day) {
+        return appleClose(day) / 2;
+    }
+
+    private double hotaLastClose() {
+        return hotaClose(YEAR_OF_CLOSES - 1);
     }
 
     /** 100 for 200 days, then 2% up every day: 269 at the end, against a 50-day average of about 172. */

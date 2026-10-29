@@ -4,6 +4,7 @@ import { EXPLAINED_CLASS } from '../../lib/styles';
 import type { Investor } from '../../types/portfolio';
 import type { HotStock } from '../../types/recommendations';
 import { MomentumChip } from '../Momentum';
+import { TargetCell } from './AnalystTarget';
 import {
   correlationsHint,
   correlationText,
@@ -103,6 +104,15 @@ export const PRICE_COLUMN: HotStockColumn = {
   renderValue: (stock) => formatMoney(stock.momentum.lastClose),
 };
 
+/** The analysts' target from Dow Jones (decision 14), known before any analysis: the upside, the firms under it. */
+export const TARGET_COLUMN: HotStockColumn = {
+  key: 'target',
+  title: 'Analysts’ target',
+  alignment: 'right',
+  widthClass: 'w-[120px]',
+  renderValue: (stock) => <TargetCell analystTarget={stock.analystTarget} />,
+};
+
 export const ABOVE_SMA50_COLUMN: HotStockColumn = {
   key: 'aboveSma50',
   title: 'Above 50-day',
@@ -189,6 +199,7 @@ export const HOT_COLUMNS: HotStockColumn[] = [
   STOCK_COLUMN,
   SECTOR_COLUMN,
   PRICE_COLUMN,
+  TARGET_COLUMN,
   ABOVE_SMA50_COLUMN,
   FROM_HIGH_COLUMN,
   YEAR_COLUMN,
@@ -201,6 +212,7 @@ export const HOT_COLUMNS: HotStockColumn[] = [
 export const TOO_HOT_COLUMNS: HotStockColumn[] = [
   STOCK_COLUMN,
   PRICE_COLUMN,
+  TARGET_COLUMN,
   ABOVE_SMA50_COLUMN,
   YEAR_COLUMN,
   MOMENTUM_COLUMN,
@@ -209,6 +221,7 @@ export const TOO_HOT_COLUMNS: HotStockColumn[] = [
 export const CORRECTING_COLUMNS: HotStockColumn[] = [
   STOCK_COLUMN,
   PRICE_COLUMN,
+  TARGET_COLUMN,
   UNDER_SMA50_COLUMN,
   FROM_HIGH_COLUMN,
   YEAR_COLUMN,

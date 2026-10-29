@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { EMPTY_VALUE, formatDateTime, formatSignedPercentOneDecimal } from '../../lib/format';
 import type { CompanyFacts, HotStock, RiskSign } from '../../types/recommendations';
+import { TargetUpside } from './AnalystTarget';
 import { formatPoints, NEWS_SCORE_HINT } from './NewsScore';
+import { NotPickableReasons } from './NotPickableReasons';
 import { RiskSigns, RiskSignTag } from './RiskSignTag';
 import { earningsText, TimingNote } from './TimingNote';
 
@@ -71,19 +73,33 @@ function NextEarnings({ stock }: { stock: HotStock }) {
   return <span>{earningsText(stock.nextEarningsDate)}</span>;
 }
 
-/** What the recommendation's rule makes of the stock: whether it can be picked, and its score. */
+/** "No: analysts' target +4.2%; a pick needs +15% · …", or yes — every reason the API gives, in its order. */
+function CanItBePicked({ stock }: { stock: HotStock }) {
+  if (stock.canBePicked) return <>Yes: its target and its risk signs pass the rule</>;
+  return (
+    <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+      No: <NotPickableReasons stock={stock} />
+    </span>
+  );
+}
+
+/** What the recommendation's rule makes of the stock: its analysts' target, whether it can be picked, its score. */
 function ForTheRecommendation({ stock }: { stock: HotStock }) {
-  if (stock.riskSigns === null) return null;
   return (
     <section className="mt-5">
       <h3 className="mb-2 text-label text-muted">For the recommendation</h3>
       <ul className="divide-y rounded-lg border">
-        <CompanyRow label="Risk signs">
-          <RiskSigns stock={stock} showFigures={false} />
-          <span className="text-muted">weigh {stock.riskWeight}</span>
+        <CompanyRow label="Analysts’ target" rule="From Dow Jones: 15% above the price or more, of 3 firms or more">
+          <TargetUpside analystTarget={stock.analystTarget} />
         </CompanyRow>
+        {stock.riskSigns !== null && (
+          <CompanyRow label="Risk signs">
+            <RiskSigns stock={stock} showFigures={false} />
+            <span className="text-muted">weigh {stock.riskWeight}</span>
+          </CompanyRow>
+        )}
         <CompanyRow label="Can it be picked">
-          {stock.canBePicked ? 'Yes: its signs weigh 2 at most' : 'No: its signs weigh more than 2'}
+          <CanItBePicked stock={stock} />
         </CompanyRow>
         {stock.score !== null && stock.newsScore !== null && (
           <CompanyRow label="Score" rule="The news score less the signs’ weight: the picks are ordered by it">

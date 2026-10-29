@@ -3,6 +3,7 @@ package portfolioboss.api;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import portfolioboss.ai.StockAnalysisResult;
+import portfolioboss.api.response.AnalystTargetResponse;
 import portfolioboss.api.response.CorrelationResponse;
 import portfolioboss.api.response.HotStockResponse;
 import portfolioboss.api.response.LatestRecommendationResponse;
@@ -10,6 +11,7 @@ import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PickedStockResponse;
 import portfolioboss.api.response.RecommendationsResponse;
 import portfolioboss.api.response.StockAnalysisResponse;
+import portfolioboss.calculation.AnalystTargetCalculator;
 import portfolioboss.calculation.AnalystTrendCalculator;
 import portfolioboss.calculation.ConsensusCalculator;
 import portfolioboss.calculation.HotStockCalculator;
@@ -19,6 +21,7 @@ import portfolioboss.calculation.RecommendationCalculator;
 import portfolioboss.calculation.RecommendationCandidate;
 import portfolioboss.calculation.ReturnsCorrelation;
 import portfolioboss.db.AccountStateRepository;
+import portfolioboss.db.AnalystPriceTargetRepository;
 import portfolioboss.db.DailyCloseRepository;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
@@ -31,6 +34,7 @@ import portfolioboss.db.ScanEntity;
 import portfolioboss.db.ScanRepository;
 import portfolioboss.db.StockAnalysisEntity;
 import portfolioboss.db.StockAnalysisRepository;
+import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.Benchmark;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.model.AnalystConsensus;
@@ -54,15 +58,17 @@ import java.util.stream.Collectors;
 /**
  * Reads the latest scan the sync stored and turns it into the Recommendations page's three lists (RECOMMENDATIONS_TODO.md,
  * session 1): each stock's momentum from its stored closes, what the rule of decision 1 says about it, the open holdings
- * it moves with most, who holds it already, and (session 3) its latest analysis with the risk signs. Like
- * {@code PortfolioReadService} it reads only the database, and all of it is worked out on this read — a change of rule
- * applies to old scans and old analyses too.
+ * it moves with most, who holds it already, (session 3) its latest analysis with the risk signs, and (session 4b) the
+ * analysts' target from its stored Dow Jones targets. Like {@code PortfolioReadService} it reads only the database, and
+ * all of it is worked out on this read — a change of rule applies to old scans and old analyses too.
  */
 @Service
 public class RecommendationsReadService {
 
     /** The open holdings a stock moves with most, shown next to it. */
     private static final int MOST_CORRELATIONS_SHOWN = 3;
+    /** The first HOT stocks with enough upside, in the page's order, are the short list the full run analyzes. */
+    private static final int SHORT_LIST_SIZE = 10;
 
     private final ScanRepository scanRepository;
     private final AccountStateRepository accountStateRepository;
@@ -72,13 +78,15 @@ public class RecommendationsReadService {
     private final StockAnalysisRepository stockAnalysisRepository;
     private final ScanCandidateRepository scanCandidateRepository;
     private final InvestmentRecommendationRepository investmentRecommendationRepository;
+    private final AnalystPriceTargetRepository analystPriceTargetRepository;
 
     public RecommendationsReadService(ScanRepository scanRepository, AccountStateRepository accountStateRepository,
                                       HoldingRepository holdingRepository, InvestorRepository investorRepository,
                                       DailyCloseRepository dailyCloseRepository,
                                       StockAnalysisRepository stockAnalysisRepository,
                                       ScanCandidateRepository scanCandidateRepository,
-                                      InvestmentRecommendationRepository investmentRecommendationRepository) {
+                                      InvestmentRecommendationRepository investmentRecommendationRepository,
+                                      AnalystPriceTargetRepository analystPriceTargetRepository) {
         this.scanRepository = scanRepository;
         this.accountStateRepository = accountStateRepository;
         this.holdingRepository = holdingRepository;
@@ -87,6 +95,7 @@ public class RecommendationsReadService {
         this.stockAnalysisRepository = stockAnalysisRepository;
         this.scanCandidateRepository = scanCandidateRepository;
         this.investmentRecommendationRepository = investmentRecommendationRepository;
+        this.analystPriceTargetRepository = analystPriceTargetRepository;
     }
 
     /**
@@ -105,8 +114,31 @@ public class RecommendationsReadService {
     @Transactional(readOnly = true)
     public List<CandidateWithItsList> candidatesWithTheirListsOfLatestScan() {
         return scanRepository.findFirstByOrderByScannedAtDesc()
-                .map(scan -> candidatesWithTheirLists(scan.candidates(), dailyClosesOf(scan.candidates(), List.of())))
+                .map(scan -> candidatesWithTheirLists(scan, dailyClosesOf(scan.candidates(), List.of())))
                 .orElse(List.of());
+    }
+
+    /**
+     * The short list the full run analyzes (decision 14): the first 10 HOT stocks of the latest scan whose analysts'
+     * target is at least 15% above the last close — the same the page marks. Without a scan, no scan id and no stock.
+     */
+    @Transactional(readOnly = true)
+    public ShortList shortListOfLatestScan() {
+        return scanRepository.findFirstByOrderByScannedAtDesc()
+                .map(scan -> shortListOf(scan,
+                        candidatesWithTheirLists(scan, dailyClosesOf(scan.candidates(), List.of()))))
+                .orElse(new ShortList(null, 0, 0, List.of()));
+    }
+
+    private ShortList shortListOf(ScanEntity scan, List<CandidateWithItsList> candidatesWithTheirLists) {
+        List<CandidateWithItsList> hotStocks = candidatesWithTheirLists.stream()
+                .filter(candidateWithItsList -> candidateWithItsList.hotStock().label() == HotStockLabel.HOT)
+                .toList();
+        List<CandidateWithItsList> withEnoughUpside = hotStocks.stream()
+                .filter(candidateWithItsList -> candidateWithItsList.analystTarget().hasEnoughUpside())
+                .toList();
+        return new ShortList(scan.id(), hotStocks.size(), withEnoughUpside.size(),
+                withEnoughUpside.stream().limit(SHORT_LIST_SIZE).toList());
     }
 
     private RecommendationsResponse toResponse(ScanEntity scan) {
@@ -116,17 +148,21 @@ public class RecommendationsReadService {
         Map<Integer, StockAnalysisEntity> latestAnalysisByConId = latestAnalysisByConIdOf(scan.candidates());
         // the day the timing note counts from: the scan's, not the clock's, so the same scan always reads the same
         LocalDate scanDate = dateOf(scan.scannedAt());
-        Map<HotStockLabel, List<HotStockResponse>> stocksByList =
-                candidatesWithTheirLists(scan.candidates(), dailyClosesByConId).stream()
-                        .collect(Collectors.groupingBy(
-                                candidateWithItsList -> candidateWithItsList.hotStock().label(),
-                                () -> new EnumMap<>(HotStockLabel.class),
-                                Collectors.mapping(
-                                        candidateWithItsList -> hotStockResponseOf(candidateWithItsList, openHoldings,
-                                                dailyClosesByConId, accountOwnerId,
-                                                latestAnalysisByConId.get(candidateWithItsList.candidate().conId()),
-                                                scanDate),
-                                        Collectors.toList())));
+        List<CandidateWithItsList> candidatesWithTheirLists = candidatesWithTheirLists(scan, dailyClosesByConId);
+        Set<Long> shortListCandidateIds = shortListOf(scan, candidatesWithTheirLists).candidates().stream()
+                .map(candidateWithItsList -> candidateWithItsList.candidate().id())
+                .collect(Collectors.toSet());
+        Map<HotStockLabel, List<HotStockResponse>> stocksByList = candidatesWithTheirLists.stream()
+                .collect(Collectors.groupingBy(
+                        candidateWithItsList -> candidateWithItsList.hotStock().label(),
+                        () -> new EnumMap<>(HotStockLabel.class),
+                        Collectors.mapping(
+                                candidateWithItsList -> hotStockResponseOf(candidateWithItsList, openHoldings,
+                                        dailyClosesByConId, accountOwnerId,
+                                        latestAnalysisByConId.get(candidateWithItsList.candidate().conId()),
+                                        scanDate,
+                                        shortListCandidateIds.contains(candidateWithItsList.candidate().id())),
+                                Collectors.toList())));
         return new RecommendationsResponse(
                 scan.scannedAt(),
                 scan.candidates().size(),
@@ -196,11 +232,19 @@ public class RecommendationsReadService {
                 analysis -> conIdByCandidateId.get(analysis.scanCandidateId()), analysis -> analysis));
     }
 
-    /** The candidates in one of the lists, in the page's order; a candidate in no list is left out. */
-    private List<CandidateWithItsList> candidatesWithTheirLists(List<ScanCandidateEntity> candidates,
+    /**
+     * The scan's candidates in one of the lists, in the page's order, each with its analysts' target from the stored
+     * Dow Jones targets — the half year counted back from the scan's day; a candidate in no list is left out.
+     */
+    private List<CandidateWithItsList> candidatesWithTheirLists(ScanEntity scan,
                                                                 Map<Integer, List<DailyClose>> dailyClosesByConId) {
-        return candidates.stream()
-                .map(candidate -> candidateWithItsListOf(candidate, dailyClosesByConId))
+        Set<Integer> conIds = scan.candidates().stream().map(ScanCandidateEntity::conId).collect(Collectors.toSet());
+        Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId =
+                analystPriceTargetRepository.analystPriceTargetsByConId(conIds);
+        LocalDate scanDate = dateOf(scan.scannedAt());
+        return scan.candidates().stream()
+                .map(candidate -> candidateWithItsListOf(candidate, dailyClosesByConId,
+                        analystPriceTargetsByConId.getOrDefault(candidate.conId(), List.of()), scanDate))
                 .flatMap(Optional::stream)
                 .sorted((firstCandidate, secondCandidate) ->
                         firstCandidate.hotStock().comparePlaceInList(secondCandidate.hotStock()))
@@ -209,32 +253,41 @@ public class RecommendationsReadService {
 
     /** Empty when the stock is in no list: no stored closes, or no long upward trend. */
     private Optional<CandidateWithItsList> candidateWithItsListOf(ScanCandidateEntity candidate,
-                                                  Map<Integer, List<DailyClose>> dailyClosesByConId) {
+                                                                  Map<Integer, List<DailyClose>> dailyClosesByConId,
+                                                                  List<AnalystPriceTarget> analystPriceTargets,
+                                                                  LocalDate scanDate) {
         Momentum momentum = Momentum.of(dailyClosesByConId.getOrDefault(candidate.conId(), List.of()),
                 dailyClosesByConId.getOrDefault(Benchmark.SPY_CON_ID, List.of()));
         if (momentum == null) {
             return Optional.empty();
         }
         HotStockCalculator hotStock = new HotStockCalculator(momentum);
-        return hotStock.label() == null ? Optional.empty() : Optional.of(new CandidateWithItsList(candidate, hotStock));
+        if (hotStock.label() == null) {
+            return Optional.empty();
+        }
+        AnalystTargetCalculator analystTarget =
+                new AnalystTargetCalculator(analystPriceTargets, momentum.lastClose(), scanDate);
+        return Optional.of(new CandidateWithItsList(candidate, hotStock, analystTarget));
     }
 
     /**
      * @param latestAnalysis {@code null} while the stock has never been analyzed
      * @param scanDate       the day the timing note counts from
+     * @param inShortList    the full run analyzes it
      */
     private HotStockResponse hotStockResponseOf(CandidateWithItsList candidateWithItsList,
                                                 List<HoldingEntity> openHoldings,
                                                 Map<Integer, List<DailyClose>> dailyClosesByConId,
                                                 long accountOwnerId,
                                                 StockAnalysisEntity latestAnalysis,
-                                                LocalDate scanDate) {
+                                                LocalDate scanDate,
+                                                boolean inShortList) {
         ScanCandidateEntity candidate = candidateWithItsList.candidate();
         HotStockCalculator hotStock = candidateWithItsList.hotStock();
         Stock finnhubStock = latestAnalysis == null ? null : latestAnalysis.finnhubStock();
         StockAnalysisResult analysisResult = latestAnalysis == null ? null : latestAnalysis.result();
-        RecommendationCandidate recommendationCandidate =
-                new RecommendationCandidate(candidate.id(), hotStock, finnhubStock, analysisResult);
+        RecommendationCandidate recommendationCandidate = new RecommendationCandidate(candidate.id(), hotStock,
+                candidateWithItsList.analystTarget(), finnhubStock, analysisResult);
         // counted from the day of the analysis, as the recommendation counted it
         LocalDate analysisDate = latestAnalysis == null ? null : dateOf(latestAnalysis.analyzedAt());
         NewsScoreCalculator newsScore = analysisResult == null ? null
@@ -268,7 +321,10 @@ public class RecommendationsReadService {
                 newsScore == null ? List.of() : newsScore.countedAnalystMoves(),
                 riskSignsChecked ? recommendationRule.riskWeightOf(recommendationCandidate) : null,
                 riskSignsChecked ? recommendationRule.scoreOf(recommendationCandidate) : null,
-                recommendationRule.canBePicked(recommendationCandidate));
+                recommendationRule.canBePicked(recommendationCandidate),
+                new AnalystTargetResponse(candidateWithItsList.analystTarget()),
+                inShortList,
+                recommendationRule.reasonsNotPickable(recommendationCandidate));
     }
 
     private LocalDate dateOf(Instant instant) {

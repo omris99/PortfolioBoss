@@ -79,17 +79,24 @@ addition (each stock's news-score parts, `riskWeight`, `score`, `canBePicked`, s
 the real database since the first full run from the page (2026-10-27). After that run the user kept the rule as it is (a
 stock with no risk sign and no news scores 0 and can be picked), and asked for the analyst actions without a price target
 to be hidden and the detail line to be one labeled line. **Claude doesn't explain the picks** (dropped: it would justify a
-pick it didn't make) **nor choose them** (session 0: the same input gave two picks, then none). Session 5 (the
-measurement) comes after.
+pick it didn't make) **nor choose them** (session 0: the same input gave two picks, then none). Then decision 14
+(2026-10-29, session 4ב): two of the three picks of 27.10 were below the analysts' target, and the user wants **at least
+15% upside by the analysts** — so every scan now reads each stock's **Dow Jones headlines** through IB's API (free on this
+account; IB's scanner filter for it was refused, Finnhub's targets are paid), the code reads each firm's price target out
+of them, and the short list is the first 10 HOT stocks whose **median** target (each firm's latest of half a year, 3
+firms at least) is 15%+ above the last close. Session 4ב is built (437 tests, the UI build) and the database was backed up
+before V12; its live check — `./run.sh` applying V12 and the scan reading the headlines, then the browser — is next.
+Session 5 (the measurement) comes after.
 
 ## Hard invariant: read-only
 
 PortfolioBoss reads the account and **never places, modifies, or cancels an order**. `IbGateway`
 deliberately exposes no order-placement method, and `PortfolioWrapper` overrides only the
 account-reading callbacks, for the momentum the daily-bar ones (`historicalData` / `historicalDataEnd`), and for the
-Recommendations page the scanner's (`scannerData` / `scannerDataEnd`) and the contract details' (`contractDetails` /
-`contractDetailsEnd`) — reads too: `IbGateway` sends `reqScannerSubscription` and, after the scan's first answer,
-`cancelScannerSubscription`, and `reqContractDetails`. Do not add `placeOrder`, `cancelOrder`, or order-related `EWrapper`
+Recommendations page the scanner's (`scannerData` / `scannerDataEnd`), the contract details' (`contractDetails` /
+`contractDetailsEnd`) and Dow Jones's headlines' (`historicalNews` / `historicalNewsEnd`) — reads too: `IbGateway` sends
+`reqScannerSubscription` and, after the scan's first answer, `cancelScannerSubscription`, `reqContractDetails` and
+`reqHistoricalNews`. Do not add `placeOrder`, `cancelOrder`, or order-related `EWrapper`
 callbacks — if a task seems to need them, it is the wrong project. The drawer's Weight tab says how many shares to sell
 or buy, and that is all it does: it is a calculation on screen that sends nothing anywhere and saves nothing. Likewise
 "recommended" means picked by rules in code, not a price forecast, and nothing is bought.
@@ -159,8 +166,13 @@ pins the JSON contract the UI depends on with made-up responses, no database nee
 the derived math; `PortfolioWrapperTest` feeds `PortfolioWrapper` IB callbacks directly, no socket — the portfolio's,
 the scans' (only a scan's first answer kept, an error ending it, code 165 not ending it, the cancel's confirmation after
 the end ignored), the contract details' and the daily closes' (an error ending one request, a request still running at
-the timeout, an unreadable bar date); `ScanTest` how two scans' rows and the contract details become candidates (one per
-stock, NYSE / NASDAQ only, the left-out ones named);
+the timeout, an unreadable bar date), and Dow Jones's headlines (each contract's with their time, a late headline of an
+earlier round dropped, an unreadable time skipped); `ScanTest` how two scans' rows and the contract details become
+candidates (one per stock, NYSE / NASDAQ only, the left-out ones named); `PriceTargetHeadlineReaderTest` the four forms of
+a target headline (copied from the real feed), a thousands separator and an `&amp;`, the company matched by the start of
+each word of IB's name (HPE's "Ent", "The Trade Desk"), another company's target left out (Asset Entities in ASST's feed,
+Apple against APPLIED MATERIALS) and what isn't a target; `NewsHeadlinePagingTest` the pages back (a full page asks for
+the one before it; a short, empty, repeated or half-year-old one ends the stock);
 `MomentumTest` covers the momentum score on made-up series of closes (decision 5's two-day-drop example among them) and
 the year's figures (IB's year starting a day late still a full year, a young stock's months).
 `HotStockCalculatorTest` (the 15% and 5–15% limits, no long trend, the page's order), `ReturnsCorrelationTest` (1 and
@@ -168,13 +180,18 @@ the year's figures (IB's year starting a day late still a full year, a young sto
 change), `RecommendationCandidateTest` (each risk sign at its limit, a missing figure raising none, no Finnhub figures at
 all, the 14 / 15 days of the timing note, the news score from the analysis), `NewsScoreCalculatorTest` (every weight of
 the table, a partnership without a size, `NOT_IN_THE_LIST` 0, an analyst's move without a target or 31 days old, the
-parts the page shows — every event, only the moves that count) and
+parts the page shows — every event, only the moves that count), `AnalystTargetCalculatorTest` (each firm's latest target,
+the half year's first day counted, the median of an odd and an even count, a pre-split target not moving it, under three
+firms no target, exactly 15% enough) and
 `RecommendationCalculatorTest` (a pick weighs 2 at most, the order, good news before the list's order but never past the
-risk limit, bad news after) cover the Recommendations rules.
+risk limit or the target rule, bad news after, the target exactly 15% / 14.9% / below the price / of two firms, the
+reasons in the order of the checks) cover the Recommendations rules.
 `PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
 `ManualPositionWriteServiceTest` and `InvestorWriteServiceTest` are `@DataJpaTest`s against the real
 `portfolioboss_test` database (`src/test/resources/application-test.properties`, `@ActiveProfiles("test")`), each test
-rolled back automatically. The write endpoints are tested in the same two halves: `HoldingWriteControllerTest`,
+rolled back automatically. The test profile caps each context's pool at 3 connections: Spring keeps every test context
+it builds, and ten database test classes at the default 10, with a running `./run.sh`'s 10, passed PostgreSQL's 100
+("too many clients already", 2026-10-29). The write endpoints are tested in the same two halves: `HoldingWriteControllerTest`,
 `ManualPositionWriteControllerTest` and `InvestorWriteControllerTest` (`@WebMvcTest`, service mocked) for status
 codes, validation messages and the JSON-only rule, the `*WriteServiceTest`s for what is stored. `ClosedPositionTest`
 and `HoldingHistoryTest` cover the average-cost math, `InvestorSummaryCalculatorTest` (INVESTORS_TODO.md's worked
@@ -199,12 +216,15 @@ The Recommendations side: `RecommendationsReadServiceTest` (`@DataJpaTest`, six 
 shaped for their lists) the lists, the stocks in none, a correlation of 1, a stock already held, a stock keeping its
 latest analysis from an earlier scan with its risk signs and timing note, what a news score is made of with the weight and
 score the pick would give, `riskSigns` / `riskWeight` / `score` `null` and `canBePicked` false without Finnhub's figures,
-the latest recommendation with its own scan's date; `RecommendationAnalysisServiceTest` (`@DataJpaTest`, Tavily, Claude
-and Finnhub `@MockitoBean`s, thirteen made-up stocks — HOT01 … HOT11 a little more stretched each) the first ten HOT
-analyzed and three picked, the price Claude is told, Finnhub's answer stored, a pick over the risk limit, the lighter risk
-and good news first, Finnhub failing, Claude failing, one candidate without a pick, the picks stored in order (an empty
-list too), 503 without a key — the full run without Finnhub's —, 404; `RecommendationAnalysisControllerTest` its JSON
-(`picks` `null` for one stock), 415, 503, 404 and 405;
+the latest recommendation with its own scan's date, the analysts' target from the stored targets (only HOTA has any),
+the reasons of a stock never analyzed, the short list (`shortListOfLatestScan`, and `inShortList`) and none before a scan;
+`RecommendationAnalysisServiceTest` (`@DataJpaTest`, Tavily, Claude and Finnhub `@MockitoBean`s, thirteen made-up stocks
+— HOT01 … HOT11 a little more stretched each —, three firms' targets 30% above each) the first ten HOT analyzed and three
+picked, two stocks with too little upside left off the short list (HOT11 then on it), none with enough upside — nothing
+searched or asked, an empty recommendation stored —, a pick's upside, the price Claude is told, Finnhub's answer stored, a
+pick over the risk limit, the lighter risk and good news first, Finnhub failing, Claude failing, one candidate without a
+pick, the picks stored in order (an empty list too), 503 without a key — the full run without Finnhub's —, 404;
+`RecommendationAnalysisControllerTest` its JSON (`picks` `null` for one stock), 415, 503, 404 and 405;
 `RecommendationsControllerTest` its JSON, 503 and 405; `ScanServiceTest` (`@DataJpaTest`, `TwsReader` a `@MockitoBean`:
 **no test connects to TWS**) a scan stored with its closes, 409 and 503 storing nothing; `ScanControllerTest` the status
 codes and the JSON-only rule; `FinnhubClientTest` Finnhub's two calls against a fake Finnhub (`MockRestServiceServer`,
@@ -272,9 +292,12 @@ Main (Spring Boot: brings the web server up, then Spring runs the runner)
   └──> TwsPortfolioRunner ──asks ScanSchedule whether a scan is due, then──> TwsReader (the one place that connects;
         │                                                                     one reading at a time)
         │        TwsReader ──> IbGateway ──owns──> PortfolioWrapper ──> Holding (+conId), PortfolioSnapshot, Scan
-        │                      (socket + reader loop)  (EWrapper callbacks,  (rows + contract details), DailyClose (a
-        │                                               three RequestBatches) year per holding, SPY and scanned stock)
-        ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state · daily_close · scan)
+        │                      (socket + reader loop)  (EWrapper callbacks,  (rows + contract details + the analysts'
+        │                                               RequestBatches)       price targets in Dow Jones's headlines),
+        │                                                                     DailyClose (a year per holding, SPY and
+        │                                                                     scanned stock)
+        ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state · daily_close · scan ·
+        │                                                      analyst_price_target)
         └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser
 
 PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
@@ -283,14 +306,16 @@ PortfolioController ──reads── PortfolioReadService ──reads── Pos
         │                      ConsensusCalculator, AnalystTrendCalculator, SignalCalculator)
         └──JSON──> ui/ (React; the dev server proxies /api to :8080)
 
-RecommendationsController ──reads── RecommendationsReadService ──reads── Postgres (the latest scan, its stocks' closes,
-        │                           (with calculation/Momentum,             each stock's latest analysis by conId, the
-        │                            HotStockCalculator, ReturnsCorrelation, latest investment_recommendation)
+RecommendationsController ──reads── RecommendationsReadService ──reads── Postgres (the latest scan, its stocks' closes
+        │                           (with calculation/Momentum,             and analysts' price targets, each stock's
+        │                            HotStockCalculator, ReturnsCorrelation, latest analysis by conId, the latest
+        │                            AnalystTargetCalculator,               investment_recommendation)
         │                            RecommendationCandidate, NewsScoreCalculator)
         └──JSON──> ui/'s Recommendations page
 
-ScanController ──> ScanService ──> TwsReader.readScan() ──> TWS (a scan, contract details, closes; read-only, free)
-        ▲                  └──writes──> Postgres (PortfolioSyncService.syncScan: a scan row and its closes only)
+ScanController ──> ScanService ──> TwsReader.readScan() ──> TWS (a scan, contract details, Dow Jones's headlines,
+        ▲                  │                                     closes; read-only, free)
+        │                  └──writes──> Postgres (PortfolioSyncService.syncScan: a scan row, its targets and closes)
         └──JSON── POST /api/scans — only from the Recommendations page's Scan again, then a reload
 
 AnalysisController ──> AnalysisService ──> StockAnalysisPipeline ──per stock, all at once──> TavilyClient ──> Tavily
@@ -301,7 +326,9 @@ AnalysisController ──> AnalysisService ──> StockAnalysisPipeline ──p
 
 RecommendationAnalysisController ──> RecommendationAnalysisService ──> StockAnalysisPipeline (the same, per stock)
         ▲                            (the short list: the first 10 HOT ──> FinnhubClient ──HTTPS──> Finnhub (beside it)
-        │                             of RecommendationsReadService)    then RecommendationCalculator: the pick (code)
+        │                             with the analysts' target 15%+,   then RecommendationCalculator: the pick (code)
+        │                             RecommendationsReadService
+        │                             .shortListOfLatestScan)
         │                                    └──writes──> Postgres (stock_analysis rows of scanned stocks, with
         │                                                 Finnhub's answer; an investment_recommendation row per full run)
         └──JSON── POST /api/recommendations/analysis — {} the short list and the pick (Analyze & recommend), or one
@@ -337,7 +364,10 @@ The sync-at-connection lifecycle, which is the part worth knowing:
    connected**: when `withScan` (the runner asked `ScanSchedule` first), the scans for hot stocks
    (`IbGateway.requestHotStockScans`: `SCAN_histPerfRatio3m_DESC` and `…6m_DESC`, `STK.US.MAJOR`, `CORP`, the filters
    `priceAbove` 15, `marketCapAbove1e6` 2,000, `avgVolumeAbove` 1,000,000 — `ib.HotStockScan` —, up to 50 rows each,
-   10s), then `reqContractDetails` for every stock found (15s) — a scan's row carries no exchange or sector; then the
+   10s), then `reqContractDetails` for every stock found (15s) — a scan's row carries no exchange or sector —, then half a
+   year of Dow Jones's headlines of every stock kept (`IbGateway.requestNewsHeadlines`: `reqHistoricalNews`, provider
+   `DJ-N`, 300 a page, every stock at once, round after round back in time — `ib.NewsHeadlinePaging`, at most 8 rounds of
+   20s) and the analysts' price targets in them (`ib.PriceTargetHeadlineReader`, decision 14); then the
    daily closes: `IbGateway.requestDailyCloses` sends one `reqHistoricalData` per contract
    — every holding, SPY (`ib.Benchmark.SPY_CON_ID` = 756733, IB's fixed id, requested whether or not SPY is
    held) and every stock the scan kept, by conId + `SMART`, `"1 Y"` of `"1 day"` `TRADES` bars, regular hours, dates as
@@ -373,9 +403,11 @@ small wrapper on purpose.
 Error handling note: `INFO_CODES` in `PortfolioWrapper` filters IB's informational status codes
 (165 — a scan's "50 out of 992 items retrieved", which ended a scan before its rows in session 0 —, 2104, 2106, …) to
 stdout; codes 502/504 mean connection failure and release the latch early so the
-program reports a clear message instead of waiting out the timeout. The scans, the contract details and the daily
-closes are three `ib.RequestBatch<Key, Answer>`s (one per kind: requests numbered from 100, 5000 and 1000, each answered
-and then ended by its end callback or an error): an error carrying one of a batch's request ids (162, no market data
+program reports a clear message instead of waiting out the timeout. The scans, the contract details, Dow Jones's
+headlines and the daily closes are `ib.RequestBatch<Key, Answer>`s (one per kind: requests numbered from 100, 5000,
+10,000 and 1000, each answered and then ended by its end callback or an error; the headlines a new batch per round of
+pages, `PortfolioWrapper.startNewsRound`, numbered from its own thousand, so that a late answer of an earlier round is
+dropped, its id unknown to the current one): an error carrying one of a batch's request ids (162, no market data
 permission) ends that one request without answers (`[ib error] daily closes of contract …`) — a contract keeps the
 closes of an earlier sync; an error after the request ended (IB confirming a cancelled scan) is dropped without a line,
 and so is an answer after the end (a scan updating itself). The answers arrive on the reader thread while the startup
@@ -390,8 +422,25 @@ it in `ib`, and so do the scan's: `ScanRow` (one row of one scan), `StockContrac
 the scan row's `marketName`, which for many NYSE stocks is the symbol —, name, industry, category; named after
 `reqContractDetails`, and not plain `ContractDetails`, the IB class `PortfolioWrapper` reads it from), `Scan` (the rows
 and the contract details, from which `candidates()` derives one `ScanCandidate` per stock, NYSE / NASDAQ only, with its place in each scan,
-and `leftOutStocks()` the console line), and `TwsReading` / `ScanReading`. What IB reports lives with the code that reads
-it, and `calculation`, `db` and `api` use only these records, never the IB API itself.
+and `leftOutStocks()` the console line; and, since decision 14, `analystPriceTargetsByConId` — a second constructor
+without it, for before the headlines are read, and `withAnalystPriceTargets(…)`, the same scan with them), and
+`TwsReading` / `ScanReading`. The headlines' (decision 14, 2026-10-29): `NewsHeadline` (IB's time, article id and text;
+`TIME_FORMAT` is how IB writes a time and wants one back), `NewsHeadlinePaging` (each stock's pages back in time: a stock
+is done when its page was not full, brought nothing new, came back empty or reached half a year), `PriceTargetHeadlineReader
+(companyName)` (a record: `priceTargetIn(headline)`) and `AnalystPriceTarget(publishedAt, firm, priceTarget,
+previousPriceTarget, headline)`, whose `MONTHS_COUNTED` (6) is both how far back the scan reads and the half year the
+median is taken over. What IB reports lives with the code that reads it, and `calculation`, `db` and `api` use only these
+records, never the IB API itself. Things that are easy to break:
+- IB's `reqHistoricalNews` answers with the headlines *before* `startDateTime` and ignores `endDateTime` — the opposite of
+  their names (tried 2026-10-29: a start of 2025-10-29 brought headlines of 2024–2025) —, so a page back puts the oldest
+  headline so far in `startDateTime`. `DJ-N` keeps about half a year; Briefing.com's `BRFUPDN` goes back years but is
+  sparse and isn't read.
+- Dow Jones writes a target in four forms only — "X Price Target Raised to $450.00/Share From $300.00 by Firm", "Cut to",
+  "Maintained With a", "Announced at" (no "/Share" after the "From" amount) —; "Price Target Set" is only IBD's "SpaceX
+  IPO Price Target Set". A new wording drops targets without an error: the `[ib] analysts' price targets` line shows it.
+- A stock's feed carries other companies' headlines: a target counts only when each word of Dow Jones's name is the start
+  of IB's word in the same place ("Hewlett Packard Ent" ↔ "HEWLETT PACKARD ENTERPRISE"; a leading "The" skipped). A plain
+  "letters in order" match was rejected: "Apple" would have matched "APPLIED MATERIALS".
 
 The database layer, `portfolioboss.db`, is now connected to the flow: `PortfolioSyncService.sync` runs
 once per connection (called from `TwsPortfolioRunner`, step 5 above), and the API reads only from the
@@ -453,6 +502,12 @@ again. `V11__investment_recommendations.sql` (on the real database since the fir
 added `investment_recommendation` (`InvestmentRecommendationEntity`: `scan_id`, `recommended_at`, `picks` — the
 picked `scan_candidate` ids in order, as a JSON list; an empty list when none qualified, an answer the measurement counts);
 only the picks: why each was picked is worked out again from its stored analysis.
+`V12__analyst_price_targets.sql` (2026-10-29, decision 14; backed up before, not on the real database until the next
+`./run.sh`) added `analyst_price_target` (`AnalystPriceTargetEntity`: `con_id`, `published_at`, `firm`, `price_target`,
+`previous_price_target` — `NULL` when the headline names none —, `headline`; the firm and the headline `TEXT`, so that no
+length can fail a scan; an index on `con_id`, no `UNIQUE`): one row per target headline, keyed by contract id like
+`daily_close`. `storeScan` stores the scan's targets with it: a stock whose headlines were read gets them in place of the
+old ones (an empty list too), one whose headlines didn't come keeps its old ones.
 `HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
@@ -466,11 +521,12 @@ NOT NULL`: `DISTINCT ON` would keep one of the scanned stocks' rows as if it wer
 day's scan keeps its analysis; `conIds` must not be empty, PostgreSQL refuses `IN ()`), `ScanRepository`
 (`findFirstByOrderByScannedAtDesc`, its candidates read lazily — an `@EntityGraph` with a "first" would load every scan
 into memory —, and `findLatestScannedAt`, a `max` in JPQL), `ScanCandidateRepository` (`findAllById` only: which stock an
-analysis or a pick of an earlier scan was of) and `InvestmentRecommendationRepository`
-(`findFirstByOrderByRecommendedAtDesc`) are the repositories.
+analysis or a pick of an earlier scan was of), `InvestmentRecommendationRepository`
+(`findFirstByOrderByRecommendedAtDesc`) and `AnalystPriceTargetRepository` (`findByConIdIn`, its default method
+`analystPriceTargetsByConId` — empty for no contract —, and `deleteForContracts`, like the closes') are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V12__….sql`.
+  checksum): a schema change is a new `V13__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -492,9 +548,10 @@ Things that are easy to break:
   `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
-  database and compared table by table first). One that only adds a table or a column (V5, V6, V7, V9, V10, V11) or a
-  constraint (V8, after counting the rows it would refuse: none; V10's, which every stored row met) still gets the backup
-  first, checked for the same row counts as the database. `backup-db.sh` names a backup by the day, so a second backup
+  database and compared table by table first). One that only adds a table or a column (V5, V6, V7, V9, V10, V11, V12) or
+  a constraint (V8, after counting the rows it would refuse: none; V10's, which every stored row met) still gets the
+  backup first, checked for the same row counts as the database (V12's: each table's `COPY` rows in the dump against a
+  `count(*)`, 12 of 12 equal, 2026-10-29). `backup-db.sh` names a backup by the day, so a second backup
   the same day overwrites the first: rename the earlier one first (2026-10-27: `…-before-V10.sql.gz`). A live check that writes test data (a made-up investor) runs against a
   scratch copy too, pointed at with `SPRING_DATASOURCE_URL`: there is no way to delete an investor.
 
@@ -502,15 +559,15 @@ Things that are easy to break:
 files were not calculations: `HoldingHistory`, `ClosedPosition`, `TradeFact`, for the investors `PositionTrades`,
 `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, for the momentum `Momentum`, for the
 analysis `ConsensusCalculator`, `AnalystTrendCalculator` and `SignalCalculator`, for the Recommendations page
-`HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `RecommendationCandidate`, `RecommendationCalculator` and
-`NewsScoreCalculator`, and `OrderCommission` (the default commission) — pure Java, no
+`HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `AnalystTargetCalculator`, `RecommendationCandidate`,
+`RecommendationCalculator` and `NewsScoreCalculator`, and `OrderCommission` (the default commission) — pure Java, no
 Spring and no database, so it is unit tested directly. What it computes on comes from four packages of plain data:
 `ib` (what IB reports, above), `ai` (Claude's answer, below), `stocks` (Finnhub's) and **`model`** — the values the
 whole app shares: the enums the entities and the JSON share with the computation (`TradeSide`, `HoldingStatus`,
 `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the
-labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`), `AnalystConsensus`, and the
-news score's parts with their points (`WeighedNewsEvent`, `WeighedAnalystMove`) (see Conventions for which package uses
-which).
+labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`, `NotPickableReason`),
+`AnalystConsensus`, and the news score's parts with their points (`WeighedNewsEvent`, `WeighedAnalystMove`) (see
+Conventions for which package uses which).
 A holding's
 `firstBuyDate`, `lastSellDate`, `holdingDays` and closed positions are derived from its `trade` rows, never stored:
 `HoldingHistory.of(List<TradeFact>)` walks them in chronological order (a buy before a sell on the same date) tracking
@@ -607,9 +664,27 @@ New York close (`latestMarketClose()`, 16:00 on a weekday, holidays unknown) cam
 measured in New York because the market closes late in the evening here. The thresholds (15%, 5–15%, 0.7, 100 days) are
 opening numbers the measurement of session 5 is meant to test.
 
-The recommendation (RECOMMENDATIONS_TODO.md, decisions 5 and 13, session 3) is picked by code. `RecommendationCandidate
-(candidateId, hotStock, stock, analysis)` — a scanned stock as the pick sees it: Finnhub's `Stock` and Claude's
-`StockAnalysisResult`, each `null` without one — gives `riskSigns()` (`model.RiskSign`, in its order: `LOSES_MONEY` net
+The analysts' target (RECOMMENDATIONS_TODO.md, decision 14, session 4ב, 2026-10-29) is derived on every read too, from the
+stored Dow Jones targets: `AnalystTargetCalculator(targets, lastClose, scanDate)` — `latestTargetOfEachFirm()` (each
+firm's latest target of the half year before the scan's day, that day's first one included — `AnalystPriceTarget
+.MONTHS_COUNTED` —, the newest first), `firmCount()`, `medianTarget()` (the middle one, or the average of the two in the
+middle; `null` under **3 firms** — an opinion, not a target, the user's rule), `upsidePercent()` against the last close,
+and `hasEnoughUpside()` — **15%** or more, exactly 15% included through a `ROUNDING_TOLERANCE` as in `HotStockCalculator`
+($115 against $100 is 14.999999999999991%). The short list is the first 10 HOT stocks with enough upside
+(`RecommendationsReadService.shortListOfLatestScan()`, an `api.ShortList(scanId, hotStockCount, withEnoughUpsideCount,
+candidates)`), so the list's order decides who is analyzed only when more than 10 pass. Things that are easy to break:
+- The **median, not the average** (the user's choice after it was found): a target is in the price terms of its own day,
+  and CRWD split 1:4 in July 2026 — its firms' targets $600–825 before, $230–300 after, IB's closes already adjusted. With
+  some firms not updated since, the average came out +4.8%, the median −5.8%. A limit on a target's distance from its
+  day's close doesn't separate them: real targets reached 2.85 times the close (ASST, NIQ), the pre-split ones began at 2.3.
+- On the 41 HOT stocks of 2026-10-27: 7 with enough upside (SNOW, PRCH, ADPT, PLTR, PENG, ASST, HPE), and on the 11 that had
+  a MarketBeat consensus too, the two on the same side of 15% every time (decision 14 has the comparison with Tavily: 47
+  of its 59 moves with a target found in Dow Jones the same, none contradicting).
+
+The recommendation (RECOMMENDATIONS_TODO.md, decisions 5, 13 and 14, sessions 3 and 4ב) is picked by code.
+`RecommendationCandidate(candidateId, hotStock, analystTarget, stock, analysis)` — a scanned stock as the pick sees it: its
+`AnalystTargetCalculator`, Finnhub's `Stock` and Claude's `StockAnalysisResult`, the last two `null` without one — gives
+`riskSigns()` (`model.RiskSign`, in its order: `LOSES_MONEY` net
 margin below 0, `HIGH_DEBT` debt more than twice the equity, `EXPENSIVE` P/E above 50, `REVENUE_FALLING` growth below 0,
 `RECOVERING` from `HotStockCalculator.recovering()`; a figure Finnhub didn't give raises no sign — a loss-making company
 has no P/E), `hasCompanyFacts()` (at least one of the four figures: without any, "no sign" only means "not checked", and
@@ -620,12 +695,14 @@ every other kind by kind (`GUIDANCE_RAISED` +3, `EARNINGS_BEAT` +2, `REGULATORY_
 `GUIDANCE_CUT` −3, `EARNINGS_MISS` −2, `SHARE_OFFERING` −2, `LAWSUIT_OR_REGULATION` −2, `NOT_IN_THE_LIST` 0) — and the
 analysts' upgrades (+2) and downgrades (−2) of `recentActions` that state a price target and are from the 30 days before
 `today` (a rating alone moves nothing, as in the trend: the grading services drop out with no list of names).
-`RecommendationCalculator(shortList, today).picks()`: the stocks with Finnhub's figures whose signs weigh **2 at most**
-(`LOSES_MONEY` 1, `HIGH_DEBT` 2, `EXPENSIVE` 1, `REVENUE_FALLING` 3, `RECOVERING` 1 — the user's weights: the risks don't
-all threaten the same), then the highest `scoreOf` — the news score less the risks' weight — first, on a tie the list's
-order, up to 3; none qualifying is "no recommendation this time". The limit is a filter, never offset: it was 4 until
-the news could add, and a loss with a debt 16.8 times the equity (3) then passed on one partnership. All the weights and
-limits are opening numbers. Things that are easy to break:
+`RecommendationCalculator(shortList, today).picks()`: the stocks that `canBePicked` — no `reasonsNotPickable(candidate)`
+(`model.NotPickableReason`, in the order of the checks: `NO_ANALYST_TARGET` or `TARGET_TOO_CLOSE` from the target, then
+`NO_COMPANY_FACTS` or `RISK_SIGNS_TOO_HEAVY` — signs that weigh more than **2** —; a stock can have one of each) —, the
+signs weighed `LOSES_MONEY` 1, `HIGH_DEBT` 2, `EXPENSIVE` 1, `REVENUE_FALLING` 3, `RECOVERING` 1 (the user's weights: the
+risks don't all threaten the same), then the highest `scoreOf` — the news score less the risks' weight — first, on a tie
+the list's order, up to 3; none qualifying is "no recommendation this time". The target and the risk limit are filters,
+never offset by news: the risk limit was 4 until the news could add, and a loss with a debt 16.8 times the equity (3)
+then passed on one partnership. All the weights and limits are opening numbers. Things that are easy to break:
 - The two weight tables are `Map.of`s keyed by enum: a new `RiskSign` or `NewsEventType` without a weight is a
   `NullPointerException` on the first stock that has it — add both together.
 - Claude was stable on the kinds (three checks of 2026-10-27 on stored searches: 10 of 10) but not on magnitude where the
@@ -684,17 +761,23 @@ one `saveAll` — each with the very `StockSearches` Claude read (decision 22). 
 `StockAnalysisRun`), is the same figures as the line.
 
 `api.RecommendationAnalysisService` (2026-10-27, not `@Transactional` either) is the Recommendations page's paid run:
-`analyze(null)` takes the short list — the first 10 `HOT` of `RecommendationsReadService.candidatesWithTheirListsOfLatestScan()`,
-the page's own order (`api.CandidateWithItsList`: a candidate and its list, the user's name for it) —, `analyze(id)` one
+`analyze(null)` takes the short list — `RecommendationsReadService.shortListOfLatestScan()`: the first 10 `HOT` with the
+analysts' target 15%+ above the last close, in the page's own order (`api.CandidateWithItsList`: a candidate, its list —
+the user's name for it — and, since decision 14, its `AnalystTargetCalculator`) —, `analyze(id)` one
 candidate of any list (not in the latest scan's lists: 404). Keys missing: 503 — and for the full run a missing
 `FINNHUB_API_KEY` too, before anything is sent, since without Finnhub no stock can be picked. Claude is told the symbol,
 `"USD"` (NYSE / NASDAQ only) and the last stored close. Finnhub runs beside the pipeline on its own virtual threads (it
 answers in a second); without the key, or when a call fails (`[stocks error] SYMBOL: why`), the stock is analyzed and
-stored without Finnhub's answer — and can't be picked. The analyses are stored with `finnhub_stock`; after the full run
-`RecommendationCalculator` picks, the `[ai] recommended ABCD, WXYZ (of 10 analyzed)` or `[ai] no recommendation: none of
-10 qualified` line is printed, and an `investment_recommendation` row is stored (an empty short list stores none). The
-answer: `RecommendationAnalysisRunResponse(analysis, picks)` — `picks` of `RecommendationPickResponse(candidateId, symbol,
-riskSigns, reportsWithin14Days, newsScore, score)`, `null` for one candidate's run.
+stored without Finnhub's answer — and can't be picked. A separate Finnhub stage before the paid analysis was planned and
+dropped (the user's choice, 2026-10-29): the target already cuts the list to a handful, and it would have saved only a
+stock that passes the target and fails on its signs, at the cost of a table for Finnhub's answers without an analysis.
+The analyses are stored with `finnhub_stock`; after the full run `RecommendationCalculator` picks, the `[ai] recommended
+ABCD, WXYZ (of 7 analyzed; 7 of 41 hot stocks have the analysts' target 15% above the price)` or `[ai] no recommendation:
+none of 7 qualified (…)` line is printed, and an `investment_recommendation` row is stored whenever a scan exists — an
+empty one too when no stock had enough upside, with nothing searched or asked (the pipeline prints `[ai] analyzed 0 of
+0`). The answer: `RecommendationAnalysisRunResponse(analysis, picks)` — `picks` of `RecommendationPickResponse
+(candidateId, symbol, riskSigns, reportsWithin14Days, newsScore, score, targetUpsidePercent)`, `null` for one candidate's
+run.
 
 What is decided from an answer is code, derived on every read, so a change of rule applies to old analyses too:
 `ConsensusCalculator(sources, marketPrice).consensus()` (decision 16) chooses **MarketBeat first** — when one of its
@@ -829,11 +912,15 @@ analyzed); appended in session 4, so that the page shows the rule's verdict with
 both from `NewsScoreCalculator`'s `weighedNewsEvents()` / `countedAnalystMoves()`, which `score()` now sums, and empty
 while never analyzed; `riskWeight` and `score` (`RecommendationCalculator.riskWeightOf` / `scoreOf`, `null` like
 `riskSigns`) and `canBePicked` (`RecommendationCalculator.canBePicked`, public since; false without Finnhub's figures) —
-asked of a `RecommendationCalculator` of that one stock, since none of it depends on the rest of a short list.
+asked of a `RecommendationCalculator` of that one stock, since none of it depends on the rest of a short list; appended
+in session 4ב (decision 14): `analystTarget` (an `AnalystTargetResponse(medianTarget, upsidePercent, hasEnoughUpside,
+firmCount, latestTargetOfEachFirm)` — the last a list of `ib.AnalystPriceTarget` as it is, `publishedAt` a local
+date-time —, known for every stock before any analysis), `inShortList` (the same short list the full run takes) and
+`reasonsNotPickable` (`model.NotPickableReason`s, in their order; `canBePicked` is "none").
 `latestRecommendation` is a `LatestRecommendationResponse(recommendedAt, scannedAt, picks)` — its own scan's
 date, and `PickedStockResponse(candidateId, conId, symbol)`s in order, found in today's lists by `conId` — or `null`
-before the first full run. No cost estimate here: the page quotes `/api/portfolio`'s `estimatedAnalysisCost` × 10, the
-same work per stock. `ui/src/types/recommendations.ts` mirrors them. `ScanController` /
+before the first full run. No cost estimate here: the page quotes `/api/portfolio`'s `estimatedAnalysisCost` × the
+stocks marked `inShortList`, the same work per stock. `ui/src/types/recommendations.ts` mirrors them. `ScanController` /
 `ScanService` serve `POST /api/scans` (JSON only, `{}`): `TwsReader.readScan()`, then `PortfolioSyncService.syncScan`, and
 200 with a `ScanRunResponse(scannedAt, candidateCount)`; `TwsBusyException` is 409, `TwsUnavailableException` 503, its
 user's message as the `detail`. `ScanService` is not `@Transactional`: no connection waits on TWS.
@@ -888,33 +975,43 @@ table, whose last column is the stock's Analyze). The columns are defined like `
 (`hotStockColumns.tsx`: `HOT_COLUMNS`, `TOO_HOT_COLUMNS`, `CORRECTING_COLUMNS`), cells on two lines, the figure then its
 mark: `InfoMark` (Pulled back, Moves together — grey, information) and `RiskSignTag` (the five risk signs, in the
 warning-sign tone, with the figure that raised each — "Expensive · P/E 52" — where there is room; `RiskSigns` sets a
-stock's in a row: "No risk signs" muted, "Not checked" without Finnhub's figures, "—" never analyzed). Under each analyzed
-Hot row, `AnalysisDetailLine`: one labeled line — "Risk signs … · Analysts BUY +18.1% IMPROVING · Earnings … · News +2"
+stock's in a row: "No risk signs" muted, "Not checked" without Finnhub's figures, "—" never analyzed). Every list has
+"Analysts' target" after the price (`TARGET_COLUMN`, decision 14, no new design round: the upside in its profit/loss tone
+as `TargetWithUpside` colors one, the firms under it, the median on hover — `AnalystTarget.tsx`). Under each analyzed
+Hot row, `AnalysisDetailLine`: one labeled line — "Risk signs … · Analysts BUY IMPROVING · Earnings … · News +2" (the
+MarketBeat upside left it in session 4ב: two different upsides on one row would confuse; it stays in the drawer)
 — and "Why it moves: …" in full under it when the news says (the user's pick, 2026-10-27, over the design's second header
 row of slots, which didn't line up with the columns and cut the reason); the row and its line hover and select together
 (`[&:has(+tr:hover)]` / `[tr:hover+&]`). `TimingNote` is the report within 14 days, outlined in the text color — never
 the warning tone; in the line only its date. The texts the lists and the drawer share are in `hotStockTexts.ts`.
 `RecommendationCard` has three states: none yet (an invitation with Analyze & recommend, primary, and the estimate),
 the picks (up to 3 `PickCard`s, numbered: name and IB's sector, the risk signs with their figures and the timing note, a
-line the code writes from the figures — pulled back, the analysts' target against the price, the earnings date —, "Score
-+4 · news +5 · risk signs weigh 1", and `NewsScoreParts`), or none qualified; then "Why not the others" — the rest of the
-first 10 of today's Hot list, each with its reason (no analysis, not checked, its signs and their weight, or its score
-below the picks) — shown only when the recommendation is of the latest scan, since only then is that its short list; a
-pick no longer in today's lists says so. `AnalyzeButtons.tsx`: `AnalyzeShortListControl` (Analyze & recommend, after a
-confirm: "Analyze the first 10 hot stocks? About $0.46 and 50 search credits…"), `RowAnalyzeButton` (the lists' last
+line the code writes from the figures — pulled back, Dow Jones's target against the price and its firms, the earnings
+date —, "Score +4 · news +5 · risk signs weigh 1", and `NewsScoreParts`), or none qualified; then "Why not the others" —
+every hot stock not picked: the analyzed ones one by one with their reason (no analysis, or `NotPickableReasons` — each
+API reason in words with its figure, shared with the Company tab —, or its score below the picks), the rest grouped by
+their target ("Past the first 10 with the analysts' target 15%+", "Analysts' target under +15%" with each one's upside,
+"No analysts' target, fewer than 3 firms") — shown only when the recommendation is of the latest scan, since only then
+are today's marks its own; a pick no longer in today's lists says so. `AnalyzeButtons.tsx`: `AnalyzeShortListControl`
+(Analyze & recommend, after a confirm: "Analyze the 7 hot stocks whose analysts' target is 15% or more above the price?
+About $0.33…"; disabled, with the reason, when none has one; the count is the stocks the API marks `inShortList` —
+`shortListCountsOf` / `shortListWords`, so the UI holds no 10), `RowAnalyzeButton` (the lists' last
 column: an icon, a confirm toward the left, the spinner while its own run runs, a triangle with the reason when it
 failed — its clicks, and the confirm's, which React counts as inside it, never open the row; the user's choice over a
 drawer-only button) and `AnalyzeCandidateButton` (the drawer's "Analyze KRVN", at once, like a holding's). The estimate
-is `/api/portfolio`'s `estimatedAnalysisCost` × the stocks (`SHORT_LIST_SIZE` = 10, a copy of the API's for the words).
+is `/api/portfolio`'s `estimatedAnalysisCost` × the stocks of the short list.
 `useRecommendationAnalysis` holds the page's one run (`RecommendationAnalysisState`: the short list's — `candidateId`
 `null` — or one stock's), so every button reads the same state and the others wait while one runs; it runs
 `analyzeRecommendations` then the reload. `NewsScore.tsx`: each part of a news score with its points ("+3 Partnership ·
 high: …", "−2 Downgraded by …"), points in the news's tones. A row (or a symbol in the card) opens `CandidateDrawer`
 (`/recommendations/:candidateId`, the holding drawer's `DrawerFrame`, the risk signs and timing note under the key
 figures once analyzed; ‹ › through the three lists): Summary — why it is in its list, the year, the stock, the holdings
-it moves with —, the existing `MomentumPanel`, Analysts & news (the shared `AnalysisPanel` with the news score's parts
-under the news), Company (`CompanyPanel`: the next earnings date, Finnhub's four figures each with its rule and the sign it
-raises, then "For the recommendation" — the signs' weight, whether it can be picked, the score) and If I buy
+it moves with —, the existing `MomentumPanel`, Analysts & news (first `AnalystTargetSection` — "Analysts' target · Dow
+Jones": the median and its upside, the rule, each firm's latest target with the one it replaced, the headline on hover;
+there before any analysis —, then the shared `AnalysisPanel` with the news score's parts under the news), Company
+(`CompanyPanel`: the next earnings date, Finnhub's four figures each with its rule and the sign it raises, then "For the
+recommendation" — the analysts' target, the signs' weight, whether it can be picked with every reason against it, the
+score) and If I buy
 (`weightCalculator/IfIBuyPanel`: an amount → whole shares at the last close, the commission, the stock's weight after
 and its sector's — of the money in stocks — on each weights tab, the cash checked; the sector picked from the user's
 sectors of open holdings, already picked when one of IB's two words matches one, or "A sector not held yet";
@@ -996,12 +1093,15 @@ Things that are easy to break:
   `[ib] requesting a year of daily closes for N contracts` and `[ib] daily closes received for N of M contracts`. The
   scan prints `[ib] scanning for hot stocks: …`, `[ib] requesting the contract details of N stocks`, `[ib] scans found N
   stocks, M of them on NYSE or NASDAQ`, `[ib] left out, not on NYSE or NASDAQ: XYZ (ARCA), …` when any is, `[ib] scan
-  skipped: …` when none is due and `[ib] scan unavailable: no scan answered`; storing it, `[db] stored a scan of N stocks`.
+  skipped: …` when none is due and `[ib] scan unavailable: no scan answered`; its Dow Jones headlines `[ib] requesting
+  half a year of Dow Jones headlines for N stocks`, `[ib] Dow Jones headlines still missing after 20s; keeping what
+  arrived` when a round runs late, and `[ib] analysts' price targets: N in the Dow Jones headlines of M of K stocks`;
+  storing it, `[db] stored a scan of N stocks` and `[db] stored N analysts' price targets for M stocks`.
   The
   analysis prints `[ai] analysis ready` (or `[ai] analysis off: … is not set`) at startup, `[ai] analyzed N of M stocks:
   N Tavily credits, N input and N output tokens, $N` per run, and `[ai error] SYMBOL: why` for a stock that failed; the
-  Recommendations page's full run then `[ai] recommended ABCD, EFGH, WXYZ (of 10 analyzed)` or `[ai] no recommendation:
-  none of 10 qualified`. Finnhub prints `[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)` at startup
+  Recommendations page's full run then `[ai] recommended ABCD, EFGH, WXYZ (of 7 analyzed; 7 of 41 hot stocks have the
+  analysts' target 15% above the price)` or `[ai] no recommendation: none of 7 qualified (…)`. Finnhub prints `[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)` at startup
   when its key is missing, and nothing when it is set; `[stocks error] SYMBOL: why` when a call fails during a run.
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
   `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`, `stocks` / `[stocks]`. `calculation`,
@@ -1078,7 +1178,8 @@ Things that are easy to break:
   and sector (TODO.md's principle 3) and a target-weight calculator are in — of the whole account and of each investor's
   own money —, in the UI only. RECOMMENDATIONS_TODO.md's scan, hot-stock lists and page (sessions 1 and 1b), Finnhub's
   client (session 2), the analysis and recommendation's backend (session 3) and their UI (session 4, with V11 and the
-  first full run from the page) are in; the measurement (session 5) is next.
+  first full run from the page) are in, and so is session 4ב (the analysts' target from Dow Jones, decision 14) — built,
+  its live check with V12 next; the measurement (session 5) comes after.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

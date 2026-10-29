@@ -1,20 +1,22 @@
 package portfolioboss.calculation;
 
+import portfolioboss.model.NotPickableReason;
 import portfolioboss.model.RiskSign;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
 /**
- * The recommendation of RECOMMENDATIONS_TODO.md, decisions 5 and 13, picked by rules in code — never by Claude, who
- * answered the same question differently from run to run. From the short list: the stocks Finnhub gave figures for,
- * whose risk signs weigh 2 at most together — whatever the news says —; then the highest news score less the risks'
- * weight first, and on a tie the order of the list (decision 1); up to 3. When none qualifies the answer is no
- * recommendation this time.
+ * The recommendation of RECOMMENDATIONS_TODO.md, decisions 5, 13 and 14, picked by rules in code — never by Claude, who
+ * answered the same question differently from run to run. From the short list: the stocks whose analysts' target is at
+ * least 15% above the price, that Finnhub gave figures for, and whose risk signs weigh 2 at most together — whatever the
+ * news says —; then the highest news score less the risks' weight first, and on a tie the order of the list (decision
+ * 1); up to 3. When none qualifies the answer is no recommendation this time.
  *
- * @param shortList the analyzed stocks of the short list — the first ones of HOT (decision 1), each that succeeded
+ * @param shortList the analyzed stocks of the short list — the first ones of HOT with enough upside, each that succeeded
  * @param today     the day of the analysis, for the analysts' moves the news score counts
  */
 public record RecommendationCalculator(List<RecommendationCandidate> shortList, LocalDate today) {
@@ -62,11 +64,28 @@ public record RecommendationCalculator(List<RecommendationCandidate> shortList, 
         return candidate.riskSigns().stream().mapToInt(WEIGHT_OF_RISK_SIGN::get).sum();
     }
 
-    /**
-     * Finnhub gave at least one of its figures, and the signs weigh 2 at most: whether the stock can be picked at all,
-     * before the scores are compared — what the page says about a stock analyzed but not picked.
-     */
+    /** No reason against it: whether the stock can be picked at all, before the scores are compared. */
     public boolean canBePicked(RecommendationCandidate candidate) {
-        return candidate.hasCompanyFacts() && riskWeightOf(candidate) <= MOST_RISK_WEIGHT_OF_A_PICK;
+        return reasonsNotPickable(candidate).isEmpty();
+    }
+
+    /**
+     * Why the stock can't be picked, in the order of {@link NotPickableReason} — what the page says about a stock not
+     * picked; empty when it can be. The target first, then Finnhub's figures: a stock can have one reason of each.
+     */
+    public List<NotPickableReason> reasonsNotPickable(RecommendationCandidate candidate) {
+        List<NotPickableReason> reasons = new ArrayList<>();
+        AnalystTargetCalculator analystTarget = candidate.analystTarget();
+        if (analystTarget.medianTarget() == null) {
+            reasons.add(NotPickableReason.NO_ANALYST_TARGET);
+        } else if (!analystTarget.hasEnoughUpside()) {
+            reasons.add(NotPickableReason.TARGET_TOO_CLOSE);
+        }
+        if (!candidate.hasCompanyFacts()) {
+            reasons.add(NotPickableReason.NO_COMPANY_FACTS);
+        } else if (riskWeightOf(candidate) > MOST_RISK_WEIGHT_OF_A_PICK) {
+            reasons.add(NotPickableReason.RISK_SIGNS_TOO_HEAVY);
+        }
+        return List.copyOf(reasons);
     }
 }

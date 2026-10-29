@@ -1,6 +1,7 @@
 package portfolioboss.api.response;
 
 import portfolioboss.model.HotStockLabel;
+import portfolioboss.model.NotPickableReason;
 import portfolioboss.model.RiskSign;
 import portfolioboss.model.WeighedAnalystMove;
 import portfolioboss.model.WeighedNewsEvent;
@@ -40,8 +41,12 @@ import java.util.List;
  * @param riskWeight          its risk signs' weights added up; {@code null} when the signs were never checked
  * @param score               the news score less {@code riskWeight} — what the picks are ordered by; {@code null} when
  *                            the signs were never checked
- * @param canBePicked         Finnhub's figures are there and the signs weigh 2 at most: the recommendation could pick it
- *                            if its score is among the highest
+ * @param canBePicked         no reason against it ({@code reasonsNotPickable} empty): the recommendation could pick it if
+ *                            its score is among the highest
+ * @param analystTarget       the analysts' target from its Dow Jones headlines (decision 14), against the last close —
+ *                            known before any analysis
+ * @param inShortList         among the first 10 HOT stocks with enough upside: the full run analyzes it
+ * @param reasonsNotPickable  why the recommendation can't pick it, in the order the checks run; empty when it can
  */
 public record HotStockResponse(
         long candidateId,
@@ -68,5 +73,8 @@ public record HotStockResponse(
         List<WeighedAnalystMove> countedAnalystMoves,
         Integer riskWeight,
         Integer score,
-        boolean canBePicked) {
+        boolean canBePicked,
+        AnalystTargetResponse analystTarget,
+        boolean inShortList,
+        List<NotPickableReason> reasonsNotPickable) {
 }

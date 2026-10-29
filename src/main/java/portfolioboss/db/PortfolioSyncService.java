@@ -2,6 +2,7 @@ package portfolioboss.db;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
@@ -24,7 +25,7 @@ import java.util.TreeMap;
  * Brings the database up to date with one snapshot from TWS, once per connection. A holding TWS reported is
  * created or refreshed; an open holding TWS no longer reports is marked closed, never deleted, so the
  * sector and trades entered by hand survive. The daily closes read on the same connection (for the momentum) and the
- * scan for hot stocks, when one ran, are stored with it.
+ * scan for hot stocks, when one ran, with the analysts' price targets of its stocks, are stored with it.
  *
  * <p>Everything happens in one transaction: either the whole snapshot is stored or nothing is.
  */
@@ -35,13 +36,16 @@ public class PortfolioSyncService {
     private final AccountStateRepository accountStateRepository;
     private final DailyCloseRepository dailyCloseRepository;
     private final ScanRepository scanRepository;
+    private final AnalystPriceTargetRepository analystPriceTargetRepository;
 
     public PortfolioSyncService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository,
-                                DailyCloseRepository dailyCloseRepository, ScanRepository scanRepository) {
+                                DailyCloseRepository dailyCloseRepository, ScanRepository scanRepository,
+                                AnalystPriceTargetRepository analystPriceTargetRepository) {
         this.holdingRepository = holdingRepository;
         this.accountStateRepository = accountStateRepository;
         this.dailyCloseRepository = dailyCloseRepository;
         this.scanRepository = scanRepository;
+        this.analystPriceTargetRepository = analystPriceTargetRepository;
     }
 
     /** When the latest stored scan ran; empty before the first one. */
@@ -119,6 +123,26 @@ public class PortfolioSyncService {
         dailyCloses.forEach((conId, closes) -> lastCloseByConId.put(conId, lastCloseOf(closes)));
         ScanEntity storedScan = scanRepository.save(new ScanEntity(scan, lastCloseByConId));
         System.out.printf("[db] stored a scan of %d stocks%n", storedScan.candidates().size());
+        storeAnalystPriceTargets(scan.analystPriceTargetsByConId());
+    }
+
+    /**
+     * A stock whose Dow Jones headlines were read gets their targets in place of the ones stored before — an empty list
+     * too: its headlines hold none now. One whose headlines did not come keeps its old ones, like the closes.
+     */
+    private void storeAnalystPriceTargets(Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId) {
+        if (analystPriceTargetsByConId.isEmpty()) {
+            return;
+        }
+        analystPriceTargetRepository.deleteForContracts(analystPriceTargetsByConId.keySet());
+        List<AnalystPriceTargetEntity> rows = analystPriceTargetsByConId.entrySet().stream()
+                .flatMap(stockTargets -> stockTargets.getValue().stream()
+                        .map(analystPriceTarget ->
+                                new AnalystPriceTargetEntity(stockTargets.getKey(), analystPriceTarget)))
+                .toList();
+        analystPriceTargetRepository.saveAll(rows);
+        System.out.printf("[db] stored %d analysts' price targets for %d stocks%n",
+                rows.size(), analystPriceTargetsByConId.size());
     }
 
     private DailyClose lastCloseOf(List<DailyClose> closes) {

@@ -12,6 +12,7 @@ import portfolioboss.ai.MoveReason;
 import portfolioboss.ai.NewsEvent;
 import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.Sentiment;
+import portfolioboss.api.response.AnalystTargetResponse;
 import portfolioboss.api.response.CorrelationResponse;
 import portfolioboss.api.response.HotStockResponse;
 import portfolioboss.api.response.LatestRecommendationResponse;
@@ -19,8 +20,10 @@ import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PickedStockResponse;
 import portfolioboss.api.response.RecommendationsResponse;
 import portfolioboss.api.response.StockAnalysisResponse;
+import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.model.HotStockLabel;
 import portfolioboss.model.MomentumLabel;
+import portfolioboss.model.NotPickableReason;
 import portfolioboss.model.RiskSign;
 import portfolioboss.model.WeighedAnalystMove;
 import portfolioboss.model.WeighedNewsEvent;
@@ -29,6 +32,7 @@ import portfolioboss.stocks.EarningsDate;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -122,6 +126,21 @@ class RecommendationsControllerTest {
                 .andExpect(jsonPath("$.hotStocks[0].riskWeight").value(3))
                 .andExpect(jsonPath("$.hotStocks[0].score").value(-3))
                 .andExpect(jsonPath("$.hotStocks[0].canBePicked").value(false))
+                .andExpect(jsonPath("$.hotStocks[0].analystTarget.medianTarget").value(130.0))
+                .andExpect(jsonPath("$.hotStocks[0].analystTarget.upsidePercent").value(18.2))
+                .andExpect(jsonPath("$.hotStocks[0].analystTarget.hasEnoughUpside").value(true))
+                .andExpect(jsonPath("$.hotStocks[0].analystTarget.firmCount").value(3))
+                .andExpect(jsonPath("$.hotStocks[0].analystTarget.latestTargetOfEachFirm[0].publishedAt")
+                        .value("2026-10-20T12:30:00"))
+                .andExpect(jsonPath("$.hotStocks[0].analystTarget.latestTargetOfEachFirm[0].firm").value("Some Firm"))
+                .andExpect(jsonPath("$.hotStocks[0].analystTarget.latestTargetOfEachFirm[0].priceTarget")
+                        .value(115.0))
+                .andExpect(jsonPath("$.hotStocks[0].analystTarget.latestTargetOfEachFirm[0].previousPriceTarget")
+                        .value(130.0))
+                .andExpect(jsonPath("$.hotStocks[0].analystTarget.latestTargetOfEachFirm[0].headline")
+                        .value("HOTA Price Target Cut to $115.00/Share From $130.00 by Some Firm"))
+                .andExpect(jsonPath("$.hotStocks[0].inShortList").value(true))
+                .andExpect(jsonPath("$.hotStocks[0].reasonsNotPickable[0]").value("RISK_SIGNS_TOO_HEAVY"))
                 .andExpect(jsonPath("$.tooHotStocks").value(empty()))
                 .andExpect(jsonPath("$.correctingStocks[0].label").value("CORRECTING"))
                 .andExpect(jsonPath("$.correctingStocks[0].percentAboveSma50").value(-3.0))
@@ -134,6 +153,12 @@ class RecommendationsControllerTest {
                 .andExpect(jsonPath("$.correctingStocks[0].riskWeight").value(nullValue()))
                 .andExpect(jsonPath("$.correctingStocks[0].score").value(nullValue()))
                 .andExpect(jsonPath("$.correctingStocks[0].canBePicked").value(false))
+                .andExpect(jsonPath("$.correctingStocks[0].analystTarget.medianTarget").value(nullValue()))
+                .andExpect(jsonPath("$.correctingStocks[0].analystTarget.firmCount").value(0))
+                .andExpect(jsonPath("$.correctingStocks[0].analystTarget.latestTargetOfEachFirm").value(empty()))
+                .andExpect(jsonPath("$.correctingStocks[0].inShortList").value(false))
+                .andExpect(jsonPath("$.correctingStocks[0].reasonsNotPickable[0]").value("NO_ANALYST_TARGET"))
+                .andExpect(jsonPath("$.correctingStocks[0].reasonsNotPickable[1]").value("NO_COMPANY_FACTS"))
                 .andExpect(jsonPath("$.latestRecommendation.recommendedAt").value("2026-10-26T18:30:00Z"))
                 .andExpect(jsonPath("$.latestRecommendation.scannedAt").value("2026-10-25T21:30:00Z"))
                 .andExpect(jsonPath("$.latestRecommendation.picks[0].candidateId").value(8))
@@ -150,26 +175,33 @@ class RecommendationsControllerTest {
 
     /**
      * 6.5% above its 50-day average, 8% below its year high, moving with a holding, held by investor 1 — analyzed, with
-     * falling revenue (3, over the limit) and a report in ten days; a contract (+2) and a downgrade (−2).
+     * falling revenue (3, over the limit) and a report in ten days; a contract (+2) and a downgrade (−2). Three firms
+     * put its target 18.2% above the price, so it is on the short list.
      */
     private HotStockResponse hotStock() {
         StockAnalysisResponse analysis = analysis();
         AnalystAction downgrade = new AnalystAction(LocalDate.of(2026, 10, 20), "Some Firm",
                 AnalystActionType.DOWNGRADE, "Buy", "Hold", 130.0, 115.0, "https://example.com/hota-downgrade", null);
+        AnalystPriceTarget someFirmsTarget = new AnalystPriceTarget(LocalDateTime.of(2026, 10, 20, 12, 30), "Some Firm",
+                115.0, 130.0, "HOTA Price Target Cut to $115.00/Share From $130.00 by Some Firm");
+        AnalystTargetResponse analystTarget = new AnalystTargetResponse(130.0, 18.2, true, 3, List.of(someFirmsTarget));
         return new HotStockResponse(11, 9001, "HOTA", "HOTA INC", "NASDAQ", "Technology", "Software",
                 HotStockLabel.HOT, momentumAt(110.0), 6.5, true, false,
                 List.of(new CorrelationResponse(7, "AAPL", 0.82, true)), List.of(1L), analysis,
                 new EarningsDate(LocalDate.of(2026, 11, 5), "amc"), new CompanyFacts(-4.5, 12.0, 0.6, 38.0),
                 List.of(RiskSign.REVENUE_FALLING), true, 0,
                 List.of(new WeighedNewsEvent(analysis.newsEvents().getFirst(), 2)),
-                List.of(new WeighedAnalystMove(downgrade, -2)), 3, -3, false);
+                List.of(new WeighedAnalystMove(downgrade, -2)), 3, -3, false,
+                analystTarget, true, List.of(NotPickableReason.RISK_SIGNS_TOO_HEAVY));
     }
 
-    /** Never analyzed. */
+    /** Never analyzed, and no firm's target in its headlines. */
     private HotStockResponse correctingStock() {
+        AnalystTargetResponse noTarget = new AnalystTargetResponse(null, null, false, 0, List.of());
         return new HotStockResponse(12, 9002, "HOTB", "HOTB CORP", "NYSE", "Industrials", "Machinery",
                 HotStockLabel.CORRECTING, momentumAt(97.0), -3.0, false, true, List.of(), List.of(), null, null, null,
-                null, false, null, List.of(), List.of(), null, null, false);
+                null, false, null, List.of(), List.of(), null, null, false,
+                noTarget, false, List.of(NotPickableReason.NO_ANALYST_TARGET, NotPickableReason.NO_COMPANY_FACTS));
     }
 
     /** Its shape is the holdings', pinned in {@code PortfolioControllerTest}; here only that it is there. */

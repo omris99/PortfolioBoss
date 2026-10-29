@@ -5,23 +5,28 @@ import portfolioboss.ai.EventMagnitude;
 import portfolioboss.ai.NewsEvent;
 import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.StockAnalysisResult;
+import portfolioboss.ib.AnalystPriceTarget;
+import portfolioboss.model.NotPickableReason;
 import portfolioboss.stocks.CompanyFacts;
 import portfolioboss.stocks.Stock;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The pick of RECOMMENDATIONS_TODO.md, decisions 5 and 13, on made-up stocks. Every one is HOT, closes at 100 at its
+ * The pick of RECOMMENDATIONS_TODO.md, decisions 5, 13 and 14, on made-up stocks. Every one is HOT, closes at 100 at its
  * year high with the long trend and scores 5, so the list's order (decision 1) is how far each is above its 50-day
- * average — the less stretched first. The signs' weights: revenue falling 3, high debt 2, the other three 1; a pick
- * weighs 2 at most. Then the news score (NewsScoreCalculatorTest has its weights) less the risks orders the picks.
+ * average — the less stretched first. Unless a test says otherwise, three firms put its target at 130, 30% above the
+ * price. The signs' weights: revenue falling 3, high debt 2, the other three 1; a pick weighs 2 at most. Then the news
+ * score (NewsScoreCalculatorTest has its weights) less the risks orders the picks.
  */
 class RecommendationCalculatorTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 10, 27);
+    private static final double LAST_CLOSE = 100;
     private static final CompanyFacts HEALTHY_COMPANY = new CompanyFacts(10.0, 20.0, 0.5, 30.0);
     private static final CompanyFacts REVENUE_FALLING = new CompanyFacts(-5.0, 20.0, 0.5, 30.0);
     private static final CompanyFacts REVENUE_FALLING_AND_HIGH_DEBT = new CompanyFacts(-5.0, 20.0, 3.0, 30.0);
@@ -62,7 +67,8 @@ class RecommendationCalculatorTest {
     /** No answer from Finnhub, or a symbol it doesn't know: "no signs" only means "not checked". */
     @Test
     void aStockWithoutAnyFigureFromFinnhubIsNotPicked() {
-        RecommendationCandidate withoutAnswer = new RecommendationCandidate(1, hotStock(1, false), null, null);
+        RecommendationCandidate withoutAnswer =
+                new RecommendationCandidate(1, hotStock(1, false), targetOf(130, 130, 130), null, null);
         RecommendationCandidate unknownSymbol = candidate(2, 2, new CompanyFacts(null, null, null, null), false);
         RecommendationCandidate healthy = candidate(3, 5, HEALTHY_COMPANY, false);
 
@@ -75,7 +81,8 @@ class RecommendationCalculatorTest {
     @Test
     void whenNoneQualifiesThereIsNoRecommendation() {
         RecommendationCandidate tooRisky = candidate(1, 2, REVENUE_FALLING_AND_HIGH_DEBT, false);
-        RecommendationCandidate withoutAnswer = new RecommendationCandidate(2, hotStock(4, false), null, null);
+        RecommendationCandidate withoutAnswer =
+                new RecommendationCandidate(2, hotStock(4, false), targetOf(130, 130, 130), null, null);
 
         assertThat(new RecommendationCalculator(List.of(tooRisky, withoutAnswer), AS_OF).picks()).isEmpty();
         assertThat(new RecommendationCalculator(List.of(), AS_OF).picks()).isEmpty();
@@ -122,6 +129,51 @@ class RecommendationCalculatorTest {
                 .containsExactly(expensive, noSignWithACut);
     }
 
+    /** At least 15% above the price — exactly 15% is enough —, and never a target below it or one of two firms. */
+    @Test
+    void aPickNeedsTheAnalystsTargetAtLeast15PercentAbove() {
+        RecommendationCandidate exactly15PercentAbove = candidateWithTarget(1, targetOf(115, 115, 115));
+        RecommendationCandidate justUnder15PercentAbove = candidateWithTarget(2, targetOf(114.9, 114.9, 114.9));
+        RecommendationCandidate belowThePrice = candidateWithTarget(3, targetOf(90, 95, 100));
+        RecommendationCandidate twoFirmsOnly = candidateWithTarget(4, targetOf(150, 160));
+
+        List<RecommendationCandidate> picks = new RecommendationCalculator(
+                List.of(exactly15PercentAbove, justUnder15PercentAbove, belowThePrice, twoFirmsOnly), AS_OF).picks();
+
+        assertThat(picks).containsExactly(exactly15PercentAbove);
+    }
+
+    /** A partnership with a giant (+3) doesn't make up for a target only 10% above the price. */
+    @Test
+    void goodNewsNeverLetsAStockPastTheTargetRule() {
+        RecommendationCandidate closeTargetWithAPartnership = new RecommendationCandidate(1, hotStock(1, false),
+                targetOf(110, 110, 110), new Stock("STOCK1", null, HEALTHY_COMPANY),
+                analysisWith(PARTNERSHIP_WITH_A_GIANT));
+        RecommendationCandidate noNews = candidate(2, 5, HEALTHY_COMPANY, false);
+
+        assertThat(new RecommendationCalculator(List.of(closeTargetWithAPartnership, noNews), AS_OF).picks())
+                .containsExactly(noNews);
+    }
+
+    /** The target's reason first, then Finnhub's: a stock can have one of each, and a pick has none. */
+    @Test
+    void theReasonsAStockCantBePickedComeInTheOrderOfTheChecks() {
+        RecommendationCandidate noTargetAndNoFigures =
+                new RecommendationCandidate(1, hotStock(1, false), targetOf(150, 160), null, null);
+        RecommendationCandidate closeTargetAndTooRisky = new RecommendationCandidate(2, hotStock(2, false),
+                targetOf(105, 105, 105), new Stock("STOCK2", null, REVENUE_FALLING), null);
+        RecommendationCandidate healthy = candidate(3, 3, HEALTHY_COMPANY, false);
+        RecommendationCalculator recommendationCalculator = new RecommendationCalculator(
+                List.of(noTargetAndNoFigures, closeTargetAndTooRisky, healthy), AS_OF);
+
+        assertThat(recommendationCalculator.reasonsNotPickable(noTargetAndNoFigures))
+                .containsExactly(NotPickableReason.NO_ANALYST_TARGET, NotPickableReason.NO_COMPANY_FACTS);
+        assertThat(recommendationCalculator.reasonsNotPickable(closeTargetAndTooRisky))
+                .containsExactly(NotPickableReason.TARGET_TOO_CLOSE, NotPickableReason.RISK_SIGNS_TOO_HEAVY);
+        assertThat(recommendationCalculator.reasonsNotPickable(healthy)).isEmpty();
+        assertThat(recommendationCalculator.canBePicked(healthy)).isTrue();
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
     private RecommendationCandidate candidate(long candidateId, double percentAboveSma50, CompanyFacts companyFacts,
@@ -129,11 +181,27 @@ class RecommendationCalculatorTest {
         return candidate(candidateId, percentAboveSma50, companyFacts, recovering, null);
     }
 
-    /** {@code analysis} {@code null}: no news events, a news score of 0. */
+    /** {@code analysis} {@code null}: no news events, a news score of 0. The target 30% above the price. */
     private RecommendationCandidate candidate(long candidateId, double percentAboveSma50, CompanyFacts companyFacts,
                                               boolean recovering, StockAnalysisResult analysis) {
         return new RecommendationCandidate(candidateId, hotStock(percentAboveSma50, recovering),
-                new Stock("STOCK" + candidateId, null, companyFacts), analysis);
+                targetOf(130, 130, 130), new Stock("STOCK" + candidateId, null, companyFacts), analysis);
+    }
+
+    /** A healthy stock with no news, its place in the list by its id. */
+    private RecommendationCandidate candidateWithTarget(long candidateId, AnalystTargetCalculator analystTarget) {
+        return new RecommendationCandidate(candidateId, hotStock(candidateId, false), analystTarget,
+                new Stock("STOCK" + candidateId, null, HEALTHY_COMPANY), null);
+    }
+
+    /** One target per firm, each a week before the analysis, against the last close of 100. */
+    private AnalystTargetCalculator targetOf(double... targetOfEachFirm) {
+        List<AnalystPriceTarget> targets = new ArrayList<>();
+        for (int firmNumber = 1; firmNumber <= targetOfEachFirm.length; firmNumber++) {
+            targets.add(new AnalystPriceTarget(AS_OF.minusWeeks(1).atTime(12, 0), "Firm " + firmNumber,
+                    targetOfEachFirm[firmNumber - 1], null, "A headline"));
+        }
+        return new AnalystTargetCalculator(targets, LAST_CLOSE, AS_OF);
     }
 
     private StockAnalysisResult analysisWith(NewsEvent newsEvent) {
@@ -144,7 +212,7 @@ class RecommendationCalculatorTest {
     private HotStockCalculator hotStock(double percentAboveSma50, boolean recovering) {
         double sma50 = 100 / (1 + percentAboveSma50 / 100);
         Double yearReturnPercent = recovering ? -20.0 : 20.0;
-        Momentum momentum = new Momentum(AS_OF, 100, 99.0, sma50, 80.0, 100.0, 5.0, 3.0,
+        Momentum momentum = new Momentum(AS_OF, LAST_CLOSE, 99.0, sma50, 80.0, 100.0, 5.0, 3.0,
                 AS_OF.minusYears(1).plusDays(1), 100, yearReturnPercent, 10);
         return new HotStockCalculator(momentum);
     }

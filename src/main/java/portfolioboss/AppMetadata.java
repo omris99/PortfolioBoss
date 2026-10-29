@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.26.0";
+    public static final String VERSION = "0.27.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,18 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.27.0: [The analysts' target from Dow Jones in the recommendation]
+ * Scan: every scan also reads half a year of each stock's Dow Jones headlines through IB (reqHistoricalNews, read-only, free), page by page, and the analysts' price targets in them.
+ * PriceTargetHeadlineReader added: reads a firm's target from Dow Jones's four headline forms, only for the stock's own company by IB's name; NewsHeadlinePaging pages back half a year.
+ * V12 analyst_price_target: one row per target headline by contract id, replaced for every stock whose headlines a scan read; a stock whose headlines didn't come keeps its old ones.
+ * AnalystTargetCalculator added: the median of each firm's latest target of the half year, 3 firms at least, against the last close; a median, since a split leaves stale targets far too high.
+ * Recommendation: a stock is picked only when the analysts' median target is at least 15% above its price; before, the target was only shown beside a pick.
+ * Short list: the first 10 hot stocks with that upside instead of the first 10 hot stocks; when none has it, nothing is paid for and "no recommendation" is stored.
+ * GET /api/recommendations: each stock also carries its analysts' target with every firm's, whether it is on the short list and the reasons it can't be picked; each pick its upside.
+ * Recommendations page: an Analysts' target column in the three lists, the firms' targets first in the drawer's Analysts & news tab, and "Why not the others" grouped by reason.
+ * Hot list's detail line: the analysts' part shows the rating and the trend only; MarketBeat's upside moved to the drawer, since the row's column is Dow Jones's.
+ * Tests: the test profile caps each context's database pool at 3, so the suite no longer runs out of PostgreSQL connections while the app runs.
+ *
  * VERSION 0.26.0: [The recommendation and the analysis on the Recommendations page]
  * RecommendationCard added: the code's latest picks above the lists, each with its risk signs, a line from the figures, its score and news, or none qualified, and why the others weren't picked.
  * Analyze & recommend added: the short list's paid run after a confirm quoting its cost; Analyze for one stock from its row (after a confirm) or its drawer; one run at a time on the page.
