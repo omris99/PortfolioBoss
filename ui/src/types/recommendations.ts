@@ -3,7 +3,7 @@
  * Java records in `api/response/` — the record component names are the JSON keys, so keep the two in sync.
  */
 
-import type { AnalysisRun, Momentum, StockAnalysis } from './portfolio';
+import type { AnalysisRun, AnalystAction, Momentum, NewsEvent, StockAnalysis } from './portfolio';
 
 /** Which of the three lists a stock is in, by where its last close stands against its 50-day average. */
 export type HotStockLabel = 'HOT' | 'TOO_HOT' | 'CORRECTING';
@@ -28,6 +28,20 @@ export interface CompanyFacts {
   /** The debt divided by the equity — a ratio: 2 is twice the equity. */
   debtToEquity: number | null;
   peRatio: number | null;
+}
+
+/** One event of the analysis and what it weighs in the news score — the API's weight, never worked out here. */
+export interface WeighedNewsEvent {
+  event: NewsEvent;
+  /** 0 for an event no kind fits. */
+  points: number;
+}
+
+/** An analyst's upgrade or downgrade that counts in the news score: with a price target, from the last 30 days. */
+export interface WeighedAnalystMove {
+  action: AnalystAction;
+  /** +2 or −2. */
+  points: number;
 }
 
 /** How closely a scanned stock moves with one open holding: 1 exactly together, 0 unrelated, −1 opposite. */
@@ -77,6 +91,16 @@ export interface HotStock {
   reportsWithin14Days: boolean;
   /** Its news events and the analysts' moves weighed, as the recommendation weighed them; null while never analyzed. */
   newsScore: number | null;
+  /** Every event of the analysis with what it weighs in `newsScore`; empty while never analyzed. */
+  weighedNewsEvents: WeighedNewsEvent[];
+  /** The analysts' moves that count in `newsScore`; empty while never analyzed. */
+  countedAnalystMoves: WeighedAnalystMove[];
+  /** The risk signs' weights added up; null when they were never checked. */
+  riskWeight: number | null;
+  /** The news score less `riskWeight`: what the picks are ordered by; null when the signs were never checked. */
+  score: number | null;
+  /** Finnhub's figures are there and the signs weigh 2 at most: the recommendation could pick it on its score. */
+  canBePicked: boolean;
 }
 
 /** One stock the code picked, in the recommendation's order. */

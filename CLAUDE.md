@@ -71,10 +71,16 @@ stocks passed the scan's filters, the two scans found 73, all 73 on NYSE or NASD
 `primaryExch`. Session 2 (2026-10-27) added Finnhub's client, `stocks.FinnhubClient`. Session 3's backend (2026-10-27) is
 built: `POST /api/recommendations/analysis` (the short list's analysis, Finnhub beside it, the pick, V10 and V11),
 `moveReason` and `newsEvents` in every analysis, and the GET side; V10 is on the real database and one paid full run went
-through (10 stocks, 38 s, $0.47) before decision 13, but V11 and a run with the news events wait — the user's choice —
-for session 4 (the UI, the [later] pieces), to be checked in the browser. **Claude doesn't explain the picks** (dropped:
-it would justify a pick it didn't make) **nor choose them** (session 0: the same input gave two picks, then none). Session
-5 (the measurement) comes after.
+through (10 stocks, 38 s, $0.47) before decision 13. Session 4 (2026-10-27) built the UI — the [later] pieces of the
+design, reworked where decision 13 had overtaken it: the recommendation card (none yet / the picks / none qualified, "why
+not the others"), Analyze & recommend and an Analyze per stock (in its row after a confirm, in its drawer at once), a
+detail line under each analyzed Hot row, and the drawer's Analysts & news, Company and If I buy tabs —, with a small API
+addition (each stock's news-score parts, `riskWeight`, `score`, `canBePicked`, so the UI never holds a weight). V11 is on
+the real database since the first full run from the page (2026-10-27). After that run the user kept the rule as it is (a
+stock with no risk sign and no news scores 0 and can be picked), and asked for the analyst actions without a price target
+to be hidden and the detail line to be one labeled line. **Claude doesn't explain the picks** (dropped: it would justify a
+pick it didn't make) **nor choose them** (session 0: the same input gave two picks, then none). Session 5 (the
+measurement) comes after.
 
 ## Hard invariant: read-only
 
@@ -161,7 +167,8 @@ the year's figures (IB's year starting a day late still a full year, a young sto
 −1, 99 shared days, a date missing from one), `ScanScheduleTest` (a morning scan, the weekend, New York's clock
 change), `RecommendationCandidateTest` (each risk sign at its limit, a missing figure raising none, no Finnhub figures at
 all, the 14 / 15 days of the timing note, the news score from the analysis), `NewsScoreCalculatorTest` (every weight of
-the table, a partnership without a size, `NOT_IN_THE_LIST` 0, an analyst's move without a target or 31 days old) and
+the table, a partnership without a size, `NOT_IN_THE_LIST` 0, an analyst's move without a target or 31 days old, the
+parts the page shows — every event, only the moves that count) and
 `RecommendationCalculatorTest` (a pick weighs 2 at most, the order, good news before the list's order but never past the
 risk limit, bad news after) cover the Recommendations rules.
 `PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
@@ -190,7 +197,8 @@ neither; `AnalysisServiceTest` (`@DataJpaTest`, Tavily
 and Claude `@MockitoBean`s) a run, a failed stock, the search results stored exactly as Claude read them, 404 / 400 / 503; `AnalysisControllerTest` the status codes and the JSON-only rule.
 The Recommendations side: `RecommendationsReadServiceTest` (`@DataJpaTest`, six made-up stocks with a year of closes
 shaped for their lists) the lists, the stocks in none, a correlation of 1, a stock already held, a stock keeping its
-latest analysis from an earlier scan with its risk signs and timing note, `riskSigns` `null` without Finnhub's figures,
+latest analysis from an earlier scan with its risk signs and timing note, what a news score is made of with the weight and
+score the pick would give, `riskSigns` / `riskWeight` / `score` `null` and `canBePicked` false without Finnhub's figures,
 the latest recommendation with its own scan's date; `RecommendationAnalysisServiceTest` (`@DataJpaTest`, Tavily, Claude
 and Finnhub `@MockitoBean`s, thirteen made-up stocks — HOT01 … HOT11 a little more stretched each) the first ten HOT
 analyzed and three picked, the price Claude is told, Finnhub's answer stored, a pick over the risk limit, the lighter risk
@@ -296,7 +304,8 @@ RecommendationAnalysisController ──> RecommendationAnalysisService ──> S
         │                             of RecommendationsReadService)    then RecommendationCalculator: the pick (code)
         │                                    └──writes──> Postgres (stock_analysis rows of scanned stocks, with
         │                                                 Finnhub's answer; an investment_recommendation row per full run)
-        └──JSON── POST /api/recommendations/analysis — {} the short list and the pick, or one candidate (no UI yet)
+        └──JSON── POST /api/recommendations/analysis — {} the short list and the pick (Analyze & recommend), or one
+                  candidate (its Analyze, in its row or drawer); only from ui/'s Recommendations page, then a reload
 
 HoldingWriteController ──writes── HoldingWriteService ──writes── Postgres  (sector and trade rows only;
         ▲  (api/request/*Request, @Valid;                                 never IB, never a holding row
@@ -440,8 +449,8 @@ set (`num_nonnulls`, like `trade`'s); `finnhub_stock` (`JSONB`, the plan's `comp
 `ScanCandidateEntity` itself, not its id, so a holding's id can't be passed by mistake; `holdingId()` is a `Long` now.
 `ScanCandidateEntity.scanId()` maps `scan_id` a second time, as a plain id read only (`insertable` / `updatable` false),
 so a candidate's scan is known without loading it — `null` on a candidate persisted in the same session, until it is read
-again. `V11__investment_recommendations.sql` (built, **not yet on the real database** — the user runs it with session
-4's check) added `investment_recommendation` (`InvestmentRecommendationEntity`: `scan_id`, `recommended_at`, `picks` — the
+again. `V11__investment_recommendations.sql` (on the real database since the first full run from the page, 2026-10-27)
+added `investment_recommendation` (`InvestmentRecommendationEntity`: `scan_id`, `recommended_at`, `picks` — the
 picked `scan_candidate` ids in order, as a JSON list; an empty list when none qualified, an answer the measurement counts);
 only the picks: why each was picked is worked out again from its stored analysis.
 `HoldingRepository`
@@ -499,8 +508,9 @@ Spring and no database, so it is unit tested directly. What it computes on comes
 `ib` (what IB reports, above), `ai` (Claude's answer, below), `stocks` (Finnhub's) and **`model`** — the values the
 whole app shares: the enums the entities and the JSON share with the computation (`TradeSide`, `HoldingStatus`,
 `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the
-labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`) and `AnalystConsensus` (see
-Conventions for which package uses which).
+labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`), `AnalystConsensus`, and the
+news score's parts with their points (`WeighedNewsEvent`, `WeighedAnalystMove`) (see Conventions for which package uses
+which).
 A holding's
 `firstBuyDate`, `lastSellDate`, `holdingDays` and closed positions are derived from its `trade` rows, never stored:
 `HoldingHistory.of(List<TradeFact>)` walks them in chronological order (a buy before a sell on the same date) tracking
@@ -786,7 +796,8 @@ and `signal` (appended after it) are the latest analysis and the dot: a `StockAn
 `consensus` (`model.AnalystConsensus` as it is, chosen on this read against IB's latest price; `null` without any source),
 `analystTrend` (the code's since decision 18, under the key that carried Claude's) with `raisedTargetCount` /
 `loweredTargetCount` (appended), and the rest of `StockAnalysisResult` as it is (each action with its
-`sourcePublishedDate`; `moveReason` and `newsEvents` appended at the end on 2026-10-27, which no UI shows yet) — or `null`
+`sourcePublishedDate`; `moveReason` and `newsEvents` appended at the end on 2026-10-27 — the drawers show the move reason
+under the news, the events only on the Recommendations page, with their points) — or `null`
 while the holding has never been analyzed, and the
 `HoldingSignal`, `null` without an analysis; `PortfolioReadService` loads the latest analysis of every holding in one
 query. `PortfolioResponse.estimatedAnalysisCost` (appended last, at the top level) is what the Analyze buttons quote
@@ -812,7 +823,14 @@ doesn't hide what was paid for —, consensus against the last close; two querie
 `ScanCandidateRepository.findAllById` for which stock each was), Finnhub's `nextEarningsDate` and `companyFacts` as they
 are, `riskSigns` (`null` without Finnhub's figures — not checked, which `[]` would hide), `reportsWithin14Days` (from the
 latest scan's date, not the clock) and `newsScore` (from the analysis's own date, as the pick weighed it; `null` never
-analyzed). `latestRecommendation` is a `LatestRecommendationResponse(recommendedAt, scannedAt, picks)` — its own scan's
+analyzed); appended in session 4, so that the page shows the rule's verdict without holding a weight:
+`weighedNewsEvents` (every event of the analysis with its points, `model.WeighedNewsEvent(event, points)` — 0 for
+`NOT_IN_THE_LIST`) and `countedAnalystMoves` (`model.WeighedAnalystMove(action, points)`, only the moves that count),
+both from `NewsScoreCalculator`'s `weighedNewsEvents()` / `countedAnalystMoves()`, which `score()` now sums, and empty
+while never analyzed; `riskWeight` and `score` (`RecommendationCalculator.riskWeightOf` / `scoreOf`, `null` like
+`riskSigns`) and `canBePicked` (`RecommendationCalculator.canBePicked`, public since; false without Finnhub's figures) —
+asked of a `RecommendationCalculator` of that one stock, since none of it depends on the rest of a short list.
+`latestRecommendation` is a `LatestRecommendationResponse(recommendedAt, scannedAt, picks)` — its own scan's
 date, and `PickedStockResponse(candidateId, conId, symbol)`s in order, found in today's lists by `conId` — or `null`
 before the first full run. No cost estimate here: the page quotes `/api/portfolio`'s `estimatedAnalysisCost` × 10, the
 same work per stock. `ui/src/types/recommendations.ts` mirrors them. `ScanController` /
@@ -860,18 +878,57 @@ Things that are easy to break:
 
 The Recommendations page (`ui/src/pages/RecommendationsPage.tsx`, `/recommendations`, the fifth navigation item; its
 pieces in `ui/src/components/recommendations/`, built from Claude Design's third round — DESIGN_BRIEF.md §8, which
-designed the whole page and marked each piece [now] or [later]; only [now] is built): the scan card (`ScanCard`: the scan
-line — "Scanned … · 68 stocks · 34 hot, 19 too hot, 8 correcting, 7 in no list" — with Scan again and its status, then
-each investor's free cash from `/api/portfolio`), then Hot, Too hot and Correcting, each a `StockListCard` (a
-`ListHeading` with its meaning and a grey band — the lists are not tones —, then the table). The columns are defined
-like `POSITION_COLUMNS`, one entry each (`hotStockColumns.tsx`: `HOT_COLUMNS`, `TOO_HOT_COLUMNS`, `CORRECTING_COLUMNS`),
-cells on two lines, the figure then its mark: `InfoMark` (Pulled back, Moves together — grey, information) and
-`RiskSignTag` (Recovering, in the warning-sign tone: it is one of the five risk signs). The texts the lists and the
-drawer share are in `hotStockTexts.ts`. A row opens `CandidateDrawer` (`/recommendations/:candidateId`, the holding
-drawer's `DrawerFrame`; Summary — why it is in its list, the year, the stock, the holdings it moves with — and the
-existing `MomentumPanel`; ‹ › through the three lists). `useRecommendations` treats 503 as "no scan yet", not an error;
+designed the whole page and marked each piece [now] or [later]; [now] in session 1b, [later] in session 4 — reworked
+where decision 13 had overtaken the design: no text from Claude anywhere). App passes it the portfolio snapshot (the
+cost estimate, and for If I buy the holdings and the cash). From the top: the scan card (`ScanCard`: the scan line —
+"Scanned … · 68 stocks · 34 hot, 19 too hot, 8 correcting, 7 in no list" — with Scan again and its status, then each
+investor's free cash from `/api/portfolio`), the recommendation (`RecommendationCard`, below), then Hot, Too hot and
+Correcting, each a `StockListCard` (a `ListHeading` with its meaning and a grey band — the lists are not tones —, then the
+table, whose last column is the stock's Analyze). The columns are defined like `POSITION_COLUMNS`, one entry each
+(`hotStockColumns.tsx`: `HOT_COLUMNS`, `TOO_HOT_COLUMNS`, `CORRECTING_COLUMNS`), cells on two lines, the figure then its
+mark: `InfoMark` (Pulled back, Moves together — grey, information) and `RiskSignTag` (the five risk signs, in the
+warning-sign tone, with the figure that raised each — "Expensive · P/E 52" — where there is room; `RiskSigns` sets a
+stock's in a row: "No risk signs" muted, "Not checked" without Finnhub's figures, "—" never analyzed). Under each analyzed
+Hot row, `AnalysisDetailLine`: one labeled line — "Risk signs … · Analysts BUY +18.1% IMPROVING · Earnings … · News +2"
+— and "Why it moves: …" in full under it when the news says (the user's pick, 2026-10-27, over the design's second header
+row of slots, which didn't line up with the columns and cut the reason); the row and its line hover and select together
+(`[&:has(+tr:hover)]` / `[tr:hover+&]`). `TimingNote` is the report within 14 days, outlined in the text color — never
+the warning tone; in the line only its date. The texts the lists and the drawer share are in `hotStockTexts.ts`.
+`RecommendationCard` has three states: none yet (an invitation with Analyze & recommend, primary, and the estimate),
+the picks (up to 3 `PickCard`s, numbered: name and IB's sector, the risk signs with their figures and the timing note, a
+line the code writes from the figures — pulled back, the analysts' target against the price, the earnings date —, "Score
++4 · news +5 · risk signs weigh 1", and `NewsScoreParts`), or none qualified; then "Why not the others" — the rest of the
+first 10 of today's Hot list, each with its reason (no analysis, not checked, its signs and their weight, or its score
+below the picks) — shown only when the recommendation is of the latest scan, since only then is that its short list; a
+pick no longer in today's lists says so. `AnalyzeButtons.tsx`: `AnalyzeShortListControl` (Analyze & recommend, after a
+confirm: "Analyze the first 10 hot stocks? About $0.46 and 50 search credits…"), `RowAnalyzeButton` (the lists' last
+column: an icon, a confirm toward the left, the spinner while its own run runs, a triangle with the reason when it
+failed — its clicks, and the confirm's, which React counts as inside it, never open the row; the user's choice over a
+drawer-only button) and `AnalyzeCandidateButton` (the drawer's "Analyze KRVN", at once, like a holding's). The estimate
+is `/api/portfolio`'s `estimatedAnalysisCost` × the stocks (`SHORT_LIST_SIZE` = 10, a copy of the API's for the words).
+`useRecommendationAnalysis` holds the page's one run (`RecommendationAnalysisState`: the short list's — `candidateId`
+`null` — or one stock's), so every button reads the same state and the others wait while one runs; it runs
+`analyzeRecommendations` then the reload. `NewsScore.tsx`: each part of a news score with its points ("+3 Partnership ·
+high: …", "−2 Downgraded by …"), points in the news's tones. A row (or a symbol in the card) opens `CandidateDrawer`
+(`/recommendations/:candidateId`, the holding drawer's `DrawerFrame`, the risk signs and timing note under the key
+figures once analyzed; ‹ › through the three lists): Summary — why it is in its list, the year, the stock, the holdings
+it moves with —, the existing `MomentumPanel`, Analysts & news (the shared `AnalysisPanel` with the news score's parts
+under the news), Company (`CompanyPanel`: the next earnings date, Finnhub's four figures each with its rule and the sign it
+raises, then "For the recommendation" — the signs' weight, whether it can be picked, the score) and If I buy
+(`weightCalculator/IfIBuyPanel`: an amount → whole shares at the last close, the commission, the stock's weight after
+and its sector's — of the money in stocks — on each weights tab, the cash checked; the sector picked from the user's
+sectors of open holdings, already picked when one of IB's two words matches one, or "A sector not held yet";
+`ifIBuy.ts` the arithmetic, beside `targetWeight.ts`). `useRecommendations` treats 503 as "no scan yet", not an error;
 `useScanAgain` runs `scanAgain()` then the reload, and tells 409 (another reading runs) from a failure by `ApiError.status`.
 `lib/drawerAddress.ts` (`idFromAddress`, `OPENED_FROM_TABLE`) is shared with Positions.
+
+The drawers' "Analysts & news" tab is one `AnalysisPanel` for a holding and a scanned stock (`HoldingAnalysisPanel` adds
+the holding's button, open holdings only, and the dot's "?"): under the news, "Why it moves" (`moveReason`), and in the
+analysts' list only the actions that state a price target — the rule the trend and the news score count by; the others
+(a rating service's letter or rank, Weiss, Zacks; a rating kept without a target) count for nothing and are left out, with
+a faint "n actions without a price target are not shown" (the user's call, 2026-10-27, after Weiss showed as DOWNGRADED).
+`ConfirmBeforeRun` (in `AnalyzeControls.tsx`) is every paid run's confirm popover; the Positions toolbar's Analyze uses it
+too.
 
 `HoldingWriteController` serves the writes through `HoldingWriteService` (`@Transactional`, the write-side
 twin of `PortfolioReadService`): `PUT /api/holdings/{holdingId}/sector` (204), `POST
@@ -1020,8 +1077,8 @@ Things that are easy to break:
   AI_ANALYSIS_TODO.md, backend and UI; the API reads only from the database. From Milestone 3, the weight of each holding
   and sector (TODO.md's principle 3) and a target-weight calculator are in — of the whole account and of each investor's
   own money —, in the UI only. RECOMMENDATIONS_TODO.md's scan, hot-stock lists and page (sessions 1 and 1b), Finnhub's
-  client (session 2) and the analysis and recommendation's backend (session 3) are in; their UI (session 4, then the live
-  check of V11 and a full run) and the measurement (session 5) are next.
+  client (session 2), the analysis and recommendation's backend (session 3) and their UI (session 4, with V11 and the
+  first full run from the page) are in; the measurement (session 5) is next.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. The
   `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.

@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.25.0";
+    public static final String VERSION = "0.26.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,15 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.26.0: [The recommendation and the analysis on the Recommendations page]
+ * RecommendationCard added: the code's latest picks above the lists, each with its risk signs, a line from the figures, its score and news, or none qualified, and why the others weren't picked.
+ * Analyze & recommend added: the short list's paid run after a confirm quoting its cost; Analyze for one stock from its row (after a confirm) or its drawer; one run at a time on the page.
+ * Hot list: a line under each analyzed stock with its risk signs, the analysts, the earnings date (outlined within 14 days) and the news score, and why it moves in full under it.
+ * Stock drawer: new Analysts & news (with the news score's parts), Company (Finnhub's figures and the signs they raise) and If I buy (shares, commission, the stock's and sector's weights after) tabs.
+ * GET /api/recommendations: each stock also carries its news score's parts with their points, its risk signs' weight, its score and whether it can be picked, so the page holds no weight.
+ * Analysts & news: actions without a price target (rating services' letters) are no longer listed, since they count for nothing; "Why it moves" shows under the news, for holdings too.
+ * RiskSignTag shows the figure that raised a sign ("Expensive · P/E 52"); TimingNote added for a report within 14 days, outlined, never in the warning tone.
+ *
  * VERSION 0.25.0: [Analysis and recommendation of hot stocks]
  * POST /api/recommendations/analysis added: analyzes the Recommendations short list (the first 10 Hot) or one stock with Tavily, Claude and Finnhub, then the code picks up to 3.
  * RecommendationCalculator added: picks stocks with Finnhub's figures whose risk signs weigh 2 at most, ordered by the news score less the risks; Claude never picks.

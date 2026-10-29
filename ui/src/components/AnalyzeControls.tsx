@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactElement, type ReactNode } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { Check, LoaderCircle, ScanSearch, TriangleAlert } from 'lucide-react';
 import { analyzeHoldings, errorMessageOf } from '../lib/apiClient';
@@ -7,14 +7,14 @@ import type { AnalysisRun, EstimatedAnalysisCost } from '../types/portfolio';
 
 // ── what a run is expected to cost ──────────────────────────────────────────────────────────────
 
-interface CostEstimate {
+export interface CostEstimate {
   /** "0.29" */
   dollars: string;
   credits: number;
 }
 
 /** The API's average cost of one stock times `stockCount`; `null` while no stock has been analyzed yet. */
-function costEstimateOf(estimate: EstimatedAnalysisCost | null, stockCount: number): CostEstimate | null {
+export function costEstimateOf(estimate: EstimatedAnalysisCost | null, stockCount: number): CostEstimate | null {
   if (estimate === null) return null;
   return {
     dollars: (estimate.costUsdPerStock * stockCount).toFixed(2),
@@ -23,7 +23,7 @@ function costEstimateOf(estimate: EstimatedAnalysisCost | null, stockCount: numb
 }
 
 /** "about $0.29 and 35 Tavily credits for 7 stocks (by the last 7 analyses)". */
-function estimatedCostText(estimate: EstimatedAnalysisCost | null, stockCount: number): string | null {
+export function estimatedCostText(estimate: EstimatedAnalysisCost | null, stockCount: number): string | null {
   const cost = costEstimateOf(estimate, stockCount);
   if (estimate === null || cost === null) return null;
   const stocks = stockCount === 1 ? '' : ` for ${stockCount} stocks`;
@@ -35,6 +35,18 @@ function hintOf(subject: string, estimate: EstimatedAnalysisCost | null, stockCo
   const action = `Search the web for the analyst ratings and news of ${subject}, and have Claude read them`;
   const costText = estimatedCostText(estimate, stockCount);
   return costText === null ? `${action}. What it costs shows once a stock has been analyzed.` : `${action}: ${costText}.`;
+}
+
+/** "About $0.29 and 35 search credits. " in a confirm — or that the cost shows once a stock has been analyzed. */
+export function CostSentence({ estimate, stockCount }: { estimate: EstimatedAnalysisCost | null; stockCount: number }) {
+  const cost = costEstimateOf(estimate, stockCount);
+  if (cost === null) return <>What it costs shows once a stock has been analyzed. </>;
+  return (
+    <>
+      About <b className="font-semibold text-ink">${cost.dollars}</b> and{' '}
+      <b className="font-semibold text-ink">{cost.credits} search credits</b>.{' '}
+    </>
+  );
 }
 
 // ── a run ───────────────────────────────────────────────────────────────────────────────────────
@@ -82,7 +94,7 @@ function FailedStocks({ run }: { run: AnalysisRun }) {
  * Next to the button: that it is running, then what the run did and cost — "✓ Analyzed 7 · 35 credits · $0.30" — or the
  * API's reason when it refused (a missing key, say).
  */
-function RunOutcome({
+export function RunOutcome({
   isRunning,
   runningText,
   lastRun,
@@ -115,7 +127,7 @@ function RunOutcome({
   );
 }
 
-function RunningIcon({ isRunning, size }: { isRunning: boolean; size: number }) {
+export function RunningIcon({ isRunning, size }: { isRunning: boolean; size: number }) {
   return isRunning ? (
     <LoaderCircle size={size} className="animate-spin motion-reduce:animate-none" />
   ) : (
@@ -123,23 +135,63 @@ function RunningIcon({ isRunning, size }: { isRunning: boolean; size: number }) 
   );
 }
 
+/**
+ * A paid run's button that asks first, in a popover beside it: `children` say what will run and what it should cost,
+ * then the run's own button (`confirmLabel`) and Cancel — Esc or a click outside cancel too. `trigger` is the button
+ * itself, a `<button>` element: the popover adds its click to it.
+ */
+export function ConfirmBeforeRun({
+  trigger,
+  confirmLabel,
+  onConfirm,
+  align = 'start',
+  children,
+}: {
+  trigger: ReactElement;
+  confirmLabel: string;
+  onConfirm: () => void;
+  align?: 'start' | 'end';
+  children: ReactNode;
+}) {
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  const confirm = () => {
+    setIsConfirming(false);
+    onConfirm();
+  };
+
+  return (
+    <Popover.Root open={isConfirming} onOpenChange={setIsConfirming}>
+      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align={align}
+          sideOffset={6}
+          aria-label="Confirm the analysis"
+          className="z-30 w-[320px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] leading-[18px] text-ink shadow-raised"
+        >
+          {children}
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={confirm} className={PRIMARY_BUTTON_CLASS}>
+              {confirmLabel}
+            </button>
+            <Popover.Close className={SECONDARY_BUTTON_CLASS}>Cancel</Popover.Close>
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
 // ── the two buttons ─────────────────────────────────────────────────────────────────────────────
 
 /** The confirm popover's text: the stocks, what it should cost, and that it takes a while. */
 function ConfirmText({ stockCount, estimate }: { stockCount: number; estimate: EstimatedAnalysisCost | null }) {
-  const cost = costEstimateOf(estimate, stockCount);
   return (
     <>
       <p className="text-body font-semibold">Analyze {stockCount} open holdings?</p>
       <p className="mt-1 text-muted">
-        {cost === null ? (
-          'What it costs shows once a stock has been analyzed. '
-        ) : (
-          <>
-            About <b className="font-semibold text-ink">${cost.dollars}</b> and{' '}
-            <b className="font-semibold text-ink">{cost.credits} search credits</b>.{' '}
-          </>
-        )}
+        <CostSentence estimate={estimate} stockCount={stockCount} />
         It searches the web for each one’s analyst ratings and news, and takes tens of seconds.
       </p>
     </>
@@ -159,42 +211,27 @@ export function AnalyzeEveryHoldingControl({
   estimatedAnalysisCost: EstimatedAnalysisCost | null;
   onDataChanged: () => Promise<void>;
 }) {
-  const [isConfirming, setIsConfirming] = useState(false);
   const { isRunning, lastRun, errorMessage, run } = useAnalysisRun(null, onDataChanged);
-
-  const startRun = () => {
-    setIsConfirming(false);
-    void run();
-  };
 
   return (
     <div className="inline-flex min-w-0 items-center gap-3">
-      <Popover.Root open={isConfirming} onOpenChange={setIsConfirming}>
-        <Popover.Trigger
-          disabled={isRunning}
-          title={hintOf('every open holding', estimatedAnalysisCost, stockCount)}
-          className={PRIMARY_BUTTON_CLASS}
-        >
-          <RunningIcon isRunning={isRunning} size={16} />
-          {isRunning ? 'Analyzing…' : 'Analyze'}
-        </Popover.Trigger>
-        <Popover.Portal>
-          <Popover.Content
-            align="start"
-            sideOffset={6}
-            aria-label="Confirm the analysis"
-            className="z-30 w-[320px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] leading-[18px] text-ink shadow-raised"
+      <ConfirmBeforeRun
+        trigger={
+          <button
+            type="button"
+            disabled={isRunning}
+            title={hintOf('every open holding', estimatedAnalysisCost, stockCount)}
+            className={PRIMARY_BUTTON_CLASS}
           >
-            <ConfirmText stockCount={stockCount} estimate={estimatedAnalysisCost} />
-            <div className="mt-3 flex gap-2">
-              <button type="button" onClick={startRun} className={PRIMARY_BUTTON_CLASS}>
-                Analyze {stockCount} holdings
-              </button>
-              <Popover.Close className={SECONDARY_BUTTON_CLASS}>Cancel</Popover.Close>
-            </div>
-          </Popover.Content>
-        </Popover.Portal>
-      </Popover.Root>
+            <RunningIcon isRunning={isRunning} size={16} />
+            {isRunning ? 'Analyzing…' : 'Analyze'}
+          </button>
+        }
+        confirmLabel={`Analyze ${stockCount} holdings`}
+        onConfirm={() => void run()}
+      >
+        <ConfirmText stockCount={stockCount} estimate={estimatedAnalysisCost} />
+      </ConfirmBeforeRun>
       <RunOutcome
         isRunning={isRunning}
         runningText={`${stockCount} holdings · this takes tens of seconds`}

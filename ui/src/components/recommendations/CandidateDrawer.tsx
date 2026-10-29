@@ -8,12 +8,18 @@ import {
   formatPercent,
   formatSignedPercentOneDecimal,
 } from '../../lib/format';
+import type { RecommendationAnalysisState } from '../../hooks/useRecommendationAnalysis';
 import { TAG_CLASS } from '../../lib/styles';
-import type { Momentum } from '../../types/portfolio';
+import type { EstimatedAnalysisCost, Holding, Momentum } from '../../types/portfolio';
 import type { Correlation, HotStock, HotStockLabel } from '../../types/recommendations';
+import { AnalysisPanel } from '../AnalysisPanel';
 import { DrawerFrame, KeyFigure, KeyFigureExtra, KeyFigures, type DrawerTab } from '../DrawerFrame';
+import type { InvestmentsAndCash } from '../graphs/investmentsAndCash';
 import { useInvestors } from '../InvestorsContext';
 import { MomentumPanel } from '../Momentum';
+import { IfIBuyPanel } from '../weightCalculator/IfIBuyPanel';
+import { AnalyzeCandidateButton } from './AnalyzeButtons';
+import { CompanyPanel } from './CompanyPanel';
 import {
   fromHighText,
   heldByText,
@@ -24,15 +30,23 @@ import {
 } from './hotStockTexts';
 import { InfoMark } from './InfoMark';
 import { LIST_WORDS } from './ListHeading';
-import { RecoveringTag } from './RiskSignTag';
+import { NewsScoreSection } from './NewsScore';
+import { RecoveringTag, RiskSigns } from './RiskSignTag';
+import { TimingNote } from './TimingNote';
 
-type CandidateTab = 'summary' | 'momentum';
+type CandidateTab = 'summary' | 'momentum' | 'analysis' | 'company' | 'ifIBuy';
 
-/** The other three tabs of the design — Analysts & news, Company, If I buy — come to their right with the analysis. */
 const TABS: DrawerTab<CandidateTab>[] = [
   { key: 'summary', label: 'Summary' },
   { key: 'momentum', label: 'Momentum' },
+  { key: 'analysis', label: 'Analysts & news' },
+  { key: 'company', label: 'Company' },
+  { key: 'ifIBuy', label: 'If I buy' },
 ];
+
+const NOT_ANALYZED_TEXT =
+  'Not analyzed yet. Analyze searches the web for its analyst ratings and news, Claude reads what it finds, and ' +
+  'Finnhub gives its company figures and next earnings date.';
 
 /** The rule of the stock's list, beside its distance from the 50-day average. */
 const LIST_RULES: Record<HotStockLabel, string> = {
@@ -258,9 +272,24 @@ function SummaryPanel({ stock }: { stock: HotStock }) {
 
 // ── the drawer ──────────────────────────────────────────────────────────────────────────────────
 
+/** Under the key figures, once analyzed: the risk signs with their figures, and the timing note apart. */
+function RiskLine({ stock }: { stock: HotStock }) {
+  if (stock.analysis === null) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-caption">
+      <span className="text-muted">Risk signs</span>
+      <RiskSigns stock={stock} showFigures />
+      {stock.reportsWithin14Days && stock.nextEarningsDate !== null && (
+        <TimingNote earningsDate={stock.nextEarningsDate} showsDateOnly={false} />
+      )}
+    </div>
+  );
+}
+
 /**
  * A scanned stock's drawer (/recommendations/:candidateId) — the same frame as a holding's. ‹ › step through Hot, Too
- * hot and Correcting in that order; ✕, Esc or the veil close it.
+ * hot and Correcting in that order; ✕, Esc or the veil close it. Its Analyze runs through the page, so the row's button
+ * and this one agree. `weightsTabs` and `openHoldings` are for If I buy.
  */
 export function CandidateDrawer({
   stock,
@@ -269,6 +298,11 @@ export function CandidateDrawer({
   onPrevious,
   onNext,
   onClose,
+  estimate,
+  analysisState,
+  onAnalyze,
+  weightsTabs,
+  openHoldings,
 }: {
   stock: HotStock;
   previousSymbol: string;
@@ -276,10 +310,45 @@ export function CandidateDrawer({
   onPrevious: () => void;
   onNext: () => void;
   onClose: () => void;
+  estimate: EstimatedAnalysisCost | null;
+  analysisState: RecommendationAnalysisState;
+  onAnalyze: (candidateId: number | null) => void;
+  weightsTabs: InvestmentsAndCash[];
+  openHoldings: Holding[];
 }) {
   const investors = useInvestors();
   const [activeTab, setActiveTab] = useState<CandidateTab>('summary');
   const heldBy = heldByText(stock, investors);
+
+  const renderTab = () => {
+    switch (activeTab) {
+      case 'summary':
+        return <SummaryPanel stock={stock} />;
+      case 'momentum':
+        return <MomentumPanel momentum={stock.momentum} />;
+      case 'analysis':
+        return (
+          <AnalysisPanel
+            analysis={stock.analysis}
+            analyzeButton={
+              <AnalyzeCandidateButton
+                stock={stock}
+                estimate={estimate}
+                analysisState={analysisState}
+                onAnalyze={onAnalyze}
+              />
+            }
+            notAnalyzedText={NOT_ANALYZED_TEXT}
+          >
+            <NewsScoreSection stock={stock} />
+          </AnalysisPanel>
+        );
+      case 'company':
+        return <CompanyPanel stock={stock} />;
+      case 'ifIBuy':
+        return <IfIBuyPanel stock={stock} tabs={weightsTabs} openHoldings={openHoldings} />;
+    }
+  };
   return (
     <DrawerFrame
       ariaLabel={`${stock.symbol}, ${LIST_WORDS[stock.label].title}`}
@@ -293,6 +362,7 @@ export function CandidateDrawer({
       }
       subline={`${stock.companyName ?? EMPTY_VALUE} · ${sectorText(stock)}`}
       figures={<CandidateKeyFigures stock={stock} />}
+      warning={<RiskLine stock={stock} />}
       tabs={TABS}
       activeTab={activeTab}
       onTabChange={setActiveTab}
@@ -302,7 +372,7 @@ export function CandidateDrawer({
       onNext={onNext}
       onClose={onClose}
     >
-      {activeTab === 'summary' ? <SummaryPanel stock={stock} /> : <MomentumPanel momentum={stock.momentum} />}
+      {renderTab()}
     </DrawerFrame>
   );
 }

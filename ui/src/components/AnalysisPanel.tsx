@@ -12,6 +12,7 @@ import type {
   EstimatedAnalysisCost,
   Headline,
   Holding,
+  MoveReason,
   Sentiment,
   SourceConsensus,
   StockAnalysis,
@@ -21,7 +22,7 @@ import { HelpPopover } from './HelpPopover';
 import { noTrendReason, SignalLegend, targetMovesText } from './Signal';
 
 /** What an analyst firm did, in plain words. */
-const ACTION_NAMES: Record<AnalystActionType, string> = {
+export const ACTION_NAMES: Record<AnalystActionType, string> = {
   UPGRADE: 'UPGRADED',
   DOWNGRADE: 'DOWNGRADED',
   INITIATE: 'NEW COVERAGE',
@@ -87,7 +88,7 @@ function webAddressOrNull(url: string): string | null {
 }
 
 /** "marketbeat.com" for https://www.marketbeat.com/stocks/NASDAQ/AAPL/forecast; the address itself if it can't be read. */
-function siteOf(url: string): string {
+export function siteOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
@@ -95,15 +96,19 @@ function siteOf(url: string): string {
   }
 }
 
-/** Opens the source in a new tab, with the external-link icon; plain text when the address is not a web page. */
-function SourceLink({ url, children }: { url: string; children: ReactNode }) {
+/**
+ * Opens the source in a new tab, with the external-link icon; plain text when the address is not a web page. `title`:
+ * what the hover says — the result's own title, say.
+ */
+export function SourceLink({ url, title, children }: { url: string; title?: string; children: ReactNode }) {
   const webAddress = webAddressOrNull(url);
-  if (webAddress === null) return <span>{children}</span>;
+  if (webAddress === null) return <span title={title}>{children}</span>;
   return (
     <a
       href={webAddress}
       target="_blank"
       rel="noopener noreferrer"
+      title={title}
       className="inline-flex items-center gap-[3px] text-link underline-offset-2 hover:underline"
     >
       {children}
@@ -140,7 +145,7 @@ function DottedLine({ parts, className = '' }: { parts: ReactNode[]; className?:
   );
 }
 
-function SubHeading({ children }: { children: ReactNode }) {
+export function SubHeading({ children }: { children: ReactNode }) {
   return <h3 className="mb-2 mt-5 text-[13px] font-semibold leading-5 first:mt-0">{children}</h3>;
 }
 
@@ -219,7 +224,7 @@ function TrendLine({ analysis }: { analysis: StockAnalysis }) {
 }
 
 /** "Neutral → Hold", or the rating alone when it stayed the same; `null` without one. In the firm's own words. */
-function ratingChangeOf(action: AnalystAction): string | null {
+export function ratingChangeOf(action: AnalystAction): string | null {
   const { fromRating, toRating } = action;
   if (toRating === null) return fromRating;
   if (fromRating === null || fromRating.toLowerCase() === toRating.toLowerCase()) return toRating;
@@ -227,7 +232,7 @@ function ratingChangeOf(action: AnalystAction): string | null {
 }
 
 /** "target 20.00 → 15.00", or "target 15.00"; `null` without one. */
-function targetChangeOf(action: AnalystAction): string | null {
+export function targetChangeOf(action: AnalystAction): string | null {
   if (action.priceTarget === null) return null;
   if (action.previousPriceTarget === null) return `target ${formatMoney(action.priceTarget)}`;
   return `target ${formatMoney(action.previousPriceTarget)} → ${formatMoney(action.priceTarget)}`;
@@ -262,7 +267,30 @@ function newestActionsFirst(actions: AnalystAction[]): AnalystAction[] {
   return [...actions].sort((first, second) => second.date.localeCompare(first.date));
 }
 
+const HIDDEN_ACTIONS_HINT =
+  'An action that states no price target — a rating service’s letter or rank (Weiss, Zacks), a rating kept without ' +
+  'a target — counts for nothing: neither in the trend nor in a news score. So it is not listed.';
+
+/** "1 action without a price target is not shown" — so that nothing Claude found disappears without a word. */
+function HiddenActionsLine({ hiddenCount }: { hiddenCount: number }) {
+  if (hiddenCount === 0) return null;
+  const actions = hiddenCount === 1 ? '1 action' : `${hiddenCount} actions`;
+  return (
+    <p className="mt-2 text-caption text-faint">
+      <span title={HIDDEN_ACTIONS_HINT} className={EXPLAINED_CLASS}>
+        {actions} without a price target {hiddenCount === 1 ? 'is' : 'are'} not shown
+      </span>
+    </p>
+  );
+}
+
+/**
+ * The analysts: the consensus with its spread, the trend, and the actions with a price target, newest first — the rule
+ * the trend and the news score count by (AI_ANALYSIS_TODO.md, decision 18), so a rating alone is not listed either.
+ */
 function AnalystsSection({ analysis }: { analysis: StockAnalysis }) {
+  const actionsWithATarget = analysis.recentActions.filter((action) => action.priceTarget !== null);
+  const hiddenCount = analysis.recentActions.length - actionsWithATarget.length;
   return (
     <>
       <SubHeading>Analysts</SubHeading>
@@ -275,13 +303,14 @@ function AnalystsSection({ analysis }: { analysis: StockAnalysis }) {
         </>
       )}
       <TrendLine analysis={analysis} />
-      {analysis.recentActions.length > 0 && (
+      {actionsWithATarget.length > 0 && (
         <ul className="mt-3 border-t">
-          {newestActionsFirst(analysis.recentActions).map((action, index) => (
+          {newestActionsFirst(actionsWithATarget).map((action, index) => (
             <ActionRow key={`${action.date}-${action.firm}-${index}`} action={action} />
           ))}
         </ul>
       )}
+      <HiddenActionsLine hiddenCount={hiddenCount} />
     </>
   );
 }
@@ -307,6 +336,28 @@ function HeadlineRow({ headline }: { headline: Headline }) {
   );
 }
 
+/**
+ * "Why it moves: A contract win with a large bank lifted the shares. examplewire.com" — from the week's news only, the
+ * result it rests on linked, its title on hover (RECOMMENDATIONS_TODO.md, decision 4).
+ */
+function WhyItMoves({ moveReason }: { moveReason: MoveReason | null }) {
+  return (
+    <p className="mb-2">
+      <span className="text-muted">Why it moves: </span>
+      {moveReason === null ? (
+        <span className="text-muted">the news doesn’t say.</span>
+      ) : (
+        <>
+          {moveReason.reason}{' '}
+          <SourceLink url={moveReason.url} title={moveReason.title}>
+            {siteOf(moveReason.url)}
+          </SourceLink>
+        </>
+      )}
+    </p>
+  );
+}
+
 function NewsSection({ analysis }: { analysis: StockAnalysis }) {
   return (
     <>
@@ -315,6 +366,7 @@ function NewsSection({ analysis }: { analysis: StockAnalysis }) {
         <SentimentChip sentiment={analysis.sentiment} />
         <span>{analysis.sentimentReason ?? 'No recent news in the search results.'}</span>
       </div>
+      <WhyItMoves moveReason={analysis.moveReason} />
       {analysis.headlines.length > 0 ? (
         <ul className="mt-2">
           {analysis.headlines.map((headline, index) => (
@@ -331,37 +383,29 @@ function NewsSection({ analysis }: { analysis: StockAnalysis }) {
 // ── the tab ─────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The drawer's "Analysts & news" tab: when and by which model it was analyzed, the analysts' consensus the API chose
- * with the spread of the sources, their trend and latest actions, and the news — every fact linked to its source —
- * and a button to analyze this stock again (open holdings only: the API refuses a closed one).
+ * A drawer's "Analysts & news" tab — a holding's or a scanned stock's: when and by which model it was analyzed, the
+ * analysts' consensus the API chose with the spread of the sources, their trend and latest actions, and the news with
+ * why the price moves — every fact linked to its source. `analyzeButton` analyzes this stock again (`false` when it
+ * can't be), `help` sits beside it, `notAnalyzedText` says what to do while it has never been analyzed, and `children`
+ * come after the news (a scanned stock's news score).
  */
 export function AnalysisPanel({
-  holding,
-  estimatedAnalysisCost,
-  onDataChanged,
+  analysis,
+  analyzeButton,
+  help,
+  notAnalyzedText,
+  children,
 }: {
-  holding: Holding;
-  estimatedAnalysisCost: EstimatedAnalysisCost | null;
-  onDataChanged: () => Promise<void>;
+  analysis: StockAnalysis | null;
+  analyzeButton: ReactNode;
+  help?: ReactNode;
+  notAnalyzedText: string;
+  children?: ReactNode;
 }) {
-  const analysis = holding.analysis;
-  const analyzeButton = holding.status === 'OPEN' && (
-    <AnalyzeHoldingButton
-      holdingId={holding.id}
-      symbol={holding.symbol}
-      estimatedAnalysisCost={estimatedAnalysisCost}
-      onDataChanged={onDataChanged}
-    />
-  );
-
   if (analysis === null) {
     return (
       <div className="py-6 text-muted">
-        <p className="mb-3">
-          {holding.status === 'OPEN'
-            ? 'Not analyzed yet. Analyze searches the web for its analyst ratings and news, and Claude reads what it finds.'
-            : 'Not analyzed: the analysis runs on open holdings only.'}
-        </p>
+        <p className="mb-3">{notAnalyzedText}</p>
         {analyzeButton}
       </div>
     );
@@ -374,13 +418,50 @@ export function AnalysisPanel({
         </span>
         <span className="ml-auto inline-flex items-center gap-1">
           {analyzeButton}
-          <HelpPopover label="What the dot’s colors mean">
-            <SignalLegend />
-          </HelpPopover>
+          {help}
         </span>
       </div>
       <AnalystsSection analysis={analysis} />
       <NewsSection analysis={analysis} />
+      {children}
     </div>
+  );
+}
+
+/** A holding's "Analysts & news" tab: the button for open holdings only — the API refuses a closed one. */
+export function HoldingAnalysisPanel({
+  holding,
+  estimatedAnalysisCost,
+  onDataChanged,
+}: {
+  holding: Holding;
+  estimatedAnalysisCost: EstimatedAnalysisCost | null;
+  onDataChanged: () => Promise<void>;
+}) {
+  const isOpen = holding.status === 'OPEN';
+  return (
+    <AnalysisPanel
+      analysis={holding.analysis}
+      analyzeButton={
+        isOpen && (
+          <AnalyzeHoldingButton
+            holdingId={holding.id}
+            symbol={holding.symbol}
+            estimatedAnalysisCost={estimatedAnalysisCost}
+            onDataChanged={onDataChanged}
+          />
+        )
+      }
+      help={
+        <HelpPopover label="What the dot’s colors mean">
+          <SignalLegend />
+        </HelpPopover>
+      }
+      notAnalyzedText={
+        isOpen
+          ? 'Not analyzed yet. Analyze searches the web for its analyst ratings and news, and Claude reads what it finds.'
+          : 'Not analyzed: the analysis runs on open holdings only.'
+      }
+    />
   );
 }

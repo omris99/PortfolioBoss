@@ -11,7 +11,11 @@ the holding drawer, the Closed page, the Investors page, then the modals.
 they describe the UI as it was *before* that round. **Section 7 is the second round:** the weight graphs and the
 drawer's Weight tab, built on 2026-10-13 from the first round's tokens but without a design pass, then designed in
 Claude Design and rebuilt from it on 2026-10-25. **Section 8 is the third round** (2026-10-26): a new page,
-Recommendations, designed before it is built.
+Recommendations, designed before it is built — its [now] pieces built on 2026-10-26, its [later] ones on 2026-10-27.
+Section 8 is older than two rule changes, which the build follows instead: Claude writes **no explanation** of the picks
+(each pick shows a line the code writes from the figures, its score and the news that weighed in), and the risk signs
+are **weighted**, a pick's weighing 2 at most, then ordered by a news score less the risks. The Hot table's detail line
+is one labeled line rather than the design's row of slots under a second header.
 
 ---
 

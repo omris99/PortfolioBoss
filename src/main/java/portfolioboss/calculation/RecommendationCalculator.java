@@ -62,7 +62,11 @@ public record RecommendationCalculator(List<RecommendationCandidate> shortList, 
         return candidate.riskSigns().stream().mapToInt(WEIGHT_OF_RISK_SIGN::get).sum();
     }
 
-    private boolean canBePicked(RecommendationCandidate candidate) {
+    /**
+     * Finnhub gave at least one of its figures, and the signs weigh 2 at most: whether the stock can be picked at all,
+     * before the scores are compared — what the page says about a stock analyzed but not picked.
+     */
+    public boolean canBePicked(RecommendationCandidate candidate) {
         return candidate.hasCompanyFacts() && riskWeightOf(candidate) <= MOST_RISK_WEIGHT_OF_A_PICK;
     }
 }

@@ -5,6 +5,8 @@ import portfolioboss.ai.AnalystActionType;
 import portfolioboss.ai.EventMagnitude;
 import portfolioboss.ai.NewsEvent;
 import portfolioboss.ai.NewsEventType;
+import portfolioboss.model.WeighedAnalystMove;
+import portfolioboss.model.WeighedNewsEvent;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -49,9 +51,25 @@ public record NewsScoreCalculator(List<NewsEvent> newsEvents, List<AnalystAction
 
     /** 0 with no event and no analyst's move. */
     public int score() {
-        int eventsWeight = newsEvents.stream().mapToInt(this::weightOf).sum();
-        int analystsWeight = recentActions.stream().mapToInt(this::weightOf).sum();
+        int eventsWeight = weighedNewsEvents().stream().mapToInt(WeighedNewsEvent::points).sum();
+        int analystsWeight = countedAnalystMoves().stream().mapToInt(WeighedAnalystMove::points).sum();
         return eventsWeight + analystsWeight;
+    }
+
+    /** Every event Claude found, in its order, with what it weighs — 0 for one no kind fits. */
+    public List<WeighedNewsEvent> weighedNewsEvents() {
+        return newsEvents.stream().map(event -> new WeighedNewsEvent(event, weightOf(event))).toList();
+    }
+
+    /**
+     * The analysts' moves that count, in Claude's order, with what each weighs; the other actions, which weigh nothing,
+     * are left out — they are the analysts' trend's, not the news score's.
+     */
+    public List<WeighedAnalystMove> countedAnalystMoves() {
+        return recentActions.stream()
+                .map(action -> new WeighedAnalystMove(action, weightOf(action)))
+                .filter(move -> move.points() != 0)
+                .toList();
     }
 
     /** A partnership or a contract by its size — the smallest when Claude didn't give one —, every other kind by kind. */

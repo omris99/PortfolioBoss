@@ -6,6 +6,8 @@ import portfolioboss.ai.AnalystActionType;
 import portfolioboss.ai.EventMagnitude;
 import portfolioboss.ai.NewsEvent;
 import portfolioboss.ai.NewsEventType;
+import portfolioboss.model.WeighedAnalystMove;
+import portfolioboss.model.WeighedNewsEvent;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -91,6 +93,22 @@ class NewsScoreCalculatorTest {
 
         assertThat(goodAndBad.score()).isEqualTo(3 - 2 + 2 - 2);
         assertThat(new NewsScoreCalculator(List.of(), List.of(), TODAY).score()).isZero();
+    }
+
+    /** What the page shows of a score: every event with its weight — one no kind fits too —, and the moves that count. */
+    @Test
+    void listsEveryEventWithItsWeightAndOnlyTheMovesThatCount() {
+        NewsEvent partnership = event(NewsEventType.PARTNERSHIP, EventMagnitude.HIGH);
+        NewsEvent noKindFits = event(NewsEventType.NOT_IN_THE_LIST, null);
+        AnalystAction upgrade = action(AnalystActionType.UPGRADE, 300.0, TODAY.minusDays(7));
+        AnalystAction targetRaised = action(AnalystActionType.TARGET_RAISED, 300.0, TODAY.minusDays(7));
+        NewsScoreCalculator calculator = new NewsScoreCalculator(
+                List.of(partnership, noKindFits), List.of(upgrade, targetRaised), TODAY);
+
+        assertThat(calculator.weighedNewsEvents())
+                .containsExactly(new WeighedNewsEvent(partnership, 3), new WeighedNewsEvent(noKindFits, 0));
+        assertThat(calculator.countedAnalystMoves()).containsExactly(new WeighedAnalystMove(upgrade, 2));
+        assertThat(calculator.score()).isEqualTo(5);
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────

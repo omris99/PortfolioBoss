@@ -66,8 +66,12 @@ function App() {
             path="investors"
             element={pageOnceLoaded((loaded) => <InvestorsPage investors={loaded.investors} onDataChanged={reload} />)}
           />
-          {/* After the portfolio too: the page names the investors and their cash, which come with it. */}
-          <Route path="recommendations/:candidateId?" element={pageOnceLoaded(() => <RecommendationsPage />)} />
+          {/* After the portfolio too: the page names the investors and their cash, quotes the analysis's cost and
+              weighs a purchase against the holdings — all of which come with it. */}
+          <Route
+            path="recommendations/:candidateId?"
+            element={pageOnceLoaded((loaded) => <RecommendationsPage snapshot={loaded} />)}
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppShell>

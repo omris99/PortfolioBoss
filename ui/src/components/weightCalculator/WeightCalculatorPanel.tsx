@@ -19,7 +19,7 @@ import {
 } from './targetWeight';
 
 /** "1 share", "26 shares". */
-function shareCountText(shareCount: number): string {
+export function shareCountText(shareCount: number): string {
   return shareCount === 1 ? '1 share' : `${formatQuantity(shareCount)} shares`;
 }
 
@@ -39,7 +39,7 @@ function CurrentWeight({ holdingInAccount, tab }: { holdingInAccount: HoldingInA
 }
 
 /** One line of the result, on a hairline: its name on the left, its figures on the right. */
-function PlanRow({ label, children }: { label: string; children: ReactNode }) {
+export function PlanRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-t py-2">
       <dt className="shrink-0 text-muted">{label}</dt>
@@ -59,7 +59,7 @@ function RealizedPnl({ realizedPnl, tab }: { realizedPnl: number | null; tab: In
 }
 
 /** The cash against what a purchase needs: said plainly when it covers it, as a warning when it doesn't. */
-function CashCoverage({ cash, isCoveredByCash }: { cash: number; isCoveredByCash: boolean }) {
+export function CashCoverage({ cash, isCoveredByCash }: { cash: number; isCoveredByCash: boolean }) {
   if (isCoveredByCash) return <>{formatMoney(cash)}: enough</>;
   return (
     <span className="inline-flex items-start gap-1.5 font-medium text-warn-real">

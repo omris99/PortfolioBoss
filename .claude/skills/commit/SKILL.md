@@ -41,9 +41,11 @@ and per closed position, a Columns menu, forms in modals —, worked out in the 
 by sector and by holding with the cash, and the drawer's target-weight calculator — and the fifth page,
 Recommendations: IB's scan for hot stocks once a trading day in `./run.sh` and on demand (Scan again, `POST
 /api/scans`), the hot / too hot / correcting lists with their correlations to the holdings behind
-`GET /api/recommendations`, and a drawer per scanned stock — and, behind `POST /api/recommendations/analysis` (no UI yet),
-the analysis of the short list with Finnhub's earnings date and company figures, the risk signs, the news events and their
-score, and the code's pick, stored for the measurement):*
+`GET /api/recommendations`, and a drawer per scanned stock — and, behind `POST /api/recommendations/analysis`, the
+analysis of the short list with Finnhub's earnings date and company figures, the risk signs, the news events and their
+score, and the code's pick, stored for the measurement; on the page, the recommendation card with Analyze & recommend,
+an Analyze per stock, a detail line under each analyzed Hot row, and the drawer's Analysts & news, Company and If I buy
+tabs):*
 
 | Scope | Covers |
 |---|---|
@@ -53,7 +55,7 @@ score, and the code's pick, stored for the measurement):*
 | `ai` | `portfolioboss.ai` — `AiKeys` (the two API keys from `config/local.env`), `TavilyClient` + `SearchResult` / `SearchResults` / `StockSearches` (the four searches, the symbol filter, and what is kept with an analysis), `StockAnalyzer` + `StockToAnalyze` / `ClaudeReply` (the call to Claude), `StockAnalysisPipeline` + `StockAnalysisOutcome` / `StockAnalysisRun` (the searches then Claude, every stock at once — shared by both Analyze runs), and the shape of Claude's answer (`StockAnalysisResult`, `SourceConsensus`, `RatingCounts`, `AnalystAction`, `Headline`, `MoveReason`, `NewsEvent`, `AnalystRating`, `AnalystActionType`, `Sentiment`, `NewsEventType`, `EventMagnitude`), which is also its JSON schema |
 | `stocks` | `portfolioboss.stocks` (since 2026-10-27) — `FinnhubClient` (Finnhub's two calls, with its own `FINNHUB_API_KEY` from `config/local.env`) and what Finnhub reports about a stock (`Stock`, `EarningsDate`, `CompanyFacts`) |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection, `JsonColumnMapper` for the `JSONB` column), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
-| `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`) and `AnalystConsensus` |
+| `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`), `AnalystConsensus`, and the news score's parts with their points (`WeighedNewsEvent`, `WeighedAnalystMove`) |
 | `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `RecommendationCandidate`, `RecommendationCalculator`, `NewsScoreCalculator`, `OrderCommission`: derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score and the year's figures, the analysts' consensus and trend and the dot, the hot-stock rule and the page's order, the correlations, when a scan is due, the risk signs, the news score and the pick, the default commission — no Spring, no database |
 | `exceptions` | `portfolioboss.exceptions` (since 2026-10-26) — the app's own exceptions (`TwsUnavailableException`, `TwsBusyException`) |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |

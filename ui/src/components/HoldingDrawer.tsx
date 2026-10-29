@@ -11,7 +11,7 @@ import {
 } from '../lib/format';
 import { LINK_BUTTON_CLASS, TAG_CLASS } from '../lib/styles';
 import type { ClosedPosition, EstimatedAnalysisCost, Holding } from '../types/portfolio';
-import { AnalysisPanel, RatingChip, SentimentChip, TargetWithUpside, TrendChip } from './AnalysisPanel';
+import { HoldingAnalysisPanel, RatingChip, SentimentChip, TargetWithUpside, TrendChip } from './AnalysisPanel';
 import { DrawerFrame, KeyFigure, KeyFigureExtra, KeyFigures, type DrawerTab } from './DrawerFrame';
 import { HoldingWarningBands } from './HoldingWarnings';
 import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
@@ -236,7 +236,11 @@ export function HoldingDrawer({
         return <MomentumPanel momentum={holding.momentum} />;
       case 'analysis':
         return (
-          <AnalysisPanel holding={holding} estimatedAnalysisCost={estimatedAnalysisCost} onDataChanged={onDataChanged} />
+          <HoldingAnalysisPanel
+            holding={holding}
+            estimatedAnalysisCost={estimatedAnalysisCost}
+            onDataChanged={onDataChanged}
+          />
         );
       case 'trades':
         return <TradesPanel owner={position} onDataChanged={onDataChanged} />;

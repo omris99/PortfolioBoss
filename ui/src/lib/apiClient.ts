@@ -5,7 +5,7 @@ import type {
   NewManualPositionRequest,
   TradeRequest,
 } from '../types/portfolio';
-import type { ScanRun } from '../types/recommendations';
+import type { RecommendationAnalysisRun, ScanRun } from '../types/recommendations';
 
 /**
  * A write the API refused or could not be reached for; `message` is meant to be shown to the user as it is. `status` is
@@ -92,6 +92,19 @@ export function deleteCashMovement(movementId: number): Promise<void> {
 export async function analyzeHoldings(holdingIds: number[] | null): Promise<AnalysisRun> {
   const response = await sendRequest('POST', '/api/analysis', { holdingIds });
   return (await response.json()) as AnalysisRun;
+}
+
+/**
+ * The Recommendations page's paid analysis — `null`: the short list (the first 10 hot stocks) and then the code's pick;
+ * a candidate's id: that one stock, with no new recommendation. Four web searches, one Claude call and Finnhub's figures
+ * a stock. Answers once every stock is done (tens of seconds for the short list); the analyses and the pick come with the
+ * next reload of the lists. 503 when a key is missing — for the short list, Finnhub's too —, 404 for a stock no longer
+ * in the latest scan's lists.
+ */
+export async function analyzeRecommendations(candidateId: number | null): Promise<RecommendationAnalysisRun> {
+  const body = candidateId === null ? {} : { candidateId };
+  const response = await sendRequest('POST', '/api/recommendations/analysis', body);
+  return (await response.json()) as RecommendationAnalysisRun;
 }
 
 /**

@@ -2,6 +2,8 @@ package portfolioboss.api.response;
 
 import portfolioboss.model.HotStockLabel;
 import portfolioboss.model.RiskSign;
+import portfolioboss.model.WeighedAnalystMove;
+import portfolioboss.model.WeighedNewsEvent;
 import portfolioboss.stocks.CompanyFacts;
 import portfolioboss.stocks.EarningsDate;
 
@@ -31,6 +33,15 @@ import java.util.List;
  * @param reportsWithin14Days the timing note: its report is due 0 to 14 days after the latest scan
  * @param newsScore           its news events and the analysts' moves weighed (decision 13), counted from the day of
  *                            the analysis — as the recommendation weighed them; {@code null} while never analyzed
+ * @param weighedNewsEvents   every event of that analysis with what it weighs in {@code newsScore}; empty while never
+ *                            analyzed
+ * @param countedAnalystMoves the analysts' upgrades and downgrades that count in {@code newsScore}, with what each
+ *                            weighs; empty while never analyzed
+ * @param riskWeight          its risk signs' weights added up; {@code null} when the signs were never checked
+ * @param score               the news score less {@code riskWeight} — what the picks are ordered by; {@code null} when
+ *                            the signs were never checked
+ * @param canBePicked         Finnhub's figures are there and the signs weigh 2 at most: the recommendation could pick it
+ *                            if its score is among the highest
  */
 public record HotStockResponse(
         long candidateId,
@@ -52,5 +63,10 @@ public record HotStockResponse(
         CompanyFacts companyFacts,
         List<RiskSign> riskSigns,
         boolean reportsWithin14Days,
-        Integer newsScore) {
+        Integer newsScore,
+        List<WeighedNewsEvent> weighedNewsEvents,
+        List<WeighedAnalystMove> countedAnalystMoves,
+        Integer riskWeight,
+        Integer score,
+        boolean canBePicked) {
 }

@@ -14,6 +14,8 @@ import portfolioboss.calculation.AnalystTrendCalculator;
 import portfolioboss.calculation.ConsensusCalculator;
 import portfolioboss.calculation.HotStockCalculator;
 import portfolioboss.calculation.Momentum;
+import portfolioboss.calculation.NewsScoreCalculator;
+import portfolioboss.calculation.RecommendationCalculator;
 import portfolioboss.calculation.RecommendationCandidate;
 import portfolioboss.calculation.ReturnsCorrelation;
 import portfolioboss.db.AccountStateRepository;
@@ -113,7 +115,7 @@ public class RecommendationsReadService {
         long accountOwnerId = investorRepository.accountOwner().id();
         Map<Integer, StockAnalysisEntity> latestAnalysisByConId = latestAnalysisByConIdOf(scan.candidates());
         // the day the timing note counts from: the scan's, not the clock's, so the same scan always reads the same
-        LocalDate scanDate = scan.scannedAt().atZone(ZoneId.systemDefault()).toLocalDate();
+        LocalDate scanDate = dateOf(scan.scannedAt());
         Map<HotStockLabel, List<HotStockResponse>> stocksByList =
                 candidatesWithTheirLists(scan.candidates(), dailyClosesByConId).stream()
                         .collect(Collectors.groupingBy(
@@ -233,6 +235,14 @@ public class RecommendationsReadService {
         StockAnalysisResult analysisResult = latestAnalysis == null ? null : latestAnalysis.result();
         RecommendationCandidate recommendationCandidate =
                 new RecommendationCandidate(candidate.id(), hotStock, finnhubStock, analysisResult);
+        // counted from the day of the analysis, as the recommendation counted it
+        LocalDate analysisDate = latestAnalysis == null ? null : dateOf(latestAnalysis.analyzedAt());
+        NewsScoreCalculator newsScore = analysisResult == null ? null
+                : new NewsScoreCalculator(analysisResult.newsEvents(), analysisResult.recentActions(), analysisDate);
+        // the rule for this one stock: none of what is asked below depends on the other stocks of a short list
+        RecommendationCalculator recommendationRule =
+                new RecommendationCalculator(List.of(recommendationCandidate), analysisDate);
+        boolean riskSignsChecked = recommendationCandidate.hasCompanyFacts();
         return new HotStockResponse(
                 candidate.id(),
                 candidate.conId(),
@@ -251,18 +261,18 @@ public class RecommendationsReadService {
                 analysisResponseOf(latestAnalysis, hotStock),
                 finnhubStock == null ? null : finnhubStock.nextEarningsDate(),
                 finnhubStock == null ? null : finnhubStock.companyFacts(),
-                recommendationCandidate.hasCompanyFacts() ? recommendationCandidate.riskSigns() : null,
+                riskSignsChecked ? recommendationCandidate.riskSigns() : null,
                 recommendationCandidate.reportsWithin14Days(scanDate),
-                newsScoreOf(recommendationCandidate, latestAnalysis));
+                newsScore == null ? null : newsScore.score(),
+                newsScore == null ? List.of() : newsScore.weighedNewsEvents(),
+                newsScore == null ? List.of() : newsScore.countedAnalystMoves(),
+                riskSignsChecked ? recommendationRule.riskWeightOf(recommendationCandidate) : null,
+                riskSignsChecked ? recommendationRule.scoreOf(recommendationCandidate) : null,
+                recommendationRule.canBePicked(recommendationCandidate));
     }
 
-    /** Counted from the day of the analysis, as the recommendation counted it; {@code null} while never analyzed. */
-    private Integer newsScoreOf(RecommendationCandidate recommendationCandidate, StockAnalysisEntity latestAnalysis) {
-        if (latestAnalysis == null) {
-            return null;
-        }
-        LocalDate analysisDate = latestAnalysis.analyzedAt().atZone(ZoneId.systemDefault()).toLocalDate();
-        return recommendationCandidate.newsScore(analysisDate);
+    private LocalDate dateOf(Instant instant) {
+        return instant.atZone(ZoneId.systemDefault()).toLocalDate();
     }
 
     /**

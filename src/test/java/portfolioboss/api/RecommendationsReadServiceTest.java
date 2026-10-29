@@ -8,6 +8,11 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import portfolioboss.ai.AnalystAction;
+import portfolioboss.ai.AnalystActionType;
+import portfolioboss.ai.EventMagnitude;
+import portfolioboss.ai.NewsEvent;
+import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.api.response.CorrelationResponse;
 import portfolioboss.api.response.HotStockResponse;
@@ -29,6 +34,8 @@ import portfolioboss.ib.ScanRow;
 import portfolioboss.ib.StockContractDetails;
 import portfolioboss.model.HotStockLabel;
 import portfolioboss.model.RiskSign;
+import portfolioboss.model.WeighedAnalystMove;
+import portfolioboss.model.WeighedNewsEvent;
 import portfolioboss.stocks.CompanyFacts;
 import portfolioboss.stocks.EarningsDate;
 import portfolioboss.stocks.Stock;
@@ -189,6 +196,40 @@ class RecommendationsReadServiceTest {
         assertThat(hota.nextEarningsDate()).isEqualTo(finnhubStock.nextEarningsDate());
         assertThat(hota.riskSigns()).containsExactly(RiskSign.HIGH_DEBT);
         assertThat(hota.reportsWithin14Days()).isTrue();
+        assertThat(hota.riskWeight()).isEqualTo(2);
+        assertThat(hota.score()).isEqualTo(-2);
+        assertThat(hota.canBePicked()).isTrue();
+    }
+
+    /**
+     * A partnership with a giant (+3) and an upgrade a week before the analysis (+2) — a reiterated rating weighs
+     * nothing —, and a P/E of 60 (Expensive, 1): what the score is made of, and the stock can be picked.
+     */
+    @Test
+    void aStockShowsWhatItsNewsScoreIsMadeOf() {
+        storeTheScan();
+        Instant analyzedAt = SYNCED_AT.plusSeconds(3600);
+        NewsEvent partnership = new NewsEvent(NewsEventType.PARTNERSHIP, EventMagnitude.HIGH,
+                "HOTA teams up with one of the largest companies.", "HOTA teams up with a giant",
+                "https://example.com/hota-partnership");
+        AnalystAction upgrade = new AnalystAction(dateOf(analyzedAt).minusDays(7), "Some Firm",
+                AnalystActionType.UPGRADE, "Hold", "Buy", 90.0, 120.0, "https://example.com/hota-upgrade", null);
+        AnalystAction reiterated = new AnalystAction(dateOf(analyzedAt).minusDays(3), "Other Firm",
+                AnalystActionType.REITERATE, "Buy", "Buy", 110.0, 110.0, "https://example.com/hota-kept", null);
+        StockAnalysisResult result = new StockAnalysisResult(List.of(), List.of(upgrade, reiterated), List.of(), null,
+                null, null, List.of(partnership));
+        Stock finnhubStock = new Stock("HOTA", null, new CompanyFacts(8.0, 15.0, 0.5, 60.0));
+        stockAnalysisRepository.save(analysisOf(candidateNamed("HOTA"), finnhubStock, analyzedAt, result));
+
+        HotStockResponse hota = stockNamed("HOTA");
+
+        assertThat(hota.newsScore()).isEqualTo(5);
+        assertThat(hota.weighedNewsEvents()).containsExactly(new WeighedNewsEvent(partnership, 3));
+        assertThat(hota.countedAnalystMoves()).containsExactly(new WeighedAnalystMove(upgrade, 2));
+        assertThat(hota.riskSigns()).containsExactly(RiskSign.EXPENSIVE);
+        assertThat(hota.riskWeight()).isEqualTo(1);
+        assertThat(hota.score()).isEqualTo(5 - 1);
+        assertThat(hota.canBePicked()).isTrue();
     }
 
     @Test
@@ -202,9 +243,16 @@ class RecommendationsReadServiceTest {
         assertThat(tooHot.companyFacts()).isNull();
         assertThat(tooHot.riskSigns()).isNull();
         assertThat(tooHot.reportsWithin14Days()).isFalse();
+        assertThat(tooHot.newsScore()).isNull();
+        assertThat(tooHot.weighedNewsEvents()).isEmpty();
+        assertThat(tooHot.countedAnalystMoves()).isEmpty();
+        assertThat(tooHot.canBePicked()).isFalse();
     }
 
-    /** Without Finnhub's answer four of the five signs were never checked: no list of signs — not an empty one. */
+    /**
+     * Without Finnhub's answer four of the five signs were never checked: no list of signs — not an empty one —, no
+     * weight and no score, and the stock can't be picked.
+     */
     @Test
     void withoutFinnhubsAnswerTheRiskSignsAreUnknown() {
         storeTheScan();
@@ -215,6 +263,10 @@ class RecommendationsReadServiceTest {
         assertThat(hota.analysis()).isNotNull();
         assertThat(hota.companyFacts()).isNull();
         assertThat(hota.riskSigns()).isNull();
+        assertThat(hota.riskWeight()).isNull();
+        assertThat(hota.score()).isNull();
+        assertThat(hota.canBePicked()).isFalse();
+        assertThat(hota.newsScore()).isZero();
     }
 
     @Test
@@ -283,8 +335,13 @@ class RecommendationsReadServiceTest {
 
     /** An analysis that found nothing; {@code finnhubStock} is what Finnhub answered, or {@code null}. */
     private StockAnalysisEntity analysisOf(ScanCandidateEntity candidate, Stock finnhubStock, Instant analyzedAt) {
-        return new StockAnalysisEntity(candidate, finnhubStock, analyzedAt, "claude-sonnet-5-5",
-                new StockAnalysisResult(List.of(), List.of(), List.of(), null, null, null, List.of()), null, 10_500,
+        return analysisOf(candidate, finnhubStock, analyzedAt,
+                new StockAnalysisResult(List.of(), List.of(), List.of(), null, null, null, List.of()));
+    }
+
+    private StockAnalysisEntity analysisOf(ScanCandidateEntity candidate, Stock finnhubStock, Instant analyzedAt,
+                                           StockAnalysisResult result) {
+        return new StockAnalysisEntity(candidate, finnhubStock, analyzedAt, "claude-sonnet-5-5", result, null, 10_500,
                 900, 5,
                 new BigDecimal("0.030000"));
     }

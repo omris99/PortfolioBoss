@@ -5,6 +5,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import portfolioboss.ai.AnalystAction;
+import portfolioboss.ai.AnalystActionType;
 import portfolioboss.ai.EventMagnitude;
 import portfolioboss.ai.MoveReason;
 import portfolioboss.ai.NewsEvent;
@@ -20,6 +22,8 @@ import portfolioboss.api.response.StockAnalysisResponse;
 import portfolioboss.model.HotStockLabel;
 import portfolioboss.model.MomentumLabel;
 import portfolioboss.model.RiskSign;
+import portfolioboss.model.WeighedAnalystMove;
+import portfolioboss.model.WeighedNewsEvent;
 import portfolioboss.stocks.CompanyFacts;
 import portfolioboss.stocks.EarningsDate;
 
@@ -106,10 +110,18 @@ class RecommendationsControllerTest {
                 .andExpect(jsonPath("$.hotStocks[0].companyFacts.peRatio").value(38.0))
                 .andExpect(jsonPath("$.hotStocks[0].riskSigns[0]").value("REVENUE_FALLING"))
                 .andExpect(jsonPath("$.hotStocks[0].reportsWithin14Days").value(true))
-                .andExpect(jsonPath("$.hotStocks[0].newsScore").value(2))
+                .andExpect(jsonPath("$.hotStocks[0].newsScore").value(0))
                 .andExpect(jsonPath("$.hotStocks[0].analysis.newsEvents[0].type").value("MAJOR_CONTRACT"))
                 .andExpect(jsonPath("$.hotStocks[0].analysis.newsEvents[0].magnitude").value("MEDIUM"))
                 .andExpect(jsonPath("$.hotStocks[0].analysis.newsEvents[0].title").value("HOTA wins a contract"))
+                .andExpect(jsonPath("$.hotStocks[0].weighedNewsEvents[0].event.type").value("MAJOR_CONTRACT"))
+                .andExpect(jsonPath("$.hotStocks[0].weighedNewsEvents[0].points").value(2))
+                .andExpect(jsonPath("$.hotStocks[0].countedAnalystMoves[0].action.firm").value("Some Firm"))
+                .andExpect(jsonPath("$.hotStocks[0].countedAnalystMoves[0].action.action").value("DOWNGRADE"))
+                .andExpect(jsonPath("$.hotStocks[0].countedAnalystMoves[0].points").value(-2))
+                .andExpect(jsonPath("$.hotStocks[0].riskWeight").value(3))
+                .andExpect(jsonPath("$.hotStocks[0].score").value(-3))
+                .andExpect(jsonPath("$.hotStocks[0].canBePicked").value(false))
                 .andExpect(jsonPath("$.tooHotStocks").value(empty()))
                 .andExpect(jsonPath("$.correctingStocks[0].label").value("CORRECTING"))
                 .andExpect(jsonPath("$.correctingStocks[0].percentAboveSma50").value(-3.0))
@@ -117,6 +129,11 @@ class RecommendationsControllerTest {
                 .andExpect(jsonPath("$.correctingStocks[0].riskSigns").value(nullValue()))
                 .andExpect(jsonPath("$.correctingStocks[0].reportsWithin14Days").value(false))
                 .andExpect(jsonPath("$.correctingStocks[0].newsScore").value(nullValue()))
+                .andExpect(jsonPath("$.correctingStocks[0].weighedNewsEvents").value(empty()))
+                .andExpect(jsonPath("$.correctingStocks[0].countedAnalystMoves").value(empty()))
+                .andExpect(jsonPath("$.correctingStocks[0].riskWeight").value(nullValue()))
+                .andExpect(jsonPath("$.correctingStocks[0].score").value(nullValue()))
+                .andExpect(jsonPath("$.correctingStocks[0].canBePicked").value(false))
                 .andExpect(jsonPath("$.latestRecommendation.recommendedAt").value("2026-10-26T18:30:00Z"))
                 .andExpect(jsonPath("$.latestRecommendation.scannedAt").value("2026-10-25T21:30:00Z"))
                 .andExpect(jsonPath("$.latestRecommendation.picks[0].candidateId").value(8))
@@ -133,21 +150,26 @@ class RecommendationsControllerTest {
 
     /**
      * 6.5% above its 50-day average, 8% below its year high, moving with a holding, held by investor 1 — analyzed, with
-     * falling revenue and a report in ten days.
+     * falling revenue (3, over the limit) and a report in ten days; a contract (+2) and a downgrade (−2).
      */
     private HotStockResponse hotStock() {
+        StockAnalysisResponse analysis = analysis();
+        AnalystAction downgrade = new AnalystAction(LocalDate.of(2026, 10, 20), "Some Firm",
+                AnalystActionType.DOWNGRADE, "Buy", "Hold", 130.0, 115.0, "https://example.com/hota-downgrade", null);
         return new HotStockResponse(11, 9001, "HOTA", "HOTA INC", "NASDAQ", "Technology", "Software",
                 HotStockLabel.HOT, momentumAt(110.0), 6.5, true, false,
-                List.of(new CorrelationResponse(7, "AAPL", 0.82, true)), List.of(1L), analysis(),
+                List.of(new CorrelationResponse(7, "AAPL", 0.82, true)), List.of(1L), analysis,
                 new EarningsDate(LocalDate.of(2026, 11, 5), "amc"), new CompanyFacts(-4.5, 12.0, 0.6, 38.0),
-                List.of(RiskSign.REVENUE_FALLING), true, 2);
+                List.of(RiskSign.REVENUE_FALLING), true, 0,
+                List.of(new WeighedNewsEvent(analysis.newsEvents().getFirst(), 2)),
+                List.of(new WeighedAnalystMove(downgrade, -2)), 3, -3, false);
     }
 
     /** Never analyzed. */
     private HotStockResponse correctingStock() {
         return new HotStockResponse(12, 9002, "HOTB", "HOTB CORP", "NYSE", "Industrials", "Machinery",
                 HotStockLabel.CORRECTING, momentumAt(97.0), -3.0, false, true, List.of(), List.of(), null, null, null,
-                null, false, null);
+                null, false, null, List.of(), List.of(), null, null, false);
     }
 
     /** Its shape is the holdings', pinned in {@code PortfolioControllerTest}; here only that it is there. */
