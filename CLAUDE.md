@@ -60,7 +60,7 @@ card with the tabs in its header, the explanations in a small bubble (`Tip`) ins
 Weight tab's result in rows. Every trade has a price since 2026-10-13 too: the API, the form and the table (V8) all
 refuse one without.
 
-[RECOMMENDATIONS_TODO.md](RECOMMENDATIONS_TODO.md) is the current plan: a fifth page of hot US stocks — "hot" is a long
+[RECOMMENDATIONS_TODO.md](RECOMMENDATIONS_TODO.md) came next: a fifth page of hot US stocks — "hot" is a long
 upward trend, then sorted by how far the price has stretched above its 50-day average —, a recommendation the code
 picks — by weighted risk signs from Finnhub's company figures and the closes, and by a news score from the events Claude
 classifies in the news and the analysts' moves (decision 13) —, and a measurement of how the picks did. Its sessions 0
@@ -84,9 +84,18 @@ pick it didn't make) **nor choose them** (session 0: the same input gave two pic
 15% upside by the analysts** — so every scan now reads each stock's **Dow Jones headlines** through IB's API (free on this
 account; IB's scanner filter for it was refused, Finnhub's targets are paid), the code reads each firm's price target out
 of them, and the short list is the first 10 HOT stocks whose **median** target (each firm's latest of half a year, 3
-firms at least) is 15%+ above the last close. Session 4ב is built (437 tests, the UI build) and the database was backed up
-before V12; its live check — `./run.sh` applying V12 and the scan reading the headlines, then the browser — is next.
-Session 5 (the measurement) comes after.
+firms at least) is 15%+ above the last close. Session 4ב is built (437 tests, the UI build) and was checked live on
+2026-10-29: `./run.sh` applied V12 (after a backup) and its scan read 2,022 targets for 69 of the 71 stocks found, a full
+run from the page picked three, and the page was checked in the browser. Session 5 (the measurement) comes after, once a
+month of prices has passed since the first picks (from about 2026-11-27).
+
+[MY_HOLDINGS_TODO.md](MY_HOLDINGS_TODO.md) (2026-11-02) is the current plan: what the holdings themselves still lack
+against TODO.md's six principles — in the weeks before, a scanned stock got more data than a holding. In order: how much a
+stock must rise to reach its new average after a buy (the drawer's Weight tab, UI only), the earnings date, Finnhub's
+figures and the Dow Jones target for the holdings too, the holdings that move together and a market drop of 20%, alerts
+from a daily run, and the portfolio's return against SPY. Its session 0 (the docs) is done, and so is session 1
+(2026-11-04, browser-checked): every purchase in the drawer's Weight tab shows the new average cost and how far the price
+must rise to reach it (and against the average of today), and a second field buys for an amount. Session 2 comes next.
 
 ## Hard invariant: read-only
 
@@ -502,7 +511,7 @@ again. `V11__investment_recommendations.sql` (on the real database since the fir
 added `investment_recommendation` (`InvestmentRecommendationEntity`: `scan_id`, `recommended_at`, `picks` — the
 picked `scan_candidate` ids in order, as a JSON list; an empty list when none qualified, an answer the measurement counts);
 only the picks: why each was picked is worked out again from its stored analysis.
-`V12__analyst_price_targets.sql` (2026-10-29, decision 14; backed up before, not on the real database until the next
+`V12__analyst_price_targets.sql` (2026-10-29, decision 14; backed up before, on the real database since that day's
 `./run.sh`) added `analyst_price_target` (`AnalystPriceTargetEntity`: `con_id`, `published_at`, `firm`, `price_target`,
 `previous_price_target` — `NULL` when the headline names none —, `headline`; the firm and the headline `TEXT`, so that no
 length can fail a scan; an index on `con_id`, no `UNIQUE`): one row per target headline, keyed by contract id like
@@ -947,7 +956,16 @@ same investor (the link's state, `HoldingDrawer.OpenOnTab` with `weightsInvestor
 (rounded up, so it lands at the target or just under) or buy (rounded down), the weight after, the default commission
 and, for a sale, the realized P&L at the tab's average cost — on the same whole account, which a sale or a purchase
 doesn't change (cash and shares trade places). On the tab of an investor who holds none of the holding it starts from 0
-shares, so only buying is worked out (`investmentIn`). Since the design's second round (2026-10-25) the two graphs are
+shares, so only buying is worked out (`investmentIn`). Since MY_HOLDINGS_TODO.md's session 1 (2026-11-04) the tab has a
+second field, "Or buy for an amount" (`buildPurchasePlanForAmount`: the whole shares the amount buys at IB's last price,
+`calculateWholeSharesForAmount`, shared with If I buy; typing in one field empties the other), and every purchase —
+from the target or the amount, one `buildPurchasePlan` — carries an `AverageCostAfterPurchase`
+(`calculateAverageCostAfterPurchase`): the new average = (shares held × the tab's average cost + shares bought × the
+price + the commission) ÷ every share after — the commission counted in, as IB counts it in its average cost —, and how
+far the price must rise to reach it, against today's average (decision 2's example: 100 shares at 50, the price 40, 50
+more for a commission of 5 — 46.70, +16.75% against +25%). At or above the average the row says "Already reached: the
+price is 4.0% above the average"; without an average cost, or on the tab of an investor who holds none, there is no
+average to change and the rows are left out. Since the design's second round (2026-10-25) the two graphs are
 the halves of one "Weights" card (`graphs/WeightGraphs.tsx`) whose header holds the tab row; every row of the legend and
 of the bars can be reached with the keyboard and explains itself in `ui/src/components/Tip.tsx` — the design system's
 bubble, used only here so far (the rest of the app still uses the browser's `title`) —, and the bars are drawn to scale
@@ -1175,11 +1193,12 @@ Things that are easy to break:
   the UI to show and enter them, the reconciliation warnings, the closed positions (commissions, average cost,
   manual positions) and the investors sharing the account are in, and so are the momentum score and the analysis of
   AI_ANALYSIS_TODO.md, backend and UI; the API reads only from the database. From Milestone 3, the weight of each holding
-  and sector (TODO.md's principle 3) and a target-weight calculator are in — of the whole account and of each investor's
+  and sector (TODO.md's principle 3) and a target-weight calculator — with the new average after a purchase since
+  MY_HOLDINGS_TODO.md's session 1 — are in — of the whole account and of each investor's
   own money —, in the UI only. RECOMMENDATIONS_TODO.md's scan, hot-stock lists and page (sessions 1 and 1b), Finnhub's
   client (session 2), the analysis and recommendation's backend (session 3) and their UI (session 4, with V11 and the
-  first full run from the page) are in, and so is session 4ב (the analysts' target from Dow Jones, decision 14) — built,
-  its live check with V12 next; the measurement (session 5) comes after.
+  first full run from the page) are in, and so is session 4ב (the analysts' target from Dow Jones, decision 14), checked
+  live with V12; the measurement (session 5) comes after. MY_HOLDINGS_TODO.md is the current plan.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
-  ideas. The
-  `thesis` table comes later. The **written thesis per holding** is the actual product, not the IB reader.
+  ideas. There is **no written thesis per holding** (decided 2026-10-06: data, not text): the product is the data on
+  each holding that helps decide whether to stay in it — not the IB reader.

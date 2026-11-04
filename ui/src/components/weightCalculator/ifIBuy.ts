@@ -1,9 +1,8 @@
-import { formatMoney } from '../../lib/format';
 import { defaultCommissionFor } from '../../lib/orderCommission';
 import type { Holding } from '../../types/portfolio';
 import { investmentIn, type InvestmentsAndCash } from '../graphs/investmentsAndCash';
 import { portfolioWeightsOf, wholeAccountOf } from '../graphs/portfolioWeights';
-import type { CannotCalculate } from './targetWeight';
+import { calculateWholeSharesForAmount, type CannotCalculate } from './targetWeight';
 
 /**
  * "If I buy" (DESIGN_BRIEF.md §8.3), the arithmetic: what buying a scanned stock for an amount comes to on one tab —
@@ -11,9 +10,6 @@ import type { CannotCalculate } from './targetWeight';
  * Weight tab's purchase, cash turns into shares, so the whole account keeps its size, and the commission is too small to
  * change the weights, which leave it out.
  */
-
-/** Below this, a share count counts as whole: 59.9999999999 shares is 60 after the division's rounding. */
-const ROUNDING_TOLERANCE = 1e-9;
 
 /** The sector the user picked for the stock: one of their own, or one none of their holdings has yet. */
 export type SectorChoice = { kind: 'sector'; name: string } | { kind: 'notHeldYet' };
@@ -83,8 +79,8 @@ export function purchaseOf(
     const reason = `No weight can be worked out: ${tab.wholeName} is unknown (IB reported no cash) or not above zero.`;
     return { reason };
   }
-  const shareCount = Math.floor(amount / price + ROUNDING_TOLERANCE);
-  if (shareCount === 0) return { reason: `${formatMoney(amount)} buys no whole share at ${formatMoney(price)}.` };
+  const shareCount = calculateWholeSharesForAmount(amount, price);
+  if (typeof shareCount !== 'number') return shareCount;
 
   const held = heldAs === null ? null : investmentIn(tab, heldAs);
   const heldValue = held?.marketValue ?? 0;

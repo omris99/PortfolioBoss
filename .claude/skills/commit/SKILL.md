@@ -38,7 +38,8 @@ stock analysis — Tavily's searches (kept with each analysis), Claude's extract
 from price-target moves and the colored dot — behind `POST /api/analysis` and in the UI's Signal column, a holding
 drawer's "Analysts & news" tab and the Analyze buttons — the UI's light redesign: four pages, a drawer per holding
 and per closed position, a Columns menu, forms in modals —, worked out in the UI only, the Overview's weight graphs
-by sector and by holding with the cash, and the drawer's target-weight calculator — and the fifth page,
+by sector and by holding with the cash, and the drawer's target-weight calculator, with the new average after a
+purchase and a purchase for an amount — and the fifth page,
 Recommendations: IB's scan for hot stocks once a trading day in `./run.sh` and on demand (Scan again, `POST
 /api/scans`), the hot / too hot / correcting lists with their correlations to the holdings behind
 `GET /api/recommendations`, and a drawer per scanned stock — and, behind `POST /api/recommendations/analysis`, the
@@ -70,7 +71,7 @@ Tests (`src/test/`) take the scope of the code they cover.
 |---|---|
 | `thesis` | M1 — the written thesis per holding (the actual product) |
 | `analytics` | M3 — correlated clusters, TWR, SPY benchmark (the weight of each holding and sector is already in the UI, scope `ui`) |
-| `averaging` | M3 — the averaging-down calculator's verdict ladder (its weight part, the drawer's Weight tab, is in the UI, scope `ui`) |
+| `averaging` | M3 — the averaging-down calculator's verdict ladder (its weight part and the new average after a purchase, the drawer's Weight tab, are in the UI, scope `ui`) |
 | `alerts` | M4 — rule-based alerts |
 | `journal` | M4 — decision journal |
 
