@@ -58,9 +58,10 @@ public class TwsReader {
 
     /**
      * {@code ./run.sh}: the portfolio, then — when {@code withScan} — the scans for hot stocks with the contract details
-     * of the stocks they found, then the daily closes of the holdings, of SPY and of the stocks the scan kept. Waits
-     * for a reading already running to end. {@code null} when the portfolio could not be read; the reason has been
-     * printed.
+     * of the stocks they found, then the holdings' contract details, then the analysts' price targets in the Dow Jones
+     * headlines of the stocks the scan kept and of the holdings, in the same rounds, then the daily closes of the
+     * holdings, of SPY and of the stocks the scan kept. Waits for a reading already running to end. {@code null} when the
+     * portfolio could not be read; the reason has been printed.
      */
     public TwsReading readPortfolio(boolean withScan) throws InterruptedException {
         oneReadingAtATime.lock();
@@ -68,13 +69,32 @@ public class TwsReader {
         try {
             PortfolioSnapshot snapshot = connectAndReadPortfolio(gateway);
             Scan scan = withScan ? readHotStockScan(gateway) : null;
+            Map<Integer, StockContractDetails> holdingContractDetailsByConId =
+                    readContractDetailsOfHoldings(gateway, snapshot, scan);
+
+            Map<Integer, String> companyNameByConId =
+                    scan == null ? new LinkedHashMap<>() : companyNamesOfScannedStocks(scan);
+            holdingContractDetailsByConId.forEach((conId, contractDetails) ->
+                    companyNameByConId.putIfAbsent(conId, contractDetails.companyName()));
+            Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsOfAllStocks =
+                    readAnalystPriceTargets(gateway, companyNameByConId, Instant.now());
+            Map<Integer, List<AnalystPriceTarget>> holdingAnalystPriceTargetsByConId =
+                    analystPriceTargetsOfStocks(holdingContractDetailsByConId.keySet(), analystPriceTargetsOfAllStocks);
+            System.out.printf("[ib] analysts' price targets of the holdings: %d for %d of %d holdings%n",
+                    holdingAnalystPriceTargetsByConId.values().stream().mapToInt(List::size).sum(),
+                    holdingAnalystPriceTargetsByConId.size(), snapshot.holdings().size());
+            Scan scanWithAnalystPriceTargets = scan == null ? null : scan.withAnalystPriceTargets(
+                    analystPriceTargetsOfStocks(companyNamesOfScannedStocks(scan).keySet(),
+                            analystPriceTargetsOfAllStocks));
+
             Set<Integer> conIds = new LinkedHashSet<>();
             snapshot.holdings().forEach(holding -> conIds.add(holding.conId()));
             conIds.add(Benchmark.SPY_CON_ID);
             if (scan != null) {
                 scan.candidates().forEach(candidate -> conIds.add(candidate.conId()));
             }
-            return new TwsReading(snapshot, readDailyCloses(gateway, conIds), scan);
+            return new TwsReading(snapshot, readDailyCloses(gateway, conIds), scanWithAnalystPriceTargets,
+                    holdingContractDetailsByConId, holdingAnalystPriceTargetsByConId);
         } catch (TwsUnavailableException e) {
             System.err.println(e.reason());
             return null;
@@ -106,10 +126,12 @@ public class TwsReader {
                 throw new TwsUnavailableException("TWS answered, but no scan did: try again in a minute.",
                         "[ib] scan unavailable: no scan answered");
             }
+            Scan scanWithAnalystPriceTargets = scan.withAnalystPriceTargets(
+                    readAnalystPriceTargets(gateway, companyNamesOfScannedStocks(scan), scan.scannedAt()));
             Set<Integer> conIds = new LinkedHashSet<>();
             conIds.add(Benchmark.SPY_CON_ID);
             scan.candidates().forEach(candidate -> conIds.add(candidate.conId()));
-            return new ScanReading(scan, readDailyCloses(gateway, conIds));
+            return new ScanReading(scanWithAnalystPriceTargets, readDailyCloses(gateway, conIds));
         } catch (TwsUnavailableException e) {
             System.err.println(e.reason());
             throw e;
@@ -140,8 +162,8 @@ public class TwsReader {
 
     /**
      * Still connected, after the portfolio: the scans for hot stocks, then the contract details of the stocks they
-     * found — their exchange and sector —, then the analysts' price targets in the Dow Jones headlines of the stocks
-     * kept. {@code null} when no scan answered.
+     * found — their exchange and sector. Without the analysts' price targets: the caller reads them next, with the
+     * holdings' when there are any. {@code null} when no scan answered.
      */
     private Scan readHotStockScan(IbGateway gateway) throws InterruptedException {
         gateway.requestHotStockScans();
@@ -169,23 +191,88 @@ public class TwsReader {
         if (!leftOutStocks.isEmpty()) {
             System.out.println("[ib] left out, not on NYSE or NASDAQ: " + String.join(", ", leftOutStocks));
         }
-        return scan.withAnalystPriceTargets(readAnalystPriceTargets(gateway, scan.candidates(), scannedAt));
+        return scan;
     }
 
     /**
-     * Still connected: half a year of each candidate's Dow Jones headlines, page by page, and the analysts' price targets
-     * in them (decision 14). A stock whose headlines fail or come late keeps the targets an earlier scan stored.
+     * Still connected: the contract details of every holding — its sector (MY_HOLDINGS_TODO.md, decision 11) and the
+     * name its headlines are read with. A holding the scan found is not asked again: the scan's details are its own. One
+     * whose details fail or come late is left out, and keeps the sector stored before.
+     */
+    private Map<Integer, StockContractDetails> readContractDetailsOfHoldings(IbGateway gateway,
+                                                                            PortfolioSnapshot snapshot, Scan scan)
+            throws InterruptedException {
+        Map<Integer, StockContractDetails> contractDetailsAlreadyRead =
+                scan == null ? Map.of() : scan.contractDetailsByConId();
+        List<Integer> holdingConIds = snapshot.holdings().stream().map(Holding::conId).distinct().toList();
+        List<Integer> holdingConIdsToRequest = holdingConIds.stream()
+                .filter(conId -> !contractDetailsAlreadyRead.containsKey(conId))
+                .toList();
+        if (!holdingConIdsToRequest.isEmpty()) {
+            gateway.requestContractDetails(holdingConIdsToRequest);
+            if (!gateway.awaitContractDetails(CONTRACT_DETAILS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                System.out.println("[ib] contract details still missing after " + CONTRACT_DETAILS_TIMEOUT_SECONDS
+                        + "s; keeping what arrived");
+            }
+        }
+        // every contract details this connection received: the scan's and the holdings'
+        Map<Integer, StockContractDetails> contractDetailsOfThisConnection = gateway.contractDetails();
+        Map<Integer, StockContractDetails> holdingContractDetailsByConId = new LinkedHashMap<>();
+        for (int conId : holdingConIds) {
+            StockContractDetails contractDetails = contractDetailsOfThisConnection.get(conId);
+            if (contractDetails != null) {
+                holdingContractDetailsByConId.put(conId, contractDetails);
+            }
+        }
+        System.out.printf("[ib] contract details received for %d of %d holdings%n",
+                holdingContractDetailsByConId.size(), holdingConIds.size());
+        return holdingContractDetailsByConId;
+    }
+
+    /** By contract id, the company name of each stock the scan kept: its headlines are read with it. */
+    private Map<Integer, String> companyNamesOfScannedStocks(Scan scan) {
+        Map<Integer, String> companyNameByConId = new LinkedHashMap<>();
+        scan.candidates().forEach(candidate -> companyNameByConId.put(candidate.conId(), candidate.companyName()));
+        return companyNameByConId;
+    }
+
+    /** Of the targets read for every stock, those of these stocks only: the holdings', or the scanned stocks'. */
+    private Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsOfStocks(
+            Collection<Integer> stockConIds, Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsOfAllStocks) {
+        Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId = new LinkedHashMap<>();
+        for (int conId : stockConIds) {
+            List<AnalystPriceTarget> analystPriceTargets = analystPriceTargetsOfAllStocks.get(conId);
+            if (analystPriceTargets != null) {
+                analystPriceTargetsByConId.put(conId, analystPriceTargets);
+            }
+        }
+        return analystPriceTargetsByConId;
+    }
+
+    /**
+     * Still connected: half a year of each stock's Dow Jones headlines, page by page, and the analysts' price targets in
+     * them (decision 14) — the scanned stocks' and the holdings' in the same rounds, each stock once. A stock without a
+     * company name is not read: its headlines couldn't be told from other companies'. One whose headlines fail or come
+     * late keeps the targets stored before.
+     *
+     * @param companyNameByConId IB's name of each stock's company, from its contract details
+     * @param readAt             the headlines of the half year before this day are read
      */
     private Map<Integer, List<AnalystPriceTarget>> readAnalystPriceTargets(IbGateway gateway,
-                                                                          List<ScanCandidate> candidates,
-                                                                          Instant scannedAt)
+                                                                          Map<Integer, String> companyNameByConId,
+                                                                          Instant readAt)
             throws InterruptedException {
-        LocalDateTime oldestWanted = scannedAt.atZone(ZoneId.systemDefault()).toLocalDate()
+        List<Integer> conIdsToRead = companyNameByConId.keySet().stream()
+                .filter(conId -> hasCompanyName(companyNameByConId.get(conId)))
+                .toList();
+        if (conIdsToRead.isEmpty()) {
+            return Map.of();
+        }
+        LocalDateTime oldestWanted = readAt.atZone(ZoneId.systemDefault()).toLocalDate()
                 .minusMonths(AnalystPriceTarget.MONTHS_COUNTED)
                 .atStartOfDay();
-        NewsHeadlinePaging paging =
-                new NewsHeadlinePaging(candidates.stream().map(ScanCandidate::conId).toList(), oldestWanted);
-        System.out.printf("[ib] requesting half a year of Dow Jones headlines for %d stocks%n", candidates.size());
+        NewsHeadlinePaging paging = new NewsHeadlinePaging(conIdsToRead, oldestWanted);
+        System.out.printf("[ib] requesting half a year of Dow Jones headlines for %d stocks%n", conIdsToRead.size());
         for (int round = 1; round <= MOST_NEWS_ROUNDS && paging.hasStocksToRead(); round++) {
             Map<Integer, LocalDateTime> nextPages = paging.nextPages();
             gateway.requestNewsHeadlines(nextPages);
@@ -197,28 +284,31 @@ public class TwsReader {
             nextPages.keySet().forEach(conId -> paging.addPage(conId, pages.getOrDefault(conId, List.of())));
         }
 
-        Map<Integer, List<AnalystPriceTarget>> targetsByConId = priceTargetsIn(paging.headlinesByConId(), candidates);
+        Map<Integer, List<AnalystPriceTarget>> targetsByConId =
+                priceTargetsIn(paging.headlinesByConId(), companyNameByConId);
         int targetCount = targetsByConId.values().stream().mapToInt(List::size).sum();
         System.out.printf("[ib] analysts' price targets: %d in the Dow Jones headlines of %d of %d stocks%n",
-                targetCount, targetsByConId.size(), candidates.size());
+                targetCount, targetsByConId.size(), conIdsToRead.size());
         return targetsByConId;
     }
 
-    /** Each candidate's own targets, read with its IB name: other companies' headlines in its feed are left out. */
+    /** Each stock's own targets, read with its IB name: other companies' headlines in its feed are left out. */
     private Map<Integer, List<AnalystPriceTarget>> priceTargetsIn(Map<Integer, List<NewsHeadline>> headlinesByConId,
-                                                                  List<ScanCandidate> candidates) {
+                                                                  Map<Integer, String> companyNameByConId) {
         Map<Integer, List<AnalystPriceTarget>> targetsByConId = new LinkedHashMap<>();
-        for (ScanCandidate candidate : candidates) {
-            List<NewsHeadline> headlines = headlinesByConId.get(candidate.conId());
-            if (headlines != null) {
-                PriceTargetHeadlineReader headlineReader = new PriceTargetHeadlineReader(candidate.companyName());
-                targetsByConId.put(candidate.conId(), headlines.stream()
-                        .map(headlineReader::priceTargetIn)
-                        .flatMap(Optional::stream)
-                        .toList());
-            }
-        }
+        headlinesByConId.forEach((conId, headlines) -> {
+            PriceTargetHeadlineReader headlineReader = new PriceTargetHeadlineReader(companyNameByConId.get(conId));
+            targetsByConId.put(conId, headlines.stream()
+                    .map(headlineReader::priceTargetIn)
+                    .flatMap(Optional::stream)
+                    .toList());
+        });
         return targetsByConId;
+    }
+
+    /** A name its headlines can be matched with; IB may send an empty one. */
+    private boolean hasCompanyName(String companyName) {
+        return companyName != null && !companyName.isBlank();
     }
 
     /**

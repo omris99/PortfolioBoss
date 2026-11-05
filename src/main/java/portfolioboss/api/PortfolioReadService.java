@@ -3,6 +3,7 @@ package portfolioboss.api;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import portfolioboss.ai.StockAnalysisResult;
+import portfolioboss.api.response.AnalystTargetResponse;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.EstimatedAnalysisCostResponse;
 import portfolioboss.api.response.HoldingResponse;
@@ -12,6 +13,7 @@ import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.StockAnalysisResponse;
 import portfolioboss.api.response.TradeResponse;
+import portfolioboss.calculation.AnalystTargetCalculator;
 import portfolioboss.calculation.AnalystTrendCalculator;
 import portfolioboss.calculation.ConsensusCalculator;
 import portfolioboss.calculation.HoldingHistory;
@@ -19,9 +21,11 @@ import portfolioboss.calculation.InvestorSummary;
 import portfolioboss.calculation.InvestorSummaryCalculator;
 import portfolioboss.calculation.Momentum;
 import portfolioboss.calculation.PositionTrades;
+import portfolioboss.calculation.RiskSignsCalculator;
 import portfolioboss.calculation.SignalCalculator;
 import portfolioboss.db.AccountStateEntity;
 import portfolioboss.db.AccountStateRepository;
+import portfolioboss.db.AnalystPriceTargetRepository;
 import portfolioboss.db.DailyCloseRepository;
 import portfolioboss.db.HoldingEntity;
 import portfolioboss.db.HoldingRepository;
@@ -31,6 +35,8 @@ import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.ManualPositionRepository;
 import portfolioboss.db.StockAnalysisEntity;
 import portfolioboss.db.StockAnalysisRepository;
+import portfolioboss.db.StockRepository;
+import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.Benchmark;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
@@ -38,6 +44,7 @@ import portfolioboss.model.AnalystConsensus;
 import portfolioboss.model.AnalystTrend;
 import portfolioboss.model.HoldingSignal;
 import portfolioboss.model.MomentumLabel;
+import portfolioboss.stocks.Stock;
 import portfolioboss.utils.Utils;
 
 import java.math.BigDecimal;
@@ -68,17 +75,22 @@ public class PortfolioReadService {
     private final InvestorRepository investorRepository;
     private final DailyCloseRepository dailyCloseRepository;
     private final StockAnalysisRepository stockAnalysisRepository;
+    private final StockRepository stockRepository;
+    private final AnalystPriceTargetRepository analystPriceTargetRepository;
 
     public PortfolioReadService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository,
                                 ManualPositionRepository manualPositionRepository,
                                 InvestorRepository investorRepository, DailyCloseRepository dailyCloseRepository,
-                                StockAnalysisRepository stockAnalysisRepository) {
+                                StockAnalysisRepository stockAnalysisRepository, StockRepository stockRepository,
+                                AnalystPriceTargetRepository analystPriceTargetRepository) {
         this.holdingRepository = holdingRepository;
         this.accountStateRepository = accountStateRepository;
         this.manualPositionRepository = manualPositionRepository;
         this.investorRepository = investorRepository;
         this.dailyCloseRepository = dailyCloseRepository;
         this.stockAnalysisRepository = stockAnalysisRepository;
+        this.stockRepository = stockRepository;
+        this.analystPriceTargetRepository = analystPriceTargetRepository;
     }
 
     /**
@@ -97,6 +109,10 @@ public class PortfolioReadService {
         List<InvestorEntity> investors = investorRepository.findAllByOrderById();
         Map<Integer, List<DailyClose>> dailyClosesByConId = dailyClosesOf(storedHoldings);
         Map<Long, StockAnalysisEntity> latestAnalysisByHoldingId = latestAnalysisByHoldingId();
+        List<Integer> holdingConIds = storedHoldings.stream().map(HoldingEntity::conId).toList();
+        Map<Integer, Stock> finnhubDataByConId = stockRepository.finnhubDataByConId(holdingConIds);
+        Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId =
+                analystPriceTargetRepository.analystPriceTargetsByConId(holdingConIds);
         // How far an OPEN holding's day count runs (see HoldingHistory) — the last sync, in the local
         // calendar day, not the instant the API happens to be called.
         LocalDate snapshotDate = accountState.asOf().atZone(ZoneId.systemDefault()).toLocalDate();
@@ -108,7 +124,9 @@ public class PortfolioReadService {
                 accountState.totalCashValue(),
                 storedHoldings.stream()
                         .map(holding -> holdingResponseOf(holding, snapshotDate, accountOwnerId,
-                                momentumOf(holding, dailyClosesByConId), latestAnalysisByHoldingId.get(holding.id())))
+                                momentumOf(holding, dailyClosesByConId), latestAnalysisByHoldingId.get(holding.id()),
+                                finnhubDataByConId.get(holding.conId()),
+                                analystPriceTargetsByConId.getOrDefault(holding.conId(), List.of())))
                         .toList(),
                 closedPositionsOf(storedHoldings, manualPositions),
                 investorsOf(accountState, storedHoldings, manualPositions, investors, accountOwnerId),
@@ -162,15 +180,21 @@ public class PortfolioReadService {
     // ── the holdings ────────────────────────────────────────────────────────────────────────────
 
     /**
-     * {@code snapshotDate} is how far a still-{@code OPEN} holding's day count runs — see {@link HoldingHistory};
-     * {@code accountOwnerId} is who holds the shares the other investors' trades don't explain; {@code momentum} and
-     * {@code latestAnalysis} are {@code null} while there are no closes, or no analysis, for the holding.
+     * {@code snapshotDate} is how far a still-{@code OPEN} holding's day count runs — see {@link HoldingHistory} —,
+     * and the day the analysts' targets and the timing note are counted from; {@code accountOwnerId} is who holds the
+     * shares the other investors' trades don't explain; {@code momentum}, {@code latestAnalysis} and
+     * {@code finnhubData} are {@code null} while there are no closes, no analysis, or no answer from Finnhub for the
+     * holding.
      */
     private HoldingResponse holdingResponseOf(HoldingEntity holdingEntity, LocalDate snapshotDate, long accountOwnerId,
-                                              Momentum momentum, StockAnalysisEntity latestAnalysis) {
+                                              Momentum momentum, StockAnalysisEntity latestAnalysis, Stock finnhubData,
+                                              List<AnalystPriceTarget> analystPriceTargets) {
         Holding holding = holdingEntity.toIbHolding();
         HoldingHistory holdingHistory = holdingEntity.tradeHistory();
         MomentumResponse momentumResponse = momentum == null ? null : new MomentumResponse(momentum);
+        RiskSignsCalculator riskSignsCalculator = new RiskSignsCalculator(finnhubData, momentum);
+        AnalystTargetCalculator analystTargetCalculator = new AnalystTargetCalculator(analystPriceTargets,
+                Utils.finiteOrNull(holding.marketPrice()), snapshotDate);
 
         return new HoldingResponse(
                 holding.symbol(),
@@ -197,7 +221,13 @@ public class PortfolioReadService {
                 investorQuantitiesOf(holdingEntity, accountOwnerId),
                 momentumResponse,
                 analysisResponseOf(latestAnalysis, holding),
-                signalOf(latestAnalysis, momentum));
+                signalOf(latestAnalysis, momentum),
+                new AnalystTargetResponse(analystTargetCalculator),
+                finnhubData == null ? null : finnhubData.nextEarningsDate(),
+                finnhubData == null ? null : finnhubData.companyFacts(),
+                riskSignsCalculator.hasCompanyFacts() ? riskSignsCalculator.riskSigns() : null,
+                riskSignsCalculator.reportsWithin14Days(snapshotDate),
+                holdingEntity.industry());
     }
 
     /**

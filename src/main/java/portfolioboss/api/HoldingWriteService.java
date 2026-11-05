@@ -4,7 +4,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import portfolioboss.api.request.SectorRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.TradeResponse;
 import portfolioboss.calculation.OrderCommission;
@@ -18,7 +17,7 @@ import portfolioboss.model.TradeSide;
 import portfolioboss.utils.Utils;
 
 /**
- * Stores what the user enters by hand — a holding's sector and its trades — in PortfolioBoss's own database, and
+ * Stores what the user enters by hand — a holding's trades — in PortfolioBoss's own database, and
  * corrects or deletes any trade, a manual position's too ({@link ManualPositionWriteService} adds those). The
  * write-side twin of {@link PortfolioReadService}. It never creates or deletes a holding: holdings come only from the
  * sync. Each method is one transaction; the request was already validated by the controller ({@code @Valid}).
@@ -38,12 +37,6 @@ public class HoldingWriteService {
         this.holdingRepository = holdingRepository;
         this.tradeRepository = tradeRepository;
         this.investorWriteService = investorWriteService;
-    }
-
-    @Transactional
-    public void changeSector(long holdingId, SectorRequest sectorRequest) {
-        HoldingEntity holding = findHolding(holdingId);
-        holding.changeSector(Utils.trimmedOrNull(sectorRequest.sector()));   // Hibernate writes the change at commit
     }
 
     /** The investor the request names, or the account owner when it names none. */

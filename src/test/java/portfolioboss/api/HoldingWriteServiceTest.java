@@ -11,7 +11,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.api.request.InvestorRequest;
-import portfolioboss.api.request.SectorRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
@@ -179,41 +178,13 @@ class HoldingWriteServiceTest {
     }
 
     @Test
-    void theSectorIsStoredWithoutSurroundingSpaces() {
-        writeService.changeSector(appleHoldingId, new SectorRequest("  Technology  "));
-
-        assertThat(readApple().sector()).isEqualTo("Technology");
-    }
-
-    @Test
-    void aBlankSectorClearsIt() {
-        writeService.changeSector(appleHoldingId, new SectorRequest("Technology"));
-        forgetWhatHibernateLoaded();
-
-        writeService.changeSector(appleHoldingId, new SectorRequest("   "));
-
-        assertThat(readApple().sector()).isNull();
-    }
-
-    @Test
-    void changingTheSectorOfAHoldingThatDoesNotExistIs404() {
-        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
-                () -> writeService.changeSector(MISSING_ID, new SectorRequest("Technology")));
-
-        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-    }
-
-    @Test
-    void theSectorAndTradesEnteredByHandSurviveTheNextSync() {
-        writeService.changeSector(appleHoldingId, new SectorRequest("Technology"));
+    void theTradesEnteredByHandSurviveTheNextSync() {
         writeService.addTrade(appleHoldingId, buyOfTen(LocalDate.of(2024, 3, 14)));
         forgetWhatHibernateLoaded();
 
         syncService.sync(snapshotWithApple(SECOND_RUN));
 
-        HoldingResponse apple = readApple();
-        assertThat(apple.sector()).isEqualTo("Technology");
-        assertThat(apple.trades()).hasSize(1);
+        assertThat(readApple().trades()).hasSize(1);
     }
 
     // ── whose trade ─────────────────────────────────────────────────────────────────────────────

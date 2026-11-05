@@ -7,10 +7,14 @@ import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
 import portfolioboss.ib.Scan;
+import portfolioboss.ib.StockContractDetails;
+import portfolioboss.ib.TwsReading;
 import portfolioboss.model.HoldingStatus;
+import portfolioboss.stocks.Stock;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -23,9 +27,10 @@ import java.util.TreeMap;
 
 /**
  * Brings the database up to date with one snapshot from TWS, once per connection. A holding TWS reported is
- * created or refreshed; an open holding TWS no longer reports is marked closed, never deleted, so the
- * sector and trades entered by hand survive. The daily closes read on the same connection (for the momentum) and the
- * scan for hot stocks, when one ran, with the analysts' price targets of its stocks, are stored with it.
+ * created or refreshed, its sector and industry from its contract details; an open holding TWS no longer reports is
+ * marked closed, never deleted, so the trades entered by hand survive. The daily closes read on the same connection
+ * (for the momentum), the scan for hot stocks when one ran, the analysts' price targets of its stocks and of the
+ * holdings, and what Finnhub answered about the holdings are stored with it.
  *
  * <p>Everything happens in one transaction: either the whole snapshot is stored or nothing is.
  */
@@ -37,15 +42,18 @@ public class PortfolioSyncService {
     private final DailyCloseRepository dailyCloseRepository;
     private final ScanRepository scanRepository;
     private final AnalystPriceTargetRepository analystPriceTargetRepository;
+    private final StockRepository stockRepository;
 
     public PortfolioSyncService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository,
                                 DailyCloseRepository dailyCloseRepository, ScanRepository scanRepository,
-                                AnalystPriceTargetRepository analystPriceTargetRepository) {
+                                AnalystPriceTargetRepository analystPriceTargetRepository,
+                                StockRepository stockRepository) {
         this.holdingRepository = holdingRepository;
         this.accountStateRepository = accountStateRepository;
         this.dailyCloseRepository = dailyCloseRepository;
         this.scanRepository = scanRepository;
         this.analystPriceTargetRepository = analystPriceTargetRepository;
+        this.stockRepository = stockRepository;
     }
 
     /** When the latest stored scan ran; empty before the first one. */
@@ -67,12 +75,29 @@ public class PortfolioSyncService {
     }
 
     /**
+     * A sync without the holdings' contract details, analysts' price targets and Finnhub data: what is stored of them
+     * stays as it is.
+     *
      * @param dailyCloses by IB contract id — the holdings', SPY's and the scanned stocks', as many as IB sent this
      *                    connection
      * @param scan        {@code null} when no scan ran or answered this connection
      */
     @Transactional
     public SyncResult sync(PortfolioSnapshot snapshot, Map<Integer, List<DailyClose>> dailyCloses, Scan scan) {
+        return sync(new TwsReading(snapshot, dailyCloses, scan), Map.of());
+    }
+
+    /**
+     * Everything one {@code ./run.sh} connection read, and what Finnhub answered about the holdings after it.
+     *
+     * @param reading            the portfolio, the closes, the scan ({@code null} when none ran or answered), and each
+     *                           holding's contract details — its sector — and analysts' price targets
+     * @param finnhubDataByConId by contract id, what Finnhub answered about each holding it answered for
+     *                           (MY_HOLDINGS_TODO.md, decision 10); a holding missing from it keeps what was stored
+     */
+    @Transactional
+    public SyncResult sync(TwsReading reading, Map<Integer, Stock> finnhubDataByConId) {
+        PortfolioSnapshot snapshot = reading.snapshot();
         String account = snapshot.account();
         Instant syncedAt = snapshot.asOf();
         Set<Integer> reportedConIds = new HashSet<>();
@@ -83,12 +108,18 @@ public class PortfolioSyncService {
             reportedConIds.add(holdingFromIb.conId());
             Optional<HoldingEntity> storedHolding =
                     holdingRepository.findByAccountAndConId(account, holdingFromIb.conId());
+            HoldingEntity holding;
             if (storedHolding.isPresent()) {
-                storedHolding.get().refreshFromIb(holdingFromIb, syncedAt);   // Hibernate writes the change at commit
+                holding = storedHolding.get();
+                holding.refreshFromIb(holdingFromIb, syncedAt);   // Hibernate writes the change at commit
                 updatedCount++;
             } else {
-                holdingRepository.save(new HoldingEntity(account, holdingFromIb, syncedAt));
+                holding = holdingRepository.save(new HoldingEntity(account, holdingFromIb, syncedAt));
                 addedCount++;
+            }
+            StockContractDetails contractDetails = reading.holdingContractDetailsByConId().get(holdingFromIb.conId());
+            if (contractDetails != null) {
+                holding.refreshSectorAndIndustryFromIb(contractDetails);
             }
         }
 
@@ -96,8 +127,10 @@ public class PortfolioSyncService {
         accountStateRepository.save(new AccountStateEntity(snapshot));
         System.out.printf("[db] synced %d holdings (%d new, %d updated, %d closed)%n",
                 reportedConIds.size(), addedCount, updatedCount, closedCount);
-        storeDailyCloses(dailyCloses);
-        storeScan(scan, dailyCloses);
+        storeDailyCloses(reading.dailyCloses());
+        storeScan(reading.scan(), reading.dailyCloses());
+        storeAnalystPriceTargets(analystPriceTargetsOfScanAndHoldings(reading));
+        storeFinnhubData(finnhubDataByConId);
         return new SyncResult(addedCount, updatedCount, closedCount);
     }
 
@@ -109,11 +142,13 @@ public class PortfolioSyncService {
     public void syncScan(Scan scan, Map<Integer, List<DailyClose>> dailyCloses) {
         storeDailyCloses(dailyCloses);
         storeScan(scan, dailyCloses);
+        storeAnalystPriceTargets(scan.analystPriceTargetsByConId());
     }
 
     /**
      * A new row for every scan, never replacing an older one: the measurement compares them over months. Each
-     * candidate is stored with its last close of this run — the price the measurement starts from.
+     * candidate is stored with its last close of this run — the price the measurement starts from. Its analysts'
+     * price targets are stored by the caller, with the holdings'.
      */
     private void storeScan(Scan scan, Map<Integer, List<DailyClose>> dailyCloses) {
         if (scan == null) {
@@ -123,7 +158,35 @@ public class PortfolioSyncService {
         dailyCloses.forEach((conId, closes) -> lastCloseByConId.put(conId, lastCloseOf(closes)));
         ScanEntity storedScan = scanRepository.save(new ScanEntity(scan, lastCloseByConId));
         System.out.printf("[db] stored a scan of %d stocks%n", storedScan.candidates().size());
-        storeAnalystPriceTargets(scan.analystPriceTargetsByConId());
+    }
+
+    /**
+     * The scanned stocks' targets and the holdings' in one map: a holding the scan found too is in both with the same
+     * targets — its headlines were read once —, and is stored once.
+     */
+    private Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsOfScanAndHoldings(TwsReading reading) {
+        Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId = new HashMap<>();
+        if (reading.scan() != null) {
+            analystPriceTargetsByConId.putAll(reading.scan().analystPriceTargetsByConId());
+        }
+        analystPriceTargetsByConId.putAll(reading.holdingAnalystPriceTargetsByConId());
+        return analystPriceTargetsByConId;
+    }
+
+    /**
+     * A contract Finnhub answered for gets the answer in place of the one stored before; one it didn't answer for (a
+     * failed call, no key, not in USD) keeps its old one, like the closes.
+     */
+    private void storeFinnhubData(Map<Integer, Stock> finnhubDataByConId) {
+        if (finnhubDataByConId.isEmpty()) {
+            return;
+        }
+        Instant fetchedAt = Instant.now();
+        stockRepository.deleteForContracts(finnhubDataByConId.keySet());
+        List<StockEntity> rows = new ArrayList<>();
+        finnhubDataByConId.forEach((conId, finnhubData) -> rows.add(new StockEntity(conId, finnhubData, fetchedAt)));
+        stockRepository.saveAll(rows);
+        System.out.printf("[db] stored Finnhub's data for %d holdings%n", rows.size());
     }
 
     /**

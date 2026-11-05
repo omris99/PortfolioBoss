@@ -9,7 +9,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.web.server.ResponseStatusException;
-import portfolioboss.api.request.SectorRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.TradeResponse;
 import portfolioboss.model.TradeSide;
@@ -178,22 +177,12 @@ class HoldingWriteControllerTest {
 
     // ── sector ──────────────────────────────────────────────────────────────────────────────────
 
+    /** A holding's sector comes from IB with every sync (MY_HOLDINGS_TODO.md, decision 11): no endpoint writes it. */
     @Test
-    void changesTheSectorAndAnswers204() throws Exception {
+    void theSectorCanNoLongerBeWrittenByHand() throws Exception {
         mockMvc.perform(put("/api/holdings/7/sector").contentType(MediaType.APPLICATION_JSON).content("""
                         {"sector": "Technology"}"""))
-                .andExpect(status().isNoContent());
-        then(holdingWriteService).should().changeSector(APPLE_HOLDING_ID, new SectorRequest("Technology"));
-    }
-
-    @Test
-    void rejectsASectorLongerThanTheColumn() throws Exception {
-        String sixtyOneCharacters = "x".repeat(61);
-
-        mockMvc.perform(put("/api/holdings/7/sector").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"sector\": \"" + sixtyOneCharacters + "\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("sector: size must be between 0 and 60"));
+                .andExpect(status().isNotFound());
         verifyNoInteractions(holdingWriteService);
     }
 

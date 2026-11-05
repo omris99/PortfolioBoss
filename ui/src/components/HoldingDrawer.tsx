@@ -17,7 +17,7 @@ import { HoldingWarningBands } from './HoldingWarnings';
 import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
 import { InvestorSplitTable, isShared } from './InvestorSplitTable';
 import { MomentumChip, MomentumPanel, passedCheckCount } from './Momentum';
-import { SectorCell } from './SectorCell';
+import { sectorAndIndustryText } from './SectorCell';
 import { SignalDot, warningSignsOf } from './Signal';
 import { TradesPanel } from './TradesPanel';
 import type { InvestmentsAndCash } from './graphs/investmentsAndCash';
@@ -265,7 +265,7 @@ export function HoldingDrawer({
       title={holding.symbol}
       currency={holding.currency}
       tags={holding.status === 'CLOSED' && <span className={TAG_CLASS}>closed</span>}
-      subline={<SectorCell holding={holding} onDataChanged={onDataChanged} />}
+      subline={sectorAndIndustryText(holding)}
       figures={<HoldingKeyFigures holding={holding} />}
       warning={<HoldingWarningBands warnings={holding.warnings} />}
       tabs={tabs}

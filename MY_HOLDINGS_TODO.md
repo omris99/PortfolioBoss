@@ -74,13 +74,24 @@
 8. **שדה סכום בלשונית Weight** (שאלה ו, 02.11.2026: כן). ליד יעד המשקל: "אם אקנה ב-$2,000". בהורדת ממוצע חושבים בסכום, לא
    באחוז משקל. כשמקלידים בשדה אחד, השני מתרוקן.
 9. **בלי Vitest** (שאלה ח, 02.11.2026: לא). ב-UI הבדיקה נשארת `npm run build` (בדיקת הטיפוסים), ובדפדפן מול חישוב ביד.
+10. **Finnhub להחזקות אוטומטית, בכל קריאה** (שאלה ב, 04.11.2026: כן). נשלח רק הסימבול, ורק של החזקות ב-USD: הסימבול של IB
+    לבורסה זרה הוא לא של Finnhub (מניה בהונג קונג היא אצל IB מספר), ובמקרה הגרוע הוא שייך למניה אמריקאית אחרת, ואז מגיעים
+    נתונים של חברה אחרת בלי שום שגיאה. החזקה בלי Finnhub: "Not checked".
+11. **הסקטור של החזקה מגיע רק מ-IB, ואי אפשר לשנות אותו ביד** (בחירת המשתמש, 04.11.2026). כמו מניה מהסריקה: ה-`industry` של
+    פרטי החוזה, הרמה הרחבה (Technology, Communications, Financial…).
+    - **גם ה-industry** (המשתמש, באותו יום): המילה השנייה של IB, ה-`category` ("Semiconductors"), ב-`holding.industry` (V14).
+      השמות לפי השוק ולא לפי IB, ש-IB הופך אותם: הסקטור של ההחזקה הוא ה-`industry` של IB, וה-industry שלה הוא ה-`category`.
+      אצל מניה מהסריקה נשארו המילים של IB. בטבלה שתי שורות, כמו ב-Recommendations; במגירה "Technology / Semiconductors".
+    - הוא נכתב בכל סנכרון ל-`holding.sector` במקום מה שהוקלד. ה-endpoint של הסקטור והתא שעורך אותו יוצאים.
+    - IB שלח סקטור ריק: אין סקטור. פרטי החוזה לא הגיעו: נשאר מה שנשמר קודם.
+    - פוזיציה ידנית (עמוד Closed) נשארת עם סקטור שמקלידים, כי IB לא מכיר אותה. החזקה סגורה שומרת את מה שהיה לה.
+    - ההחזקות והמניות מהסריקה מדברות באותן מילים, ולכן ב-If I buy הסקטור של מניה מהסריקה מתאים לסקטורים של ההחזקות.
 
 ## פתוח: להחליט לפני הסשן שתלוי בזה
 
 - **א. (לפני סשן 4) סף אחד לשני העמודים?** לשנות גם את ה-0.7 של עמוד ה-Recommendations ל-0.65? הסימון "Moves together" שם הוא
   סימון ולא סינון. **המלצה:** כן, כלל אחד במקום אחד.
-- **ב. (לפני סשן 2) Finnhub להחזקות אוטומטית, בכל קריאה?** המשמעות: הסימבולים של ההחזקות הפתוחות נשלחים ל-Finnhub בלי לחיצה. היום
-  נשלחים רק הסימבולים של מניות מהסריקה, ורק ב-Analyze. זה בחינם, סימבול בלבד, ובלעדיו אין התראה ב.
+- ~~**ב.** Finnhub להחזקות אוטומטית, בכל קריאה~~ — הוחלט: כן, להחזקות ב-USD (החלטה 10).
 - **ג. (לפני סשן 6) הערוץ של ההתראות:**
   - **Telegram:** התראה לטלפון. ה-token של הבוט נכנס ל-`config/local.env`, ואתה מוסיף אותו בעצמך.
   - **מייל:** צריך סיסמת אפליקציה ל-SMTP.
@@ -186,37 +197,56 @@
 
 ## סשן 2 — נתונים להחזקות: backend (עקרון 4) 🟡
 
+> **סטטוס (05.11.2026): בנוי ונבדק מול TWS; בדיקת הדפדפן אצל המשתמש.** 443 בדיקות ו-`npm run build` עוברים. השמות שאושרו:
+> `RiskSignsCalculator`, `Momentum.lowerThanAYearAgo()`, `readContractDetailsOfHoldings`, `companyNamesOfScannedStocks`,
+> `analystPriceTargetsOfStocks`, `hasCompanyName`, `stockOrNullOnFailure`, `readFinnhubDataOfHoldings`, `storeFinnhubData`,
+> `refreshSectorAndIndustryFromIb`, הטבלה `stock` עם `finnhub_data` (V13), ו-`holding.industry` (V14). V13 ו-V14 הוחלו על
+> ה-DB האמיתי בריצות שלא הגיעו ל-TWS, לפני גיבוי: הן רק הוסיפו טבלה ועמודה ריקות. אחר כך גיבוי
+> (`portfolioboss-2026-11-05.sql.gz`, 14 מ-14 טבלאות זהות), ובריצה של 05.11 פרטי החוזה, היעדים ו-Finnhub הגיעו לכל
+> ההחזקות. ETF מקבל מ-IB סקטור ריק, והסקטורים שהוקלדו הוחלפו בשל IB. לא נבדק: ההשוואה מול עמוד ה-Recommendations (אף החזקה לא הייתה בסריקה של היום), וכמה ה-startup
+> התארך (הלוג בלי שעות). הטקסט מתחת לטבעת: "1 holding IB gives no sector for" (המשתמש דחה "— an ETF, say").
+>
 > **המטרה:** `GET /api/portfolio` מחזיר לכל החזקה פתוחה את מה שמניה מהסריקה מקבלת: יעד Dow Jones, תאריך הדוח, הנתונים של
-> Finnhub וסימני הסיכון.
+> Finnhub וסימני הסיכון. והסקטור מגיע מ-IB (החלטה 11).
 
-### 2.1 🟡 IB: פרטי החוזה והכותרות של ההחזקות
+### 2.1 🟢 `calculation` (קודם, כי שאר הסשן משתמש בו)
 
-- בכל קריאה (ב-startup, ובהמשך גם ב-Sync now ובריצה היומית):
-  - `reqContractDetails` להחזקות הפתוחות, כדי לקבל את שם החברה שקוראים איתו את הכותרות. הסריקה כבר עושה את זה למניות שלה.
-  - הכותרות של Dow Jones להחזקות, בדיוק כמו למועמדות (`NewsHeadlinePaging`, `PriceTargetHeadlineReader`).
-- החזקה שהיא גם מועמדת בסריקה נקראת פעם אחת.
-- `readAnalystPriceTargets` מקבל זוגות של מספר חוזה ושם חברה, במקום `ScanCandidate`: אותו קוד לשניהם.
-- **לבדוק:** בכמה ה-startup מתארך. אם זה יותר מדי, לקרוא רק את הדפים שחדשים מהכותרת האחרונה שנשמרה.
-
-### 2.2 🟡 שמירה: `V13__finnhub_stocks.sql`
-
-- היעדים של ההחזקות נכנסים ל-`analyst_price_target`. הטבלה כבר לפי `con_id`, ולכן אין צורך במיגרציה בשבילם.
-- הטבלה החדשה `finnhub_stock`: `con_id`, `symbol`, `fetched_at`, `stock` (`JSONB`, ה-`stocks.Stock` כמו שהוא).
-  - מוחלפת לפי חוזה בכל קריאה, כמו `daily_close`.
-  - קריאה שנכשלה משאירה את מה שנשמר קודם.
-
-### 2.3 🟡 Finnhub (שאלה ב)
-
-- `FinnhubClient.stock` לכל החזקה פתוחה אחרי הקריאה, ב-virtual threads כמו ב-`RecommendationAnalysisService`.
-- בלי מפתח: כבוי, כמו היום. לא בתוך הטרנזקציה של ה-DB.
-
-### 2.4 🟢 `calculation`
-
-- **סימני הסיכון יוצאים מ-`RecommendationCandidate`** לרשומה משלהם (`RiskSignsCalculator(companyFacts, momentum)`, שם: הצעה), ששני
-  המקומות משתמשים בה. כך גם `reportsWithin14Days`.
+- **הכללים של סימני הסיכון יוצאים מ-`RecommendationCandidate`** למחלקה קטנה משלהם, `RiskSignsCalculator(stock, momentum)`:
+  התשובה של Finnhub והנתונים מהסגירות, שני דברים שגם מניה מהסריקה וגם החזקה יכולות לתת. בה `riskSigns()`, `hasCompanyFacts()`
+  ו-`reportsWithin14Days(today)`, בלי שינוי בכללים. כך כל כלל כתוב פעם אחת.
+- `RecommendationCandidate` ממשיך לענות על אותן שאלות דרכה, ולכן עמוד ה-Recommendations לא משתנה.
+- "נמוכה מלפני שנה" עובר ל-`Momentum` (`lowerThanAYearAgo()`), ששניהם קוראים ממנו: `HotStockCalculator.recovering()` (הסימון
+  בעמוד) ו-`RiskSignsCalculator` (הסימן `RECOVERING`).
 - `AnalystTargetCalculator` לא משתנה. בהחזקה הוא מקבל את המחיר של IB ואת תאריך הסנכרון.
 
-### 2.5 🟢 API
+### 2.2 🟡 IB: פרטי החוזה והכותרות של ההחזקות
+
+- בכל קריאה (ב-startup, ובהמשך גם ב-Sync now ובריצה היומית):
+  - `reqContractDetails` להחזקות הפתוחות: שם החברה, שקוראים איתו את הכותרות, והסקטור (החלטה 11). מניה שהסריקה כבר ביקשה לא
+    מבוקשת שוב.
+  - הכותרות של Dow Jones של ההחזקות ושל המועמדות **בסבב אחד** (`NewsHeadlinePaging`, `PriceTargetHeadlineReader`), כך שהחזקה
+    שהיא גם מועמדת נקראת פעם אחת, והיעדים של כולן במפה אחת שנשמרת פעם אחת.
+- `readAnalystPriceTargets` מקבל מפה ממספר חוזה לשם חברה, במקום `ScanCandidate`: אותו קוד לשניהם.
+- **לבדוק:** בכמה ה-startup מתארך. אם זה יותר מדי, לקרוא רק את הדפים שחדשים מהכותרת האחרונה שנשמרה.
+
+### 2.3 🟡 Finnhub (החלטה 10)
+
+- אחרי שהחיבור ל-TWS נסגר ולפני השמירה: `FinnhubClient.stock` לכל החזקה ב-USD, כולן במקביל (virtual threads, כמו
+  ב-`RecommendationAnalysisService`). לא בתוך הטרנזקציה של ה-DB.
+- בלי מפתח: כבוי, כמו היום. קריאה שנכשלה: `[stocks error]`, ונשאר מה שנשמר קודם. כש-TWS לא עונה, גם Finnhub לא נקרא.
+
+### 2.4 🟡 שמירה: `V13__stocks.sql`
+
+- הטבלה החדשה **`stock`** (`StockEntity`, `StockRepository`; השם של המשתמש, כמו הרשומה `stocks.Stock` שהיא שומרת): `con_id`,
+  `symbol`, `fetched_at`, `finnhub_data` (`JSONB`: כל התשובה של Finnhub, תאריך הדוח וארבעת הנתונים; השם של המשתמש).
+  - מוחלפת לפי חוזה בכל קריאה, כמו `daily_close`. קריאה שנכשלה משאירה את מה שנשמר קודם.
+- היעדים של ההחזקות נכנסים ל-`analyst_price_target`. הטבלה כבר לפי `con_id`, ולכן אין צורך במיגרציה בשבילם.
+- הסקטור נכתב ל-`holding.sector` הקיימת, ולכן גם בשבילו אין מיגרציה. בסנכרון הראשון הוא מחליף את מה שהוקלד (הגיבוי של
+  29.10.2026 שומר אותו).
+- `V14__holding_industry.sql`: העמודה `holding.industry` (החלטה 11). מיגרציה משלה, כי V13 כבר רצה על ה-DB האמיתי
+  (04.11.2026 ב-14:49, בריצה שלא הגיעה ל-TWS, ולכן בלי גיבוי לפניה: היא רק יצרה טבלה ריקה).
+
+### 2.5 🟢 API (וה-UI של הסקטור)
 
 - ל-`HoldingResponse` נוספים:
   - `analystTarget` (`AnalystTargetResponse`, כמו בעמוד ה-Recommendations);
@@ -224,19 +254,23 @@
   - `companyFacts`;
   - `riskSigns` (`null` בלי Finnhub);
   - `reportsWithin14Days`.
-- המפתחות רק נוספים, כמו תמיד (`ui/src/types/portfolio.ts`).
+- המפתחות רק נוספים, כמו תמיד (`ui/src/types/portfolio.ts`). `sector` נשאר באותו מפתח, ועכשיו הוא של IB.
+- יוצאים: `PUT /api/holdings/{holdingId}/sector`, `SectorRequest`, `HoldingEntity.changeSector`. ב-UI התא של הסקטור בטבלת
+  ה-Positions נהיה טקסט, והקריאה שלו ב-`apiClient.ts` יוצאת: בלי זה התא היה שולח לכתובת שכבר לא קיימת.
 
 ### 2.6 🟢 בדיקות
 
-- `PortfolioSyncServiceTest`: היעדים והתשובה של Finnhub נשמרים ומוחלפים.
+- `RiskSignsCalculatorTest`: מה שעבר מ-`RecommendationCandidateTest`, והחזקה בלי סגירות.
+- `PortfolioSyncServiceTest`: היעדים, התשובה של Finnhub והסקטור נשמרים ומוחלפים; מה שלא הגיע נשאר.
 - `PortfolioReadServiceTest`: המפתחות החדשים, והחזקה בלי Finnhub.
-- `RiskSignsCalculatorTest`: מה שעבר מ-`RecommendationCandidateTest`.
 - `PortfolioControllerTest`: ה-JSON.
+- `HoldingWriteControllerTest`, `HoldingWriteServiceTest`: בלי הסקטור.
 
 **בדיקת אימות סשן 2:**
-- `mvn -q clean test` ירוק.
-- גיבוי, ואז V13 דרך `./run.sh`.
-- שורת ה-`[ib]` של הכותרות של ההחזקות.
+- `mvn -q clean test` ירוק, ו-`npm run build`.
+- גיבוי, ואז V14 דרך `./run.sh` (V13 כבר הוחלה), כש-TWS מחובר.
+- שורת ה-`[ib]` של הכותרות של ההחזקות, ובכמה ה-startup התארך.
+- הסקטורים וה-industries של ההחזקות מ-IB (ובמיוחד ETF).
 - `/api/portfolio` לכל ההחזקות הפתוחות, מול עמוד ה-Recommendations למניה שמופיעה בשניהם.
 
 ---
@@ -316,7 +350,7 @@
 
 - `model.AlertType`: שמונת הסוגים של החלטה 6.
 - ב-`calculation`, כל כלל מקבל את המספרים של הקריאה ומחזיר את התנאים שנכונים עכשיו.
-- `V14__alerts.sql`: הטבלה `alert` (סוג, `con_id`, מה ההתראה מתארת — תאריך או כותרת, `created_at`, `sent_at`).
+- `V15__alerts.sql`: הטבלה `alert` (סוג, `con_id`, מה ההתראה מתארת — תאריך או כותרת, `created_at`, `sent_at`).
 - תנאי הופך להתראה רק אם לא היה נכון בריצה היומית הקודמת. איך שומרים את המצב של הריצה הקודמת — יוחלט בסשן.
 
 ### 5.5 🟢 בדיקות

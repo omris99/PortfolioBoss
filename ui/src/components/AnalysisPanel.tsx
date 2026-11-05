@@ -76,7 +76,7 @@ export function TargetWithUpside({ consensus }: { consensus: AnalystConsensus })
 
 /**
  * The address when it is a web page, `null` otherwise. It comes from search results, which are untrusted text, so
- * anything but http(s) — a `javascript:` address, say — is shown as text, never as a link.
+ * anything but http(s) — for example a `javascript:` address — is shown as text, never as a link.
  */
 function webAddressOrNull(url: string): string | null {
   try {
@@ -98,7 +98,7 @@ export function siteOf(url: string): string {
 
 /**
  * Opens the source in a new tab, with the external-link icon; plain text when the address is not a web page. `title`:
- * what the hover says — the result's own title, say.
+ * what the hover says — for example the result's own title.
  */
 export function SourceLink({ url, title, children }: { url: string; title?: string; children: ReactNode }) {
   const webAddress = webAddressOrNull(url);

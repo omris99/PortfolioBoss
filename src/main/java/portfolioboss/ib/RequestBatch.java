@@ -24,8 +24,11 @@ class RequestBatch<Key, Answer> {
 
     /** Names a request in an error line: "daily closes of contract" + " 756733". */
     private final String whatEachRequestReads;
-    /** The batch's requests are numbered from here, so that no two batches share a request id. */
-    private final int firstRequestId;
+    /**
+     * The batch's requests are numbered from its first request id, so that no two batches share one; a second send on
+     * the same connection goes on from where the first one stopped.
+     */
+    private int nextRequestId;
     private final Map<Integer, Key> keyByRequestId = new ConcurrentHashMap<>();
     private final Map<Integer, List<Answer>> answersByRequestId = new ConcurrentHashMap<>();
     private final Set<Integer> finishedRequestIds = ConcurrentHashMap.newKeySet();
@@ -33,21 +36,22 @@ class RequestBatch<Key, Answer> {
 
     protected RequestBatch(String whatEachRequestReads, int firstRequestId) {
         this.whatEachRequestReads = whatEachRequestReads;
-        this.firstRequestId = firstRequestId;
+        this.nextRequestId = firstRequestId;
     }
 
     /**
-     * Called before the requests go out: gives each key a request id of its own, counting up from the batch's first
-     * one in the order given, and returns them — request id to key — for the requests to be sent with.
+     * Called before the requests go out: gives each key a request id of its own, counting up in the order given, and
+     * returns them — request id to key — for the requests to be sent with. Called again on the same connection (the
+     * holdings' contract details after the scan's), it counts on from the last id, and the wait is for the new requests
+     * only; the answers of the earlier ones are kept.
      */
     protected Map<Integer, Key> expect(Collection<Key> keys) {
         Map<Integer, Key> keyByNewRequestId = new LinkedHashMap<>();
-        int requestId = firstRequestId;
         for (Key key : keys) {
+            int requestId = nextRequestId++;
             keyByNewRequestId.put(requestId, key);
             keyByRequestId.put(requestId, key);
             answersByRequestId.put(requestId, Collections.synchronizedList(new ArrayList<>()));
-            requestId++;
         }
         requestsNotFinished = new CountDownLatch(keys.size());
         return keyByNewRequestId;

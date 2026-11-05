@@ -136,6 +136,8 @@ class RecommendationAnalysisServiceTest {
         given(finnhubClient.hasApiKey()).willReturn(true);
         given(finnhubClient.stock(anyString(), any()))
                 .willAnswer(invocation -> new Stock(invocation.getArgument(0), null, HEALTHY_COMPANY));
+        // the real one: it calls the stubbed stock(…) and turns its failure into null
+        given(finnhubClient.stockOrNullOnFailure(anyString(), any())).willCallRealMethod();
     }
 
     @Test

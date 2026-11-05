@@ -10,14 +10,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import portfolioboss.api.request.SectorRequest;
 import portfolioboss.api.request.TradeRequest;
 import portfolioboss.api.response.TradeResponse;
 
 /**
- * The endpoints that write what the user enters by hand — a holding's sector and its trades — to PortfolioBoss's own
- * database. They never reach Interactive Brokers: the account is still only read, by the sync. Holdings themselves
- * are never created or deleted here; only the sync does that. After a write the UI reloads {@code /api/portfolio}.
+ * The endpoints that write what the user enters by hand — a holding's trades — to PortfolioBoss's own database. They
+ * never reach Interactive Brokers: the account is still only read, by the sync. Holdings themselves are never created
+ * or deleted here; only the sync does that, and since MY_HOLDINGS_TODO.md's decision 11 it also brings each holding's
+ * sector, from IB. After a write the UI reloads {@code /api/portfolio}.
  *
  * <p>Every endpoint with a body accepts JSON only ({@code consumes}). A page on another site can make the browser
  * send a request to localhost without asking first only as text or a form, and those get 415. JSON, PUT and DELETE
@@ -34,13 +34,6 @@ class HoldingWriteController {
 
     private HoldingWriteController(HoldingWriteService holdingWriteService) {
         this.holdingWriteService = holdingWriteService;
-    }
-
-    @PutMapping(path = "/api/holdings/{holdingId}/sector", consumes = MediaType.APPLICATION_JSON_VALUE)
-    private ResponseEntity<Void> changeSector(@PathVariable long holdingId,
-                                              @Valid @RequestBody SectorRequest sectorRequest) {
-        holdingWriteService.changeSector(holdingId, sectorRequest);
-        return ResponseEntity.noContent().build();
     }
 
     @PostMapping(path = "/api/holdings/{holdingId}/trades", consumes = MediaType.APPLICATION_JSON_VALUE)

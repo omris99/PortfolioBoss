@@ -92,7 +92,7 @@ function FailedStocks({ run }: { run: AnalysisRun }) {
 
 /**
  * Next to the button: that it is running, then what the run did and cost — "✓ Analyzed 7 · 35 credits · $0.30" — or the
- * API's reason when it refused (a missing key, say).
+ * API's reason when it refused (for example a missing key).
  */
 export function RunOutcome({
   isRunning,

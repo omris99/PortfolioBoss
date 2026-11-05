@@ -149,13 +149,7 @@ public class RecommendationAnalysisService {
         if (!finnhubClient.hasApiKey()) {
             return null;
         }
-        String symbol = candidateWithItsList.candidate().symbol();
-        try {
-            return finnhubClient.stock(symbol, today);
-        } catch (RuntimeException e) {
-            System.err.println("[stocks error] " + symbol + ": " + e.getMessage());
-            return null;
-        }
+        return finnhubClient.stockOrNullOnFailure(candidateWithItsList.candidate().symbol(), today);
     }
 
     /**

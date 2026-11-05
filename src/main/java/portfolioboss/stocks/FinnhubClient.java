@@ -76,6 +76,20 @@ public class FinnhubClient {
         return new Stock(symbol, nextEarningsDate(symbol, today), companyFacts(symbol));
     }
 
+    /**
+     * Like {@link #stock}, but never throws: a call that fails — no network, a refused key, a time limit passed — prints
+     * {@code [stocks error] SYMBOL: why} and gives {@code null}, so that one stock's failure leaves the others' answers
+     * and the rest of the run as they are.
+     */
+    public Stock stockOrNullOnFailure(String symbol, LocalDate today) {
+        try {
+            return stock(symbol, today);
+        } catch (RuntimeException e) {
+            System.err.println("[stocks error] " + symbol + ": " + e.getMessage());
+            return null;
+        }
+    }
+
     /** The first report from {@code today} on, or {@code null} when there is none in the next four months. */
     private EarningsDate nextEarningsDate(String symbol, LocalDate today) {
         EarningsCalendarResponse response = restClient.get()

@@ -27,10 +27,6 @@ export function errorMessageOf(error: unknown): string {
   return error instanceof ApiError ? error.message : 'Saving failed unexpectedly.';
 }
 
-export function changeSector(holdingId: number, sector: string | null): Promise<void> {
-  return sendJson('PUT', `/api/holdings/${holdingId}/sector`, { sector });
-}
-
 export function addTrade(holdingId: number, trade: TradeRequest): Promise<void> {
   return sendJson('POST', `/api/holdings/${holdingId}/trades`, trade);
 }
@@ -142,7 +138,7 @@ async function sendRequest(method: 'PUT' | 'POST' | 'DELETE', url: string, body?
 
 /**
  * The API answers errors with a ProblemDetail JSON body whose `detail` says what was wrong
- * ("quantity: must be greater than 0"). Anything else — say, Vite's own error page when the API is down —
+ * ("quantity: must be greater than 0"). Anything else — for example Vite's own error page when the API is down —
  * gets a message with just the status.
  */
 async function readErrorMessage(response: Response): Promise<string> {

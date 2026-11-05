@@ -4,6 +4,8 @@
  * api/request/). A figure IB did not report arrives as `null`.
  */
 
+import type { AnalystTarget, CompanyFacts, EarningsDate, RiskSign } from './recommendations';
+
 export type HoldingStatus = 'OPEN' | 'CLOSED';
 export type TradeSide = 'BUY' | 'SELL';
 export type HoldingWarningType = 'NO_TRADES_LOGGED' | 'CLOSED_WITHOUT_SELL' | 'QUANTITY_MISMATCH';
@@ -116,9 +118,9 @@ export interface Holding {
   id: number;
   /** IB's contract id. */
   conId: number;
-  /** Entered by hand; `null` until then. */
+  /** IB's, from the holding's contract details with every sync — never typed by hand; `null` when IB gives none. */
   sector: string | null;
-  /** A holding TWS no longer reports is `CLOSED`, never deleted, so its sector and trades survive. */
+  /** A holding TWS no longer reports is `CLOSED`, never deleted, so its trades survive. */
   status: HoldingStatus;
   /** 'yyyy-MM-dd', derived from `trades` by the API: the first buy since the position was last empty. */
   firstBuyDate: string | null;
@@ -138,6 +140,22 @@ export interface Holding {
   analysis: StockAnalysis | null;
   /** The colored dot; `null` without an analysis, or while fewer than two of its three signs are known. */
   signal: HoldingSignal | null;
+  // What a scanned stock has (MY_HOLDINGS_TODO.md, session 2); shown only — none of it changes the dot.
+  /** From the holding's Dow Jones headlines, against IB's latest price; no median under three firms. */
+  analystTarget: AnalystTarget;
+  /** Finnhub's; `null` without its answer, or without a report in the next four months. */
+  nextEarningsDate: EarningsDate | null;
+  /** Finnhub's four figures; `null` without its answer. */
+  companyFacts: CompanyFacts | null;
+  /** `null` without Finnhub's figures: then they were never checked, which an empty list would hide. */
+  riskSigns: RiskSign[] | null;
+  /** The next report is 0–14 days after the last sync. */
+  reportsWithin14Days: boolean;
+  /**
+   * IB's finer word, "Semiconductors", under `sector`; `null` until a sync reads it, and when IB gives none. IB names
+   * the two the other way round — a scanned stock's `industry` is the sector, its `category` this.
+   */
+  industry: string | null;
 }
 
 /** What a momentum score means: `STRONG` 4–5, `NEUTRAL` 2–3, `WEAK` 0–1 (AI_ANALYSIS_TODO.md, decision 5). */

@@ -141,6 +141,27 @@ class PortfolioWrapperTest {
                 List.of(new StockContractDetails(APPLE_CON_ID, "NASDAQ", "APPLE INC", "Technology", "Computers"))));
     }
 
+    /** The holdings' contract details go out after the scan's, on the same connection: the ids count on. */
+    @Test
+    void aSecondSendOfContractDetailsCountsOnAndKeepsTheFirstOnesAnswers() throws InterruptedException {
+        wrapper.contractDetailsRequests().expect(List.of(APPLE_CON_ID));
+        wrapper.contractDetails(APPLE_DETAILS_REQUEST_ID, contractDetails(APPLE_CON_ID, "NASDAQ", "APPLE INC",
+                "Technology", "Computers"));
+        wrapper.contractDetailsEnd(APPLE_DETAILS_REQUEST_ID);
+
+        Map<Integer, Integer> conIdByRequestId = wrapper.contractDetailsRequests().expect(List.of(MICROSOFT_CON_ID));
+        assertThat(conIdByRequestId).isEqualTo(Map.of(APPLE_DETAILS_REQUEST_ID + 1, MICROSOFT_CON_ID));
+        assertThat(wrapper.contractDetailsRequests().awaitAllFinished(0, TimeUnit.SECONDS)).isFalse();
+
+        wrapper.contractDetails(APPLE_DETAILS_REQUEST_ID + 1, contractDetails(MICROSOFT_CON_ID, "NASDAQ",
+                "MICROSOFT CORP", "Technology", "Software"));
+        wrapper.contractDetailsEnd(APPLE_DETAILS_REQUEST_ID + 1);
+
+        assertThat(wrapper.contractDetailsRequests().awaitAllFinished(0, TimeUnit.SECONDS)).isTrue();
+        assertThat(wrapper.contractDetailsRequests().answersOfFinishedRequests().keySet())
+                .containsExactlyInAnyOrder(APPLE_CON_ID, MICROSOFT_CON_ID);
+    }
+
     // ── daily closes ────────────────────────────────────────────────────────────────────────────
 
     @Test

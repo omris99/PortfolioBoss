@@ -13,6 +13,7 @@ import portfolioboss.calculation.HoldingHistory;
 import portfolioboss.calculation.PositionTrades;
 import portfolioboss.calculation.TradeFact;
 import portfolioboss.ib.Holding;
+import portfolioboss.ib.StockContractDetails;
 import portfolioboss.model.HoldingStatus;
 import portfolioboss.utils.Utils;
 
@@ -23,9 +24,9 @@ import java.util.List;
 /**
  * One row of the {@code holding} table: a position PortfolioBoss has seen at Interactive Brokers.
  *
- * <p>The broker figures are refreshed on every connection. {@code sector} and {@code trades} are entered
- * by the user and never overwritten by the sync. A holding that disappears from TWS is marked
- * {@code CLOSED}, never deleted, so those manual entries survive.
+ * <p>The broker figures are refreshed on every connection, and so is the {@code sector}, from IB's contract details
+ * (MY_HOLDINGS_TODO.md, decision 11). The {@code trades} are entered by the user and never overwritten by the sync. A
+ * holding that disappears from TWS is marked {@code CLOSED}, never deleted, so those manual entries survive.
  *
  * <p>Not to be confused with {@code calculation.Holding} (one IB reading) or {@code HoldingResponse} (what the
  * UI receives). The column names are these field names in snake_case ({@code conId} is {@code con_id}).
@@ -44,7 +45,10 @@ public class HoldingEntity {
     private String secType;
     private String currency;
 
+    /** IB's broad word, "Technology" — what IB calls {@code industry}. */
     private String sector;
+    /** IB's finer word, "Semiconductors" — what IB calls {@code category}. */
+    private String industry;
 
     private double position;
     private Double averageCost;
@@ -79,8 +83,9 @@ public class HoldingEntity {
     }
 
     /**
-     * Takes the broker's latest figures and reopens the holding if it was closed. It never touches
-     * {@code sector} or {@code trades}: those are entered by hand.
+     * Takes the broker's latest figures and reopens the holding if it was closed. It never touches {@code trades}:
+     * those are entered by hand. The sector and the industry come with the contract details, read apart:
+     * {@link #refreshSectorAndIndustryFromIb}.
      */
     protected void refreshFromIb(Holding holdingFromIb, Instant syncedAt) {
         symbol = holdingFromIb.symbol();
@@ -107,9 +112,14 @@ public class HoldingEntity {
         closedDetectedAt = syncedAt;
     }
 
-    /** Entered by the user through the API; the sync never calls this. {@code null} clears it. */
-    public void changeSector(String sector) {
-        this.sector = sector;
+    /**
+     * IB's two words for the company, from its contract details, under the market's names: the sector is IB's
+     * {@code industry} ("Technology"), the industry IB's {@code category} ("Semiconductors"). An empty word is none.
+     * Only the sync calls this, when the contract details came.
+     */
+    protected void refreshSectorAndIndustryFromIb(StockContractDetails contractDetails) {
+        sector = Utils.trimmedOrNull(contractDetails.industry());
+        industry = Utils.trimmedOrNull(contractDetails.category());
     }
 
     public Long id() {
@@ -130,6 +140,10 @@ public class HoldingEntity {
 
     public String sector() {
         return sector;
+    }
+
+    public String industry() {
+        return industry;
     }
 
     public HoldingStatus status() {

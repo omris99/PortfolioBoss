@@ -195,9 +195,7 @@ export const POSITION_COLUMNS: ColumnDefinition[] = [
     alignment: 'left',
     sortValue: (holding) => holding.sector,
     firstSortDirection: 'ascending',
-    renderValue: (holding, tableActions) => (
-      <SectorCell holding={holding} onDataChanged={tableActions.onDataChanged} />
-    ),
+    renderValue: (holding) => <SectorCell holding={holding} />,
   },
   {
     key: 'position',

@@ -99,7 +99,7 @@ export function purchaseOf(
   };
 }
 
-/** The sectors the user has typed for their open holdings, A to Z: the list a scanned stock's sector is picked from. */
+/** IB's sectors of the open holdings, A to Z: the list a scanned stock's sector is picked from. */
 export function sectorsOfHoldings(openHoldings: Holding[]): string[] {
   const sectors = openHoldings.map((holding) => holding.sector).filter((sector) => sector !== null);
   return [...new Set(sectors)].sort((first, second) => first.localeCompare(second));

@@ -139,6 +139,15 @@ public record Momentum(
         return (int) ChronoUnit.MONTHS.between(firstCloseDate, asOf);
     }
 
+    /**
+     * Lower than a year ago — or than its first close, for a stock that has traded less than a year: the scanned
+     * stock's "recovering" mark and the risk sign of the same name ({@link RiskSignsCalculator}). {@code null} when the
+     * year's return is unknown.
+     */
+    public Boolean lowerThanAYearAgo() {
+        return yearReturnPercent == null ? null : yearReturnPercent < 0;
+    }
+
     /** How many of the five checks hold; {@code null} if any of them is unknown. */
     public Integer score() {
         List<Boolean> checks = Arrays.asList(aboveSma20(), aboveSma50(), sma50AboveSma200(), nearHigh(), beatsSpy());

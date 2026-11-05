@@ -28,10 +28,12 @@ import portfolioboss.api.response.TradeResponse;
 import portfolioboss.db.PortfolioSyncService;
 import portfolioboss.db.StockAnalysisEntity;
 import portfolioboss.db.StockAnalysisRepository;
+import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.Benchmark;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
+import portfolioboss.ib.TwsReading;
 import portfolioboss.model.AnalystTrend;
 import portfolioboss.model.CashMovementType;
 import portfolioboss.model.HoldingSignal;
@@ -39,11 +41,16 @@ import portfolioboss.model.HoldingStatus;
 import portfolioboss.model.HoldingWarning;
 import portfolioboss.model.HoldingWarningType;
 import portfolioboss.model.MomentumLabel;
+import portfolioboss.model.RiskSign;
 import portfolioboss.model.TradeSide;
+import portfolioboss.stocks.CompanyFacts;
+import portfolioboss.stocks.EarningsDate;
+import portfolioboss.stocks.Stock;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -423,6 +430,45 @@ class PortfolioReadServiceTest {
     }
 
     /**
+     * What a scanned stock has, for a holding too (MY_HOLDINGS_TODO.md, session 2). Apple: three firms' targets, 230,
+     * 240 and 250 — a median of 240, 20% above IB's price of 200 —, and Finnhub's answer: a report 10 days after the
+     * sync, and a P/E of 55, which is expensive. Microsoft: no headline held a target, and Finnhub never answered for
+     * it — its risk signs were never checked, so they are {@code null}, not an empty list.
+     */
+    @Test
+    void servesTheAnalystsTargetAndFinnhubsDataOfEachHolding() {
+        LocalDate syncDate = FIRST_RUN.atZone(ZoneId.systemDefault()).toLocalDate();
+        TwsReading reading = new TwsReading(
+                snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0), microsoft(5, 300.0)),
+                Map.of(APPLE_CON_ID, risingCloses(0.003), Benchmark.SPY_CON_ID, risingCloses(0.001)), null, Map.of(),
+                Map.of(APPLE_CON_ID, List.of(priceTargetOf("Firm A", 250.0), priceTargetOf("Firm B", 240.0),
+                        priceTargetOf("Firm C", 230.0))));
+        Stock appleFinnhubData = new Stock("AAPL", new EarningsDate(syncDate.plusDays(10), "amc"),
+                new CompanyFacts(8.0, 25.0, 1.2, 55.0));
+        syncService.sync(reading, Map.of(APPLE_CON_ID, appleFinnhubData));
+
+        PortfolioResponse portfolio = readPortfolio().orElseThrow();
+
+        HoldingResponse apple = portfolio.holdings().get(0);
+        assertThat(apple.analystTarget().medianTarget()).isEqualTo(240.0);
+        assertThat(apple.analystTarget().upsidePercent()).isCloseTo(20.0, within(1e-9));
+        assertThat(apple.analystTarget().hasEnoughUpside()).isTrue();
+        assertThat(apple.analystTarget().firmCount()).isEqualTo(3);
+        assertThat(apple.nextEarningsDate().date()).isEqualTo(syncDate.plusDays(10));
+        assertThat(apple.companyFacts().peRatio()).isEqualTo(55.0);
+        assertThat(apple.riskSigns()).containsExactly(RiskSign.EXPENSIVE);
+        assertThat(apple.reportsWithin14Days()).isTrue();
+        HoldingResponse microsoft = portfolio.holdings().get(1);
+        assertThat(microsoft.symbol()).isEqualTo("MSFT");
+        assertThat(microsoft.analystTarget().medianTarget()).isNull();
+        assertThat(microsoft.analystTarget().firmCount()).isZero();
+        assertThat(microsoft.nextEarningsDate()).isNull();
+        assertThat(microsoft.companyFacts()).isNull();
+        assertThat(microsoft.riskSigns()).isNull();
+        assertThat(microsoft.reportsWithin14Days()).isFalse();
+    }
+
+    /**
      * The estimate the Analyze buttons quote averages the latest analysis of each holding: Apple's older, cheaper run
      * (3 credits, $0.03 — before the four searches) doesn't count; its latest (5 credits, $0.05) and Microsoft's
      * (5 credits, $0.04) do.
@@ -569,6 +615,12 @@ class PortfolioReadServiceTest {
                 new StockAnalysisResult(List.of(), List.of(), List.of(), null, null, null, List.of());
         return new StockAnalysisEntity(holdingId, analyzedAt, "claude-sonnet-5-5", result, null, 10_500, 900,
                 tavilyCredits, new BigDecimal(costUsd));
+    }
+
+    /** A firm's target for Apple, from a made-up Dow Jones headline three weeks before the first run. */
+    private AnalystPriceTarget priceTargetOf(String firm, double priceTarget) {
+        return new AnalystPriceTarget(LocalDateTime.of(2026, 9, 1, 13, 0), firm, priceTarget, null,
+                "Apple Price Target Announced at $%.2f/Share by %s".formatted(priceTarget, firm));
     }
 
     /** 250 daily closes from {@link #FIRST_CLOSE_DATE}, growing by {@code dailyGrowth} a day. */

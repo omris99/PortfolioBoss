@@ -20,7 +20,7 @@ import java.util.Map;
  * @param depositsMinusWithdrawals {@code null} for the account owner, who has no deposits — their cash comes from IB
  * @param sharesValue              their shares at IB's market price
  * @param totalValue               cash and shares — for the account owner IB's net liquidation value less the others',
- *                                 so it also holds what IB counts beyond cash and shares (accrued interest, say)
+ *                                 so it also holds what IB counts beyond cash and shares (for example accrued interest)
  * @param sharesCost               what their shares cost, at average cost with their buy commissions
  * @param realizedPnlByCurrency    the realized P&amp;L of their closed positions, by currency ({@code "HKD"},
  *                                 {@code "USD"}); a closed position without one is left out, and a warning says so

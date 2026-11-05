@@ -33,7 +33,7 @@ export interface SectorWeight extends Weight {
   holdingCount: number;
 }
 
-/** The holdings no sector has been entered for yet, weighed together. */
+/** The holdings IB gives no sector for, weighed together. */
 export interface NoSectorWeight extends Weight {
   holdingCount: number;
 }
@@ -49,7 +49,7 @@ export interface LeftOutHolding {
 }
 
 export interface PortfolioWeights {
-  /** The sectors entered, heaviest first. */
+  /** The holdings' sectors, heaviest first. */
   bySector: SectorWeight[];
   /** `null` when every weighed holding has a sector. */
   noSector: NoSectorWeight | null;
@@ -92,7 +92,7 @@ function heaviestFirst<SomeWeight extends Weight>(
   );
 }
 
-/** The holdings of each sector entered, and those with none: a sector is typed in by hand, so it may be missing. */
+/** The holdings of each sector, and those IB gives no sector for: an ETF gets none. */
 function groupBySector(weighedHoldings: WeighedHolding[]): {
   holdingsOfSector: Map<string, WeighedHolding[]>;
   holdingsWithoutSector: WeighedHolding[];

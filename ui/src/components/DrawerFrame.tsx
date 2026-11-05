@@ -51,7 +51,7 @@ function TabBar<TabKey extends string>({
   );
 }
 
-/** An Esc meant for a field — cancelling a sector being typed — is not one that closes the drawer. */
+/** An Esc meant for a field — one being typed in — is not one that closes the drawer. */
 function isTypingInAField(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
 }

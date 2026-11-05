@@ -1,4 +1,4 @@
-/** Shown for any value that is missing: a figure IB did not report, or a sector or date not entered yet. */
+/** Shown for any value that is missing: a figure or a sector IB did not report, or a date not entered yet. */
 export const EMPTY_VALUE = '—';
 
 /** The real minus sign, as wide as "+", rather than a hyphen. */

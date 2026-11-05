@@ -23,7 +23,7 @@ const SECTOR_PAINTS: SlicePaint[] = [
 /** The lighter sectors, added together once every color is taken. */
 const OTHER_SECTORS_PAINT: SlicePaint = { fillClass: 'fill-chart-rest', swatchClass: 'bg-chart-rest' };
 
-/** Only an outline, like a holding with no signal: a sector not entered yet is unknown, not a sector of its own. */
+/** Only an outline, like a holding with no signal: a sector IB doesn't give is unknown, not a sector of its own. */
 const NO_SECTOR_PAINT: SlicePaint = {
   fillClass: 'fill-surface stroke-signal-none stroke-[1.5]',
   swatchClass: 'ring-[1.5px] ring-inset ring-signal-none',
@@ -77,7 +77,7 @@ function noSectorSliceOf(noSectorWeight: NoSectorWeight, wholeName: string): Sec
     name: 'No sector',
     weight: noSectorWeight,
     hint: hintOf([
-      `${countText(noSectorWeight.holdingCount, 'holding')} without a sector yet: add it in Positions`,
+      `${countText(noSectorWeight.holdingCount, 'holding')} IB gives no sector for`,
       accountShareText(noSectorWeight, wholeName),
     ]),
     paint: NO_SECTOR_PAINT,

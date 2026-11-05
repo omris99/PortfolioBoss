@@ -16,6 +16,10 @@ import portfolioboss.ib.PortfolioSnapshot;
 import portfolioboss.ib.Scan;
 import portfolioboss.ib.ScanRow;
 import portfolioboss.ib.StockContractDetails;
+import portfolioboss.ib.TwsReading;
+import portfolioboss.stocks.CompanyFacts;
+import portfolioboss.stocks.EarningsDate;
+import portfolioboss.stocks.Stock;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -75,8 +79,9 @@ class PortfolioSyncServiceTest {
                 .containsEntry("sector", null);
     }
 
+    /** The contract details didn't come this time (a timeout, an error): the sector stays as the last sync left it. */
     @Test
-    void refreshesIbFiguresButNeverTheSectorOrTheTrades() {
+    void refreshesIbFiguresAndKeepsTheSectorWithoutContractDetailsButNeverTouchesTheTrades() {
         syncService.sync(snapshotOf(FIRST_RUN, apple(10, 150.0)));
         long appleHoldingId = holdingIdOf(APPLE_CON_ID);
         jdbc.update("update holding set sector = 'Technology' where id = ?", appleHoldingId);
@@ -287,7 +292,131 @@ class PortfolioSyncServiceTest {
         assertThat(countOf("select count(*) from analyst_price_target where con_id = " + HOTB_CON_ID)).isEqualTo(1);
     }
 
+    // ── what a scanned stock has, for the holdings too (MY_HOLDINGS_TODO.md, session 2) ─────────
+
+    /**
+     * Decision 11: IB's two words, under the market's names — the sector is IB's industry, the industry IB's category
+     * —, in place of what was there; a new holding gets them at once.
+     */
+    @Test
+    void theSectorAndTheIndustryComeFromIbsContractDetails() {
+        syncService.sync(readingOf(snapshotOf(FIRST_RUN, apple(10, 150.0)),
+                Map.of(APPLE_CON_ID, contractDetailsOf(APPLE_CON_ID, "Technology", "Computers")), Map.of()), Map.of());
+        assertThat(rowOf(APPLE_CON_ID))
+                .containsEntry("sector", "Technology")
+                .containsEntry("industry", "Computers");
+        jdbc.update("update holding set sector = 'Typed by hand' where con_id = ?", APPLE_CON_ID);
+        startNextRun();
+
+        syncService.sync(readingOf(snapshotOf(SECOND_RUN, apple(10, 150.0)),
+                Map.of(APPLE_CON_ID, contractDetailsOf(APPLE_CON_ID, "Communications", "Internet")), Map.of()),
+                Map.of());
+
+        assertThat(rowOf(APPLE_CON_ID))
+                .containsEntry("sector", "Communications")
+                .containsEntry("industry", "Internet");
+    }
+
+    /** IB sends empty words for an ETF (tried 2026-11-05): then the holding has no sector and no industry. */
+    @Test
+    void anEmptySectorOrIndustryFromIbIsNone() {
+        syncService.sync(readingOf(snapshotOf(FIRST_RUN, apple(10, 150.0)),
+                Map.of(APPLE_CON_ID, contractDetailsOf(APPLE_CON_ID, "Technology", "Computers")), Map.of()), Map.of());
+        startNextRun();
+
+        syncService.sync(readingOf(snapshotOf(SECOND_RUN, apple(10, 150.0)),
+                Map.of(APPLE_CON_ID, contractDetailsOf(APPLE_CON_ID, "", " ")), Map.of()), Map.of());
+
+        assertThat(rowOf(APPLE_CON_ID))
+                .containsEntry("sector", null)
+                .containsEntry("industry", null);
+    }
+
+    /**
+     * The holdings' targets are stored like the scan's: the next sync read Apple's headlines again — one target now —
+     * and Microsoft's didn't come, so Apple's are replaced and Microsoft's kept.
+     */
+    @Test
+    void storesTheHoldingsPriceTargetsAndReplacesAHoldingsOnTheNextSync() {
+        syncService.sync(readingOf(snapshotOf(FIRST_RUN, apple(10, 150.0), microsoft(5, 300.0)), Map.of(), Map.of(
+                APPLE_CON_ID, List.of(priceTarget("Wells Fargo", 130.0), priceTarget("Barclays", 120.0)),
+                MICROSOFT_CON_ID, List.of(priceTarget("Needham", 80.0)))), Map.of());
+        startNextRun();
+
+        syncService.sync(readingOf(snapshotOf(SECOND_RUN, apple(10, 150.0), microsoft(5, 300.0)), Map.of(), Map.of(
+                APPLE_CON_ID, List.of(priceTarget("Wells Fargo", 140.0)))), Map.of());
+
+        assertThat(countOf("select count(*) from analyst_price_target where con_id = " + APPLE_CON_ID)).isEqualTo(1);
+        assertThat(jdbc.queryForMap("select * from analyst_price_target where con_id = ?", APPLE_CON_ID))
+                .containsEntry("firm", "Wells Fargo")
+                .containsEntry("price_target", 140.0);
+        assertThat(countOf("select count(*) from analyst_price_target where con_id = " + MICROSOFT_CON_ID))
+                .isEqualTo(1);
+    }
+
+    /** A holding the scan found too has the same targets in both maps — its headlines were read once —: stored once. */
+    @Test
+    void aHoldingTheScanFoundTooHasItsTargetsStoredOnce() {
+        List<AnalystPriceTarget> appleTargets =
+                List.of(priceTarget("Wells Fargo", 130.0), priceTarget("Barclays", 120.0));
+        Scan scanThatFoundApple = new Scan(FIRST_RUN, List.of(new ScanRow(THREE_MONTH_SCAN, 0, APPLE_CON_ID, "AAPL")),
+                Map.of(APPLE_CON_ID, contractDetailsOf(APPLE_CON_ID, "Technology", "Computers")))
+                .withAnalystPriceTargets(Map.of(APPLE_CON_ID, appleTargets));
+        TwsReading reading = new TwsReading(snapshotOf(FIRST_RUN, apple(10, 150.0)), Map.of(), scanThatFoundApple,
+                Map.of(APPLE_CON_ID, contractDetailsOf(APPLE_CON_ID, "Technology", "Computers")),
+                Map.of(APPLE_CON_ID, appleTargets));
+
+        syncService.sync(reading, Map.of());
+
+        assertThat(countOf("select count(*) from analyst_price_target where con_id = " + APPLE_CON_ID)).isEqualTo(2);
+    }
+
+    /**
+     * Decision 10: what Finnhub answered about each holding, one row per contract. The next sync Finnhub answered for
+     * Apple only — Microsoft's call failed —: Apple's row is replaced, Microsoft's kept.
+     */
+    @Test
+    void storesFinnhubsDataAndReplacesAHoldingsOnTheNextSync() {
+        TwsReading firstReading = readingOf(snapshotOf(FIRST_RUN, apple(10, 150.0), microsoft(5, 300.0)), Map.of(),
+                Map.of());
+        syncService.sync(firstReading, Map.of(
+                APPLE_CON_ID, finnhubDataOf("AAPL", LocalDate.of(2026, 10, 30), 32.0),
+                MICROSOFT_CON_ID, finnhubDataOf("MSFT", LocalDate.of(2026, 10, 28), 35.0)));
+        startNextRun();
+
+        TwsReading secondReading = readingOf(snapshotOf(SECOND_RUN, apple(10, 150.0), microsoft(5, 300.0)), Map.of(),
+                Map.of());
+        syncService.sync(secondReading, Map.of(APPLE_CON_ID, finnhubDataOf("AAPL", LocalDate.of(2026, 10, 30), 31.0)));
+
+        assertThat(countOf("select count(*) from stock")).isEqualTo(2);
+        assertThat(jdbc.queryForMap("select symbol, finnhub_data -> 'nextEarningsDate' ->> 'date' as report_date, "
+                + "finnhub_data -> 'companyFacts' ->> 'peRatio' as pe_ratio from stock where con_id = ?", APPLE_CON_ID))
+                .containsEntry("symbol", "AAPL")
+                .containsEntry("report_date", "2026-10-30")
+                .containsEntry("pe_ratio", "31.0");
+        assertThat(jdbc.queryForObject("select finnhub_data -> 'companyFacts' ->> 'peRatio' from stock "
+                + "where con_id = ?", String.class, MICROSOFT_CON_ID)).isEqualTo("35.0");
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
+
+    /** A connection without a scan or closes: the holdings' contract details and targets only. */
+    private TwsReading readingOf(PortfolioSnapshot snapshot,
+                                 Map<Integer, StockContractDetails> holdingContractDetailsByConId,
+                                 Map<Integer, List<AnalystPriceTarget>> holdingAnalystPriceTargetsByConId) {
+        return new TwsReading(snapshot, Map.of(), null, holdingContractDetailsByConId,
+                holdingAnalystPriceTargetsByConId);
+    }
+
+    /** In IB's words: its industry is the holding's sector, its category the holding's industry. */
+    private StockContractDetails contractDetailsOf(int conId, String industry, String category) {
+        return new StockContractDetails(conId, "NASDAQ", "SOME COMPANY INC", industry, category);
+    }
+
+    /** Growing, profitable, little debt: only the P/E changes between the tests' answers. */
+    private Stock finnhubDataOf(String symbol, LocalDate nextReportDate, double peRatio) {
+        return new Stock(symbol, new EarningsDate(nextReportDate, "amc"), new CompanyFacts(8.0, 25.0, 1.2, peRatio));
+    }
 
     /**
      * Every start of the app is a new process, so Hibernate remembers nothing from the last sync. {@code clear()}

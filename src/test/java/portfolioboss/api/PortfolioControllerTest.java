@@ -15,6 +15,7 @@ import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.RatingCounts;
 import portfolioboss.ai.Sentiment;
 import portfolioboss.ai.SourceConsensus;
+import portfolioboss.api.response.AnalystTargetResponse;
 import portfolioboss.api.response.CashMovementResponse;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
@@ -26,6 +27,7 @@ import portfolioboss.api.response.MomentumResponse;
 import portfolioboss.api.response.PortfolioResponse;
 import portfolioboss.api.response.StockAnalysisResponse;
 import portfolioboss.api.response.TradeResponse;
+import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.model.AnalystConsensus;
 import portfolioboss.model.AnalystTrend;
 import portfolioboss.model.CashMovementType;
@@ -36,11 +38,15 @@ import portfolioboss.model.HoldingWarningType;
 import portfolioboss.model.InvestorWarning;
 import portfolioboss.model.InvestorWarningType;
 import portfolioboss.model.MomentumLabel;
+import portfolioboss.model.RiskSign;
 import portfolioboss.model.TradeSide;
+import portfolioboss.stocks.CompanyFacts;
+import portfolioboss.stocks.EarningsDate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -231,13 +237,59 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].costBasis").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].unrealizedPnlPercent").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].sector").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].industry").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].firstBuyDate").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].holdingDays").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].trades").value(empty()))
                 .andExpect(jsonPath("$.holdings[0].momentum").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].analysis").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].signal").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.medianTarget").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.upsidePercent").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm").value(empty()))
+                .andExpect(jsonPath("$.holdings[0].nextEarningsDate").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].companyFacts").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].riskSigns").value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].reportsWithin14Days").value(false))
                 .andExpect(jsonPath("$.estimatedAnalysisCost").value(nullValue()));
+    }
+
+    /**
+     * What a scanned stock has, on a holding too (MY_HOLDINGS_TODO.md, session 2): the analysts' target from Dow Jones,
+     * Finnhub's next report, figures and the risk signs they raise, and IB's two words for the company. Finnhub's
+     * records go into the JSON as they are.
+     */
+    @Test
+    void servesWhatAScannedStockHasWithTheFieldNamesTheUiExpects() throws Exception {
+        PortfolioResponse withApple = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0, List.of(apple()),
+                List.of(), List.of(), null);
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withApple));
+
+        mockMvc.perform(get("/api/portfolio"))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.medianTarget").value(240.0))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.upsidePercent").value(20.0))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.hasEnoughUpside").value(true))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.firmCount").value(3))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm[0].publishedAt")
+                        .value("2026-09-15T13:05:00"))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm[0].firm").value("Firm A"))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm[0].priceTarget").value(250.0))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm[0].previousPriceTarget")
+                        .value(220.0))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm[1].previousPriceTarget")
+                        .value(nullValue()))
+                .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm[0].headline")
+                        .value("Apple Price Target Raised to $250.00/Share From $220.00 by Firm A"))
+                .andExpect(jsonPath("$.holdings[0].nextEarningsDate.date").value("2026-09-30"))
+                .andExpect(jsonPath("$.holdings[0].nextEarningsDate.hour").value("amc"))
+                .andExpect(jsonPath("$.holdings[0].companyFacts.revenueGrowthPercent").value(6.0))
+                .andExpect(jsonPath("$.holdings[0].companyFacts.netMarginPercent").value(25.0))
+                .andExpect(jsonPath("$.holdings[0].companyFacts.debtToEquity").value(1.5))
+                .andExpect(jsonPath("$.holdings[0].companyFacts.peRatio").value(55.0))
+                .andExpect(jsonPath("$.holdings[0].riskSigns[0]").value("EXPENSIVE"))
+                .andExpect(jsonPath("$.holdings[0].reportsWithin14Days").value(true))
+                .andExpect(jsonPath("$.holdings[0].sector").value("Technology"))
+                .andExpect(jsonPath("$.holdings[0].industry").value("Computers"));
     }
 
     /** What the Analyze buttons quote before a paid run: the average cost of one stock's analysis. */
@@ -420,7 +472,21 @@ class PortfolioControllerTest {
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
                 LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities, momentum,
-                appleAnalysis(), HoldingSignal.YELLOW);
+                appleAnalysis(), HoldingSignal.YELLOW, appleAnalystTarget(),
+                new EarningsDate(LocalDate.of(2026, 9, 30), "amc"), new CompanyFacts(6.0, 25.0, 1.5, 55.0),
+                List.of(RiskSign.EXPENSIVE), true, "Computers");
+    }
+
+    /** Three made-up firms' targets — 230, 240 and 250 —: a median of 240, 20% above the price of 200. */
+    private AnalystTargetResponse appleAnalystTarget() {
+        List<AnalystPriceTarget> latestTargetOfEachFirm = List.of(
+                new AnalystPriceTarget(LocalDateTime.of(2026, 9, 15, 13, 5), "Firm A", 250.0, 220.0,
+                        "Apple Price Target Raised to $250.00/Share From $220.00 by Firm A"),
+                new AnalystPriceTarget(LocalDateTime.of(2026, 9, 2, 8, 30), "Firm B", 240.0, null,
+                        "Apple Price Target Announced at $240.00/Share by Firm B"),
+                new AnalystPriceTarget(LocalDateTime.of(2026, 8, 20, 9, 0), "Firm C", 230.0, 230.0,
+                        "Apple Price Target Maintained With a $230.00/Share by Firm C"));
+        return new AnalystTargetResponse(240.0, 20.0, true, 3, latestTargetOfEachFirm);
     }
 
     /** Made-up figures, one of each part, to pin the shape: one source, one analyst action, one headline. */
@@ -447,7 +513,8 @@ class PortfolioControllerTest {
         HoldingWarning noTrades = new HoldingWarning(HoldingWarningType.NO_TRADES_LOGGED, NO_TRADES_MESSAGE);
         return new HoldingResponse("MSFT", "STK", "USD", 5.0, null, null, null, null, 0.0, ACCOUNT,
                 null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of(), List.of(noTrades),
-                List.of(), null, null, null);
+                List.of(), null, null, null, new AnalystTargetResponse(null, null, false, 0, List.of()), null, null,
+                null, false, null);
     }
 
     /** The account owner of INVESTORS_TODO.md's example, with a realized P&amp;L in two currencies. */

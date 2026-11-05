@@ -58,13 +58,12 @@ public record HotStockCalculator(Momentum momentum) {
     }
 
     /**
-     * Lower than a year ago — or than its first close, for a stock that has traded less than a year. A mark, not a
-     * filter: after a crash the 200-day average sinks with the price, so a rebound passes the long-trend check fast.
-     * {@code null} when the year's return is unknown.
+     * Lower than a year ago ({@link Momentum#lowerThanAYearAgo()}). A mark, not a filter: after a crash the 200-day
+     * average sinks with the price, so a rebound passes the long-trend check fast. {@code null} when the year's return
+     * is unknown.
      */
     public Boolean recovering() {
-        Double yearReturnPercent = momentum.yearReturnPercent();
-        return yearReturnPercent == null ? null : yearReturnPercent < 0;
+        return momentum.lowerThanAYearAgo();
     }
 
     /**

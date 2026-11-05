@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.27.0";
+    public static final String VERSION = "0.29.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,24 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.29.0: [The holdings get what a scanned stock has]
+ * Sector from IB: every sync takes a holding's sector (IB's broad word, "Technology") and its new industry ("Semiconductors") from its contract details; before, the sector was typed by hand.
+ * PUT /api/holdings/{id}/sector removed with SectorRequest; the Positions table's sector cell is text now, the sector over the industry, and the drawer shows "Technology / Semiconductors".
+ * TwsReader: every ./run.sh also reads the holdings' contract details and Dow Jones headlines, in the same rounds as the scan's, so a holding the scan found too is read once.
+ * RequestBatch: a second request of the same kind on one connection numbers on from the first, instead of reusing ids that had already ended and waiting out its timeout.
+ * Finnhub for the holdings: after TWS disconnects, every holding in USD is asked about at once, the symbol only, without a button; a failed call prints [stocks error] and keeps what was stored.
+ * V13 stock: what Finnhub answered about each holding (finnhub_data), replaced per contract on every sync; V14 adds holding.industry.
+ * GET /api/portfolio: each holding also carries its analysts' target from Dow Jones, the next earnings date, Finnhub's four figures, its risk signs, the 14-day timing note and its industry.
+ * RiskSignsCalculator added: the risk signs and the timing note taken out of RecommendationCandidate unchanged, so a holding is judged by the same rules as a scanned stock.
+ * Weights ring: the "No sector" slice is now the holdings IB gives no sector for, "1 holding IB gives no sector for"; before, it said to add the sector in Positions.
+ * Console: [ib] contract details received for N of M holdings, the holdings' price targets, [stocks] Finnhub answered for N of M holdings in dollars, and [db] stored Finnhub's data.
+ *
+ * VERSION 0.28.0: [The new average after a purchase in the Weight tab]
+ * Weight tab: every purchase shows the new average cost, the commission counted in as IB counts it, and how far the price must rise to reach it, beside today's average.
+ * Weight tab: at or above the average a purchase says "Already reached: the price is X% above the average" instead of a rise to reach.
+ * Weight tab: a second field, "Or buy for an amount", buys whole shares at IB's last price; typing in one field empties the other.
+ * calculateWholeSharesForAmount added: the whole shares an amount buys, shared by the Weight tab and the Recommendations page's If I buy.
+ *
  * VERSION 0.27.0: [The analysts' target from Dow Jones in the recommendation]
  * Scan: every scan also reads half a year of each stock's Dow Jones headlines through IB (reqHistoricalNews, read-only, free), page by page, and the analysts' price targets in them.
  * PriceTargetHeadlineReader added: reads a firm's target from Dow Jones's four headline forms, only for the stock's own company by IB's name; NewsHeadlinePaging pages back half a year.
