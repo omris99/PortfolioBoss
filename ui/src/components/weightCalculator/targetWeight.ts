@@ -113,9 +113,14 @@ function tradeFiguresOf(holdingInAccount: HoldingInAccount, shareCount: number, 
   };
 }
 
-/** How far the price must rise to reach `average`, in percent of the price. */
-function calculateRiseNeededToReachAveragePercent(average: number, price: number): number {
+/** How far the price must rise to reach `average`, in percent of the price: +25 for an average of 50 at a price of 40. */
+export function calculateRiseNeededToReachAveragePercent(average: number, price: number): number {
   return ((average - price) / price) * 100;
+}
+
+/** How far the price is above `average`, in percent of the average: 4 for a price of 52 and an average of 50. */
+export function calculatePriceAboveAveragePercent(price: number, average: number): number {
+  return ((price - average) / average) * 100;
 }
 
 /**
@@ -136,7 +141,7 @@ function calculateAverageCostAfterPurchase(
     newAverageCost,
     riseNeededToReachCurrentAveragePercent: calculateRiseNeededToReachAveragePercent(averageCost, price),
     riseNeededToReachNewAveragePercent: calculateRiseNeededToReachAveragePercent(newAverageCost, price),
-    priceAboveCurrentAveragePercent: ((price - averageCost) / averageCost) * 100,
+    priceAboveCurrentAveragePercent: calculatePriceAboveAveragePercent(price, averageCost),
   };
 }
 

@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { ArrowRight } from 'lucide-react';
 import {
-  EMPTY_VALUE,
   formatHoldingPeriod,
   formatDayCount,
   formatMoney,
@@ -15,38 +14,25 @@ import type { ClosedPosition, EstimatedAnalysisCost, Holding } from '../types/po
 import { HoldingAnalysisPanel, RatingChip, SentimentChip, TargetWithUpside, TrendChip } from './AnalysisPanel';
 import { AnalystTargetSection } from './AnalystTarget';
 import { CompanyPanel } from './companyInfo/CompanyPanel';
-import { notCheckedHintOf, RiskSignTagList, type NotCheckedHints } from './companyInfo/RiskSigns';
 import { TimingNoteWhenDue } from './companyInfo/TimingNote';
 import { DrawerFrame, KeyFigure, KeyFigureExtra, KeyFigures, type DrawerTab } from './DrawerFrame';
+import { HOLDING_NOT_CHECKED_HINTS, HoldingWarningSigns } from './HoldingWarningSigns';
 import { HoldingWarningBands } from './HoldingWarnings';
 import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
 import { InvestorSplitTable, isShared } from './InvestorSplitTable';
 import { MomentumChip, MomentumPanel, passedCheckCount } from './Momentum';
 import { sectorAndIndustryText } from './SectorCell';
-import { SignalDot, SignalWarningSignTags, warningSignsOf } from './Signal';
+import { SignalDot, warningSignsOf } from './Signal';
 import { TradesPanel } from './TradesPanel';
 import type { InvestmentsAndCash } from './graphs/investmentsAndCash';
 import { WeightCalculatorPanel } from './weightCalculator/WeightCalculatorPanel';
 
 export type HoldingTab = 'summary' | 'momentum' | 'analysis' | 'company' | 'trades' | 'weight' | 'byInvestor';
 
-/**
- * Why a holding's risk signs are unknown: Finnhub is asked on every run that reaches TWS, about the holdings in dollars
- * only (MY_HOLDINGS_TODO.md, decision 10).
- */
-const HOLDING_NOT_CHECKED_HINTS: NotCheckedHints = {
-  finnhubDidNotAnswer:
-    'No answer from Finnhub: it is asked on every run that reaches TWS, about the holdings in dollars only — on ' +
-    'another exchange IB’s symbol isn’t Finnhub’s —, and only when its key is set.',
-  finnhubHadNoFigures: 'Finnhub has none of the company’s four figures, so the risk signs could not be checked.',
-};
-
 /** What the analysts' target is on a holding: the median a scanned stock gets. */
 const TARGET_RULE_FOR_A_HOLDING =
   'The median of 3 firms’ targets or more — each firm’s latest of the half year, from Dow Jones’s headlines —, ' +
   'against IB’s price at the last sync.';
-
-const NO_WARNING_SIGN_HINT = 'No warning signs: none of the Signal dot’s, and none of the five risk signs';
 
 /** A link's state that opens the drawer on a tab other than Summary: the Overview's weight bars open it on Weight. */
 export interface OpenOnTab {
@@ -111,32 +97,15 @@ function HoldingKeyFigures({ holding }: { holding: Holding }) {
 }
 
 /**
- * Under an open holding's key figures, everything that warns in one row (MY_HOLDINGS_TODO.md, session 3): the Signal
- * dot's warning signs, then the risk signs with their figures — "—" when there are none —, whether the risk signs
- * could be checked, and the timing note. Shown together only: the dot still counts its own three.
+ * Under an open holding's key figures, everything that warns in one row (MY_HOLDINGS_TODO.md, session 3): the warning
+ * signs, then the timing note.
  */
 function HoldingWarningSignsLine({ holding }: { holding: Holding }) {
-  const companyInfo = holding.companyInfo;
-  const riskSignsNotCheckedHint = notCheckedHintOf(companyInfo, HOLDING_NOT_CHECKED_HINTS);
-  const warningSignCount = warningSignsOf(holding).length + (companyInfo?.riskSigns ?? []).length;
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-caption">
       <span className="text-muted">Warning signs</span>
-      <SignalWarningSignTags holding={holding} />
-      <RiskSignTagList
-        companyInfo={companyInfo}
-        yearReturnPercent={holding.momentum?.yearReturnPercent ?? null}
-        showFigures
-      />
-      {warningSignCount === 0 && riskSignsNotCheckedHint === null && (
-        <span title={NO_WARNING_SIGN_HINT}>{EMPTY_VALUE}</span>
-      )}
-      {riskSignsNotCheckedHint !== null && (
-        <span title={riskSignsNotCheckedHint} className="text-muted">
-          risk signs not checked
-        </span>
-      )}
-      <TimingNoteWhenDue companyInfo={companyInfo} />
+      <HoldingWarningSigns holding={holding} />
+      <TimingNoteWhenDue companyInfo={holding.companyInfo} />
     </div>
   );
 }

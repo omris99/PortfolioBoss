@@ -15,7 +15,11 @@ Recommendations, designed before it is built — its [now] pieces built on 2026-
 Section 8 is older than two rule changes, which the build follows instead: Claude writes **no explanation** of the picks
 (each pick shows a line the code writes from the figures, its score and the news that weighed in), and the risk signs
 are **weighted**, a pick's weighing 2 at most, then ordered by a news score less the risks. The Hot table's detail line
-is one labeled line rather than the design's row of slots under a second header.
+is one labeled line rather than the design's row of slots under a second header. **Section 9 is the fourth round**
+(2026-11-07): a new page, the Averaging calculator, designed before it is built, then built the same day from
+arrangement A. Four details follow the rest of the app instead of the design: the highlighter on "in 5 days" rather than
+on the date, the cash's hint as the browser's tooltip, the Weight tab's own sentences under "Not on this page", and 32px
+fields.
 
 ---
 
@@ -842,3 +846,195 @@ of each list.
   - one investor (no tabs in If I buy, one cash figure) and several
   - a long company name, a long "why it moves" line
   - every state of the buttons in 8.4
+
+---
+
+## 9. Fourth round: the Averaging calculator
+
+A new, sixth page: **Overview · Positions · Averaging calculator · Closed · Investors · Recommendations**, at
+`/averaging`. It is for **buying more of holdings whose price fell below their average cost** (averaging down). The
+drawer's Weight tab (§7.5) already works out one such purchase for one holding at a time. This page plans **several at
+once**: each holding has its own fields, and one card adds up every purchase typed against the cash. It is designed
+before it is built.
+
+Section 2's rules still hold:
+- no new figure: everything is worked out in the UI from what the API already sends, with the Weight tab's arithmetic
+- the page only calculates: it sends nothing anywhere and saves nothing (PortfolioBoss never places an order)
+
+### 9.1 What the page is built on
+
+- **The Weight tab's purchase, unchanged.** Since §7.5 was designed, the tab has a second field, "Or buy for an amount",
+  and every purchase shows **the new average cost** and **how far the price must rise to reach it**, after the purchase
+  and now. Typing in one of the two fields empties the other. A target weight or an amount gives:
+  - the whole shares to buy, rounded **down**, and what they cost at IB's last price
+  - the default commission: 1¢ a share, at least $5, **for each purchase**
+  - the weight after
+  - the new average, the commission counted in, as IB counts it in its average cost. Example: 100 shares at an average
+    of 50.00, the price 40.00, 50 more bought for a commission of 5.00: (5,000 + 2,000 + 5) ÷ 150 = **46.70**. The price
+    must rise **+16.8%** to reach it, against +25.0% to reach 50.00.
+- **The purchases don't change one another.** A purchase turns cash into shares, so the whole account keeps its size.
+  Each holding's weight after is worked out exactly as if it were the only purchase. The one thing they share is **the
+  cash**, and the cash card (9.2) adds them up against it.
+- **The tabs are the weights' (7.2):** Portfolio, then each investor, the account owner first; no row with one investor.
+  - **Portfolio** uses IB's quantities, IB's average cost and IB's cash.
+  - **An investor's tab** uses that investor's shares, the average cost of their shares and the cash on their card.
+  - **An investor's tab lists only the holdings they hold some of.** Buying a stock one holds none of is a new
+    purchase, not averaging down: there is no average to bring down.
+  - The wording follows the tab, as in 7.2 ("the whole account" / "all of Dana's money").
+- **Each tab is a plan of its own.** What is typed on Portfolio stays on Portfolio, and Dana's tab starts empty.
+  - Switching tabs and back keeps what was typed.
+  - Leaving the page or reloading it clears everything. Nothing is saved.
+- **Below the average cost** means IB's last price is under the tab's average cost of a share.
+
+### 9.2 The page, from the top (`/averaging`)
+
+1. **The title** "Averaging calculator", with a quiet line under it: "Plan buying more of several holdings at once:
+   each one's new average, and what is left of the cash."
+2. **The tab row** (7.2), only with several investors.
+3. **The cash card:**
+   - **Nothing typed:** "Cash 12,407.80". It is the tab's cash: IB's on Portfolio, the investor's own on their tab,
+     with the cash's hint of 7.4.
+   - **Once something is typed,** the plan's sum beside it: "3 purchases · 6,325.95 + commissions 15.00 = 6,340.95 ·
+     Cash left 6,066.85". A **Clear** button empties every field on this tab.
+   - **The cash can't pay for the plan:** the real-warning triangle, in orange: "626.60 short: the purchases and their
+     commissions come to 5,969.40, more than the cash of 5,342.80". It is still shown, and nothing is blocked.
+   - **Only the rows that buy count.** A row whose field can't be used, or that buys nothing, is left out of the sum.
+4. **Below the average cost (n):** the holdings whose price is under the tab's average, **the farthest below first**
+   (the one the price must rise most to bring back to its average).
+   - **A quiet line above the table** asks principle 2's question: "If you held none of it, would you buy it today at
+     this price? Under each holding is what PortfolioBoss knows."
+   - **One row per holding:**
+
+     | Column | Shows |
+     |---|---|
+     | Holding | the signal dot, the symbol, IB's sector under it |
+     | Shares | the tab's quantity |
+     | Average / Price | "905.10 / 742.60": the tab's average cost and IB's last price |
+     | To reach the average | "+21.9%": how far the price must rise to reach today's average |
+     | Weight | "10.8%" of the whole account (of all of Dana's money, on Dana's tab) |
+     | Target weight | a short number field followed by "%" |
+     | Or buy for | a short number field followed by "USD"; typing in one of the two empties the other |
+     | Buy | "3 shares ≈ 2,227.80", with "+ 5.00 commission" under it |
+     | New average | "872.93" |
+     | To reach it | "+17.6%": the rise needed after the purchase |
+     | Weight after | "13.5%" |
+
+     The last four stay empty until something is typed.
+   - **Under every row, a line of what to know before buying more.** PortfolioBoss answers principle 2's question with
+     data, not a written thesis. Every piece of the line exists already in the holding's drawer:
+     - **Warning signs**, the drawer's line under its key figures:
+       - the signal dot's three, "Momentum weak", "Analysts down" and "News negative"
+       - the risk signs (8.1), with the figure that raised each: "Expensive · P/E 180"
+       - all of them as red tags; "—" when there is none; "risk signs not checked" when Finnhub gave no figure
+     - **Momentum:** its label and score, "WEAK 1/5", in its tone (§4)
+     - **Analysts' target:** Dow Jones's median and how far it is from the price, "830.00 (+11.8%) · 6 firms", the
+       upside in the profit/loss tone; "—" with fewer than 3 firms
+     - **Earnings:** the next report's date. When it is 0–14 days away, the date is run over with the yellow
+       highlighter and "in 5 days" stands beside it. It is a date to look at, not a warning.
+5. **At or above the average cost (n),** folded by default; a click opens it.
+   - **The same columns and the same line under each row.**
+   - **The closest to its average first.**
+   - **A purchase here raises the average,** and the two "To reach" columns say so: "12.4% above" for today's average,
+     "Already reached" after the purchase.
+   - **A folded section never hides a planned purchase.** While one of its rows has something typed, its heading says
+     so ("· 1 purchase planned"), or the section stays open: the designer chooses.
+6. **Not on this page,** one line, shown only when a holding is left out: "Not on this page: 0700 (in HKD: the
+   calculator works in USD only for now)." The other reasons:
+   - "no price from IB"
+   - "its average cost is unknown"
+   - "Dana's part of this holding is below zero: check its trades."
+7. **The footer line:** "At IB's last prices, from the sync of 2026-10-10 16:05. A calculation only: nothing is sold
+   or bought."
+
+**A row opens nothing.** The holding's drawer belongs to Positions, and going there would take the plan away.
+
+### 9.3 The states of a row
+
+- **Nothing typed:** the four result columns are empty, and the row adds nothing to the cash card.
+- **A purchase:** the four result columns are filled, and the row counts in the cash card.
+- **A field that can't be used:** its border turns red, and the reason shows with the row:
+  - "Type the target as a number, like 15 or 12.5."
+  - "A weight is between 0% and 100%."
+  - "Type an amount in USD, like 5000."
+  - "500.00 buys no whole share at 742.60."
+- **A target at or under the weight now:** "At or above the target already: this page only buys." Selling stays in
+  the holding's drawer, on its Weight tab.
+
+### 9.4 Colors and words
+
+- **The cash short:** the **real** warning (solid orange triangle, orange text), like the Weight tab's Cash row.
+- **The warning signs and the risk signs:** the warning-sign tone (§4, 8.5).
+- **The analysts' target's upside:** the profit/loss tone, as in the Positions table.
+- **A report 0–14 days away:** the yellow highlighter (`highlight`), never a warning color.
+- **"To reach the average" and "To reach it" are not profit or loss:** no green or red.
+- **Wording:** "average cost", "new average", "to reach the average", "below the average cost", "cash left", "short" —
+  the Weight tab's words. The page's name is "Averaging calculator".
+
+### 9.5 Sample data (made up, the same account as §6 and 7.6)
+
+Synced 2026-10-10 16:05. The whole accounts, as in 7.6:
+- **Portfolio:** 82,500.00, cash 12,407.80
+- **Me:** 60,712.00, cash 5,342.80
+- **Dana:** 21,788.00, cash 7,065.00
+
+**Portfolio, below the average cost** (the farthest below first), with something typed in each row:
+
+| Holding | Shares | Average / Price | To reach the average | Weight | Typed | Buy | New average | To reach it | Weight after |
+|---|---|---|---|---|---|---|---|---|---|
+| ASML · Semiconductors | 12 | 905.10 / 742.60 | +21.9% | 10.8% | target 14% | 3 shares ≈ 2,227.80 + 5.00 | 872.93 | +17.6% | 13.5% |
+| PLTR · Technology | 100 | 24.80 / 21.35 | +16.2% | 2.6% | 2,000 USD | 93 shares ≈ 1,985.55 + 5.00 | 23.16 | +8.5% | 5.0% |
+
+Their lines:
+- **ASML:** dot RED · Warning signs: Momentum weak, Analysts down · Momentum WEAK 1/5 · Analysts' target 830.00
+  (+11.8%) · 6 firms · Earnings 2026-10-15, in 5 days (highlighted)
+- **PLTR:** dot YELLOW · Warning signs: Momentum weak, Expensive · P/E 180 · Momentum WEAK 1/5 · Analysts' target 26.50
+  (+24.1%) · 4 firms · Earnings 2026-11-03
+
+**Portfolio, at or above the average cost** (folded; the closest first): COST 6.3% above · V 12.4% · MSFT 13.5% · AMZN
+17.3% · GOOGL 18.7%. One of them typed:
+
+| Holding | Shares | Average / Price | To reach the average | Weight | Typed | Buy | New average | To reach it | Weight after |
+|---|---|---|---|---|---|---|---|---|---|
+| V · Financials | 25 | 268.40 / 301.80 | 12.4% above | 9.1% | target 12% | 7 shares ≈ 2,112.60 + 5.00 | 275.86 | Already reached | 11.7% |
+
+GOOGL was never analyzed: its dot is the empty grey ring, and its line has only the risk signs among the warning signs.
+
+**The cash card on Portfolio:** "Cash 12,407.80 · 3 purchases · 6,325.95 + commissions 15.00 = 6,340.95 · Cash left
+6,066.85".
+
+**Me's tab, the cash short** (all of Me's money 60,712.00, cash 5,342.80):
+
+| Holding | Shares | Average / Price | To reach the average | Weight | Typed | Buy | New average | To reach it | Weight after |
+|---|---|---|---|---|---|---|---|---|---|
+| ASML · Semiconductors | 12 | 905.10 / 742.60 | +21.9% | 14.7% | target 20% | 4 shares ≈ 2,970.40 + 5.00 | 864.79 | +16.5% | 19.6% |
+| PLTR · Technology | 100 | 24.80 / 21.35 | +16.2% | 3.5% | 3,000 USD | 140 shares ≈ 2,989.00 + 5.00 | 22.81 | +6.8% | 8.4% |
+
+The cash card: "Cash 5,342.80 · 2 purchases · 5,959.40 + commissions 10.00 = 5,969.40", then, in orange with the
+triangle, "626.60 short: the purchases and their commissions come to 5,969.40, more than the cash of 5,342.80".
+
+**Dana's tab, nothing below the average:** Dana holds MSFT (average 415.25, price 468.15) and AMZN (average 185.20, price
+214.40), both above. In place of the first table: "None of Dana's holdings is below its average cost." The folded
+section holds the two. Cash 7,065.00.
+
+### 9.6 What to design
+
+- **The pieces, with their states:**
+  - the cash card: nothing typed, a plan the cash covers, a plan it doesn't, Clear
+  - a row in every state of 9.3, below and above the average
+  - the line under a row
+  - the folded section, with and without a planned purchase in it
+  - the "Not on this page" line
+- **The width:** eleven columns, two of them fields, at 1280 px. **What is open:** the designer may propose a better
+  arrangement — for example the result (Buy, New average, To reach it, Weight after) on a second line of the row,
+  beside the line of what to know, or the two fields in one column. The rules stay: no figure the API doesn't already
+  provide, and nothing sent anywhere.
+- **Edge cases:**
+  - one investor (no tabs) and several
+  - a tab with nothing below the average (Dana's)
+  - an investor with cash and no stocks: "Dana holds no stocks · cash 7,065.00"
+  - a holding never analyzed (the empty ring) and one without Finnhub's figures ("risk signs not checked")
+  - no analysts' target (fewer than 3 firms: "—")
+  - the whole account unknown or not above zero (IB reported no cash): the page is one line, §7.5's "No weight can be
+    worked out: the whole account is unknown (IB reported no cash) or not above zero."
+  - cash below zero: every purchase is short
+  - a long sector name, and 15 holdings or more

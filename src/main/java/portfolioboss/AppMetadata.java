@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.30.0";
+    public static final String VERSION = "0.31.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,14 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.31.0: [The Averaging calculator]
+ * Averaging calculator added: a new page, /averaging, third in the navigation, that plans buying more of several holdings at once, each with the Weight tab's purchase for a target weight or an amount.
+ * Averaging calculator: the weights' tabs, each a plan of its own; the holdings below their average cost first, the farthest below first, the rest folded with "1 purchase planned" while folded.
+ * Averaging calculator cash card: every purchase typed on the tab added up with its commissions against the tab's cash — "Cash left", or an orange "… short" —, kept in view, with Clear.
+ * Averaging calculator: under each holding, what to know before buying more — warning signs, momentum, the analysts' target and the next report; a calculation only, nothing sent or saved.
+ * Weight tab: "Buying more of several holdings? Averaging calculator →" under the calculator, whatever is typed, opens the page on the same investor's tab.
+ * TavilyClient: the three searches on any site leave out tavily.com, whose company pages, titled with the symbol, had taken the place of real articles (INTC: 3 of 5 news results).
+ *
  * VERSION 0.30.0: [The holdings' figures on screen]
  * CompanyInfoResponse added: Finnhub's four fields of a holding and of a scanned stock moved into one companyInfo object, with when Finnhub answered; null while it never answered.
  * Positions table: Analysts' target (the upside, the firms under it) and Earnings (the date, "in 6 days" under it within 14 days) can be turned on in the Columns menu.

@@ -41,8 +41,8 @@ from price-target moves and the colored dot — behind `POST /api/analysis` and 
 drawer's "Analysts & news" tab and the Analyze buttons — the UI's light redesign: four pages, a drawer per holding
 and per closed position, a Columns menu, forms in modals —, worked out in the UI only, the Overview's weight graphs
 by sector and by holding with the cash, and the drawer's target-weight calculator, with the new average after a
-purchase and a purchase for an amount — and the fifth page,
-Recommendations: IB's scan for hot stocks once a trading day in `./run.sh` and on demand (Scan again, `POST
+purchase and a purchase for an amount, and the Averaging calculator page, which plans such purchases for several
+holdings at once against the cash — and the Recommendations page: IB's scan for hot stocks once a trading day in `./run.sh` and on demand (Scan again, `POST
 /api/scans`), the hot / too hot / correcting lists with their correlations to the holdings behind
 `GET /api/recommendations`, and a drawer per scanned stock — and, behind `POST /api/recommendations/analysis`, the
 analysis of the short list with Finnhub's earnings date and company figures, the risk signs, the news events and their
@@ -62,7 +62,7 @@ short list of the hot stocks with enough upside):*
 | `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`, `NotPickableReason`), `AnalystConsensus`, and the news score's parts with their points (`WeighedNewsEvent`, `WeighedAnalystMove`) |
 | `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `AnalystTargetCalculator`, `RecommendationCandidate`, `RecommendationCalculator`, `NewsScoreCalculator`, `RiskSignsCalculator`, `OrderCommission`: derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score and the year's figures, the analysts' consensus and trend and the dot, the hot-stock rule and the page's order, the correlations, when a scan is due, the analysts' target from Dow Jones, the risk signs and the timing note (a scanned stock's and a holding's), the news score and the pick, the default commission — no Spring, no database |
 | `exceptions` | `portfolioboss.exceptions` (since 2026-10-26) — the app's own exceptions (`TwsUnavailableException`, `TwsBusyException`) |
-| `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) — its pages, the Recommendations page's pieces in `components/recommendations/`, and what a holding and a scanned stock both show in `components/companyInfo/` and `components/AnalystTarget.tsx` — and `UiLauncher`, which starts it and opens the browser |
+| `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) — its pages, the Recommendations page's pieces in `components/recommendations/`, the Averaging calculator's in `components/averagingCalculator/`, and what a holding and a scanned stock both show in `components/companyInfo/` and `components/AnalystTarget.tsx` — and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 
 Tests (`src/test/`) take the scope of the code they cover.
@@ -71,14 +71,13 @@ Tests (`src/test/`) take the scope of the code they cover.
 
 | Scope | Arrives |
 |---|---|
-| `thesis` | M1 — the written thesis per holding (the actual product) |
 | `analytics` | M3 — correlated clusters, TWR, SPY benchmark (the weight of each holding and sector is already in the UI, scope `ui`) |
-| `averaging` | M3 — the averaging-down calculator's verdict ladder (its weight part and the new average after a purchase, the drawer's Weight tab, are in the UI, scope `ui`) |
+| `averaging` | M3 — the averaging-down calculator's verdict ladder (its weight part and the new average after a purchase — the drawer's Weight tab — and the Averaging calculator page are in the UI, scope `ui`) |
 | `alerts` | M4 — rule-based alerts |
 | `journal` | M4 — decision journal |
 
 **Examples:**
-- `feat(thesis): add sell-trigger field to the thesis entity`
+- `feat(ui): add a Company tab to the holding drawer`
 - `fix(ib): unsubscribe from account updates before disconnecting`
 - `refactor(report): extract money formatting out of PortfolioWrapper`
 - `docs: add CLAUDE.md project guide`

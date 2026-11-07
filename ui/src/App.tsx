@@ -6,6 +6,7 @@ import { InvestorsProvider } from './components/InvestorsContext';
 import { SectorOptionsList } from './components/SectorCell';
 import { usePortfolio } from './hooks/usePortfolio';
 import { formatDateTime } from './lib/format';
+import { AveragingCalculatorPage } from './pages/AveragingCalculatorPage';
 import { ClosedPositionsPage } from './pages/ClosedPositionsPage';
 import { InvestorsPage } from './pages/InvestorsPage';
 import { OverviewPage } from './pages/OverviewPage';
@@ -21,8 +22,8 @@ function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStat
 
 /**
  * Loads the portfolio once for every page, and shows the page of the address: / the Overview, /positions (with
- * /positions/12 opening holding 12's row), /closed, /investors and /recommendations (with /recommendations/40 opening a
- * scanned stock's drawer). Any other address goes to the Overview.
+ * /positions/12 opening holding 12's row), /averaging, /closed, /investors and /recommendations (with
+ * /recommendations/40 opening a scanned stock's drawer). Any other address goes to the Overview.
  */
 function App() {
   const { snapshot, errorMessage, isLoading, reload } = usePortfolio();
@@ -55,6 +56,10 @@ function App() {
           <Route
             path="positions/:holdingId?"
             element={pageOnceLoaded((loaded) => <PositionsPage snapshot={loaded} onDataChanged={reload} />)}
+          />
+          <Route
+            path="averaging"
+            element={pageOnceLoaded((loaded) => <AveragingCalculatorPage snapshot={loaded} />)}
           />
           <Route
             path="closed"

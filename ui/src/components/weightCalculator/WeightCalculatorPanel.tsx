@@ -13,6 +13,7 @@ import {
 import { INPUT_CLASS } from '../../lib/formInput';
 import { NUMBER_INPUT_CLASS } from '../../lib/styles';
 import type { Holding } from '../../types/portfolio';
+import { AveragingCalculatorLink } from '../averagingCalculator/AveragingCalculatorLink';
 import { Field, FormError, InfoBand } from '../FormFields';
 import { weightsTabOf, type InvestmentsAndCash } from '../graphs/investmentsAndCash';
 import { WeightsTabs } from '../graphs/WeightsTabs';
@@ -231,17 +232,24 @@ function PlanResult({
   );
 }
 
-/** A field for a number with its unit after it ("%", "USD"), its border red while what is typed can't be used. */
-function NumberInputWithUnit({
+/**
+ * A field for a number with its unit after it ("%", "USD"), its border red while what is typed can't be used.
+ * `widthClass`: narrower in a table row than in a form. `ariaLabel`: what the field is for, when no label shows above it.
+ */
+export function NumberInputWithUnit({
   typedText,
   unit,
   isUnusable,
   onTypedTextChange,
+  widthClass = 'w-24',
+  ariaLabel,
 }: {
   typedText: string;
   unit: string;
   isUnusable: boolean;
   onTypedTextChange: (typedText: string) => void;
+  widthClass?: string;
+  ariaLabel?: string;
 }) {
   return (
     <span className="flex items-center gap-1.5">
@@ -249,9 +257,10 @@ function NumberInputWithUnit({
         type="text"
         inputMode="decimal"
         value={typedText}
+        aria-label={ariaLabel}
         aria-invalid={isUnusable}
         onChange={(event) => onTypedTextChange(event.target.value)}
-        className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} w-24 aria-[invalid=true]:border-negative`}
+        className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} ${widthClass} aria-[invalid=true]:border-negative`}
       />
       <span className="font-medium text-muted">{unit}</span>
     </span>
@@ -312,8 +321,9 @@ function WeightCalculator({
  * (the stocks plus the cash, as in the Overview's graphs) — or, on an investor's tab, of all of that investor's money —,
  * or how many an amount buys; and for a purchase, the new average cost and how far the price must rise to reach it.
  * `tabs` are Portfolio and then every investor, and it opens on `initialInvestorId`'s (`null`: Portfolio); what is typed
- * stays when the tab changes, to compare, and typing in one field empties the other (MY_HOLDINGS_TODO.md, decision 8). A
- * calculation only: nothing reaches IB and nothing is saved. `syncedAt` is the last sync's time, which the price is from.
+ * stays when the tab changes, to compare, and typing in one field empties the other (MY_HOLDINGS_TODO.md, decision 8).
+ * Under it, always, the link to the Averaging calculator on the same tab. A calculation only: nothing reaches IB and
+ * nothing is saved. `syncedAt` is the last sync's time, which the price is from.
  */
 export function WeightCalculatorPanel({
   holding,
@@ -352,20 +362,21 @@ export function WeightCalculatorPanel({
       {'reason' in holdingInAccount ? (
         <InfoBand>{holdingInAccount.reason}</InfoBand>
       ) : (
-        <>
-          <WeightCalculator
-            holdingInAccount={holdingInAccount}
-            tab={tab}
-            targetText={targetText}
-            amountText={amountText}
-            onTargetTextChange={changeTargetText}
-            onAmountTextChange={changeAmountText}
-          />
-          <p className="mt-4 text-caption text-faint">
-            At IB’s last price, {formatMoney(holdingInAccount.price)}, from the sync of {formatDateTime(syncedAt)}. A
-            calculation only: nothing is sold or bought.
-          </p>
-        </>
+        <WeightCalculator
+          holdingInAccount={holdingInAccount}
+          tab={tab}
+          targetText={targetText}
+          amountText={amountText}
+          onTargetTextChange={changeTargetText}
+          onAmountTextChange={changeAmountText}
+        />
+      )}
+      <AveragingCalculatorLink investorId={tab.investorId} />
+      {!('reason' in holdingInAccount) && (
+        <p className="mt-4 text-caption text-faint">
+          At IB’s last price, {formatMoney(holdingInAccount.price)}, from the sync of {formatDateTime(syncedAt)}. A
+          calculation only: nothing is sold or bought.
+        </p>
       )}
     </div>
   );

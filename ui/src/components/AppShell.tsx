@@ -9,6 +9,7 @@ export type LoadStatus = 'loading' | 'ready' | 'error';
 const NAVIGATION: { path: string; label: string }[] = [
   { path: '/', label: 'Overview' },
   { path: '/positions', label: 'Positions' },
+  { path: '/averaging', label: 'Averaging calculator' },
   { path: '/closed', label: 'Closed' },
   { path: '/investors', label: 'Investors' },
   { path: '/recommendations', label: 'Recommendations' },

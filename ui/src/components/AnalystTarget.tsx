@@ -39,6 +39,17 @@ export function TargetUpside({ analystTarget }: { analystTarget: AnalystTarget }
   );
 }
 
+/** In a line: "830.00 (+11.8%) · 6 firms" — the median, its upside and how many firms —, or "—" without a target. */
+export function MedianTargetWithUpside({ analystTarget }: { analystTarget: AnalystTarget }) {
+  if (analystTarget.medianTarget === null) return <TargetUpside analystTarget={analystTarget} />;
+  return (
+    <span>
+      {formatMoney(analystTarget.medianTarget)} (<TargetUpside analystTarget={analystTarget} />)
+      <span className="text-muted"> · {firmCountText(analystTarget.firmCount)}</span>
+    </span>
+  );
+}
+
 /** A table's cell: the upside, and how many firms under it. */
 export function TargetCell({ analystTarget }: { analystTarget: AnalystTarget }) {
   return (

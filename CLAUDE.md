@@ -7,11 +7,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A read-only decision-support tool for a **long-term** Interactive Brokers portfolio — the calm
 counterpart to the sibling IBBot intraday trading project (`~/DevProjects/IBBot`). It connects to
 TWS, syncs the holdings into a local PostgreSQL database on every connection, and serves that
-database to a React UI (`ui/`) of five pages — the API always reads from the database, never straight from TWS: an
+database to a React UI (`ui/`) of six pages — the API always reads from the database, never straight from TWS: an
 Overview (the account's figures, what needs a look, how the signals stand, how the money splits by sector and by
 holding), the positions table, in which the user
 enters what IB doesn't know (a holding's buy/sell trades; its sector and industry come from IB since 2026-11-05), the
-closed positions — derived from those
+Averaging calculator (buying more of several holdings at once, those below their average cost first, against the cash —
+worked out in the UI only, nothing saved), the closed positions — derived from those
 trades, plus the manual positions sold before PortfolioBoss saw them —, a card per investor for an account several
 people's money shares (each one's cash, value and profit), all of which the UI writes to the same database through a
 few JSON endpoints, and Recommendations: the US stocks IB's scan finds in a long upward trend, in three lists (hot, too
@@ -108,8 +109,15 @@ stock share, `companyInfo` (with when Finnhub answered); the shared pieces left 
 Columns), and an open holding's drawer the target first in Analysts & news and a Company tab. After the first browser
 check, at his asks: the next report 0–14 days away marked with a yellow highlighter wherever the outlined timing note
 was ("in 6 days" under the date in the table), "—" for no risk signs, and the drawer's row of risk signs turned into
-Warning signs — the dot's three and the risk signs together; all of it browser-checked by the user. Session 4 (holdings
-that move together, a market drop of 20%) is next.
+Warning signs — the dot's three and the risk signs together; all of it browser-checked by the user. Session 3ב
+(2026-11-07, put before session 4 at his ask — decision 13) is a sixth page, the **Averaging calculator** (`/averaging`):
+the drawer's Weight tab plans buying more of one holding, the page plans it for several at once, every purchase added up
+against the tab's cash, with a line of what to know under each holding (TODO.md's principle 2: "would you buy it today at
+this price?", answered with data). Designed first in Claude Design's fourth round (DESIGN_BRIEF.md §9; his picks:
+arrangement A, and "1 purchase planned" on the folded section), built the same day and browser-checked by him. The
+Weight tab stays — selling to a target and an investor's first purchase exist only there, and the Overview's bars lead to
+it — with a link to the page under its calculator, always shown (his ask). Session 4 (holdings that move together, a
+market drop of 20%) is next.
 
 ## Hard invariant: read-only
 
@@ -120,8 +128,9 @@ Recommendations page the scanner's (`scannerData` / `scannerDataEnd`), the contr
 `contractDetailsEnd`) and Dow Jones's headlines' (`historicalNews` / `historicalNewsEnd`) — reads too: `IbGateway` sends
 `reqScannerSubscription` and, after the scan's first answer, `cancelScannerSubscription`, `reqContractDetails` and
 `reqHistoricalNews`. Do not add `placeOrder`, `cancelOrder`, or order-related `EWrapper`
-callbacks — if a task seems to need them, it is the wrong project. The drawer's Weight tab says how many shares to sell
-or buy, and that is all it does: it is a calculation on screen that sends nothing anywhere and saves nothing. Likewise
+callbacks — if a task seems to need them, it is the wrong project. The drawer's Weight tab and the Averaging calculator
+say how many shares to sell or buy, and that is all they do: calculations on screen that send nothing anywhere and save
+nothing. Likewise
 "recommended" means picked by rules in code, not a price forecast, and nothing is bought.
 
 The local API never touches the IB account either. It writes only to PortfolioBoss's own database — the
@@ -1065,7 +1074,36 @@ Things that are easy to break:
 - A `Tip` is placed over its parent, which must be `relative` and must not clip it: a `truncate` (or any
   `overflow-hidden`) element around it hides the bubble — the legend's name truncates inside its own inner span.
 
-The Recommendations page (`ui/src/pages/RecommendationsPage.tsx`, `/recommendations`, the fifth navigation item; its
+The Averaging calculator (`ui/src/pages/AveragingCalculatorPage.tsx`, `/averaging`, the third navigation item;
+MY_HOLDINGS_TODO.md session 3ב, decision 13; built from Claude Design's fourth round, DESIGN_BRIEF.md §9, arrangement A)
+plans buying more of several holdings at once, worked out in the UI from `/api/portfolio` only — no endpoint, nothing
+stored or sent. Its tabs are the weights' (`weightsTabsOf`, `WeightsTabs`), and each tab is a plan of its own: the page's
+state keeps what is typed by tab and by holding (`TypedTexts`, gone when the page is left), and it opens on Portfolio or
+on the tab a link asked for — `averagingCalculator/AveragingCalculatorLink.tsx`, shown under the drawer's Weight tab
+calculator whatever is typed, carries the investor, and `investorIdToOpenOn(state)` reads it. The arithmetic is
+`components/averagingCalculator/averagingPlan.ts`, over `targetWeight.ts` unchanged:
+`splitHoldingsByAverage(tab)` turns the tab's holdings — on an investor's tab only those they hold some of: buying one
+they hold none of is a new purchase, not averaging down — into `AveragingRow`s below the average cost (the farthest below
+first, `calculateRiseNeededToReachAveragePercent`) and at or above it (the closest first,
+`calculatePriceAboveAveragePercent`; both exported from `targetWeight.ts`, the second also used inside
+`calculateAverageCostAfterPurchase`), and `LeftOutHolding`s with the Weight tab's own reasons plus "No average to bring
+down: … is unknown."; `calculateRowResult(row, typedTexts)` gives a `RowResult` — `nothingTyped`, `purchase` (the Weight
+tab's `PurchasePlan`, from `weightPlanOf` or `buildPurchasePlanForAmount`), `unusable` (which field, and why),
+`atOrAboveTarget` (the page only buys; selling stays in the Weight tab) or `alreadyAtTarget` —; and
+`calculatePlanTotal(rowResults, cash)` adds up the rows that buy into a `PlanTotal` (count, amount, commissions, total,
+`cashLeft`). The purchases don't change one another: a purchase turns cash into shares, so each row's weight after is as
+if it were the only one, and the one thing they share is the cash. The pieces, in `components/averagingCalculator/`:
+`AveragingCashCard` (sticky at the top of the screen: the cash with its hint, the plan's sum and Clear, or the real
+warning "626.60 short: …"), `AveragingSection` (the heading and its count; the second section folds, with "1 purchase
+planned" while folded), `AveragingTable` (eleven columns in one row under Now · Plan a purchase · After the purchase, the
+two fields `NumberInputWithUnit` — exported from `WeightCalculatorPanel.tsx` with a `widthClass` and an `ariaLabel` —, a
+3px accent edge on a row that buys, the row's message above its line), `WhatToKnowLine` (under each row:
+`HoldingWarningSigns`, `MomentumChip`, `MedianTargetWithUpside` from `AnalystTarget.tsx`, and `NextEarningsDate`) and
+`NotOnThisPage`. Four deliberate departures from the design (his OK): the highlighter on "in 5 days" as everywhere else,
+not on the date; the cash's hint in `title` (a `Tip` opens upward, and the card sticks to the top); the Weight tab's own
+sentences in "Not on this page"; 32px fields like every other.
+
+The Recommendations page (`ui/src/pages/RecommendationsPage.tsx`, `/recommendations`, the sixth navigation item; its
 pieces in `ui/src/components/recommendations/`, built from Claude Design's third round — DESIGN_BRIEF.md §8, which
 designed the whole page and marked each piece [now] or [later]; [now] in session 1b, [later] in session 4 — reworked
 where decision 13 had overtaken the design: no text from Claude anywhere). App passes it the portfolio snapshot (the
@@ -1140,11 +1178,12 @@ it when Finnhub never answered; `children` after it). `components/AnalystTarget.
 (`TargetUpside`, `TargetCell`, `AnalystTargetSection({analystTarget, ruleText})` — the rule line is the caller's:
 `TARGET_RULE_FOR_A_PICK` in `hotStockTexts.ts`, `TARGET_RULE_FOR_A_HOLDING` in `HoldingDrawer.tsx`). The holding's side:
 the Positions table's Analysts' target (`TargetCell`) and Earnings (`NextEarningsDate`, below) — under Columns, "—" on a
-closed holding —, and an open holding's drawer: `HoldingWarningSignsLine` under the key figures — "Warning signs", the
-dot's three (`SignalWarningSignTags` in `Signal.tsx`, from `warningSignsOf`) and the risk signs in the same red tags, "—"
-for none, "risk signs not checked" with `HOLDING_NOT_CHECKED_HINTS`' reason, the timing note; shown together only, the
-dot still counts its three —, `AnalystTargetSection` first in Analysts & news, and a Company tab (`CompanyPanel`, no
-children); a closed holding gets none of them, its company info and targets no longer read.
+closed holding —, and an open holding's drawer: `HoldingWarningSignsLine` under the key figures — "Warning signs", then
+`HoldingWarningSigns` (`components/HoldingWarningSigns.tsx` since session 3ב, shared with the Averaging calculator: the
+dot's three — `SignalWarningSignTags` in `Signal.tsx`, from `warningSignsOf` — and the risk signs in the same red tags,
+"—" for none, "risk signs not checked" with `HOLDING_NOT_CHECKED_HINTS`' reason), then the timing note; shown together
+only, the dot still counts its three —, `AnalystTargetSection` first in Analysts & news, and a Company tab
+(`CompanyPanel`, no children); a closed holding gets none of them, its company info and targets no longer read.
 
 The drawers' "Analysts & news" tab is one `AnalysisPanel` for a holding and a scanned stock (`HoldingAnalysisPanel` adds
 the holding's button, open holdings only, and the dot's "?"): under the news, "Why it moves" (`moveReason`), and in the
@@ -1320,7 +1359,8 @@ Things that are easy to break:
   live with V12; the measurement (session 5) comes after. MY_HOLDINGS_TODO.md is the current plan: its sessions 1 (the
   new average in the Weight tab) and 2 (the holdings' analysts' target, Finnhub's figures and risk signs in the API, the
   sector and industry from IB — V13, V14 —, checked live 2026-11-05) and 3 (their UI, with `companyInfo` shared by a
-  holding and a scanned stock) are in; session 4 (holdings that move together, a market drop of 20%) is next.
+  holding and a scanned stock) are in, and so is session 3ב (the Averaging calculator, a sixth page, UI only); session 4
+  (holdings that move together, a market drop of 20%) is next.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. There is **no written thesis per holding** (decided 2026-10-06: data, not text): the product is the data on
   each holding that helps decide whether to stay in it — not the IB reader.
