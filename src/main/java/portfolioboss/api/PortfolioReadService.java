@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.api.response.AnalystTargetResponse;
 import portfolioboss.api.response.ClosedPositionResponse;
+import portfolioboss.api.response.CompanyInfoResponse;
 import portfolioboss.api.response.EstimatedAnalysisCostResponse;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
@@ -35,6 +36,7 @@ import portfolioboss.db.ManualPositionEntity;
 import portfolioboss.db.ManualPositionRepository;
 import portfolioboss.db.StockAnalysisEntity;
 import portfolioboss.db.StockAnalysisRepository;
+import portfolioboss.db.StockEntity;
 import portfolioboss.db.StockRepository;
 import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.Benchmark;
@@ -44,7 +46,6 @@ import portfolioboss.model.AnalystConsensus;
 import portfolioboss.model.AnalystTrend;
 import portfolioboss.model.HoldingSignal;
 import portfolioboss.model.MomentumLabel;
-import portfolioboss.stocks.Stock;
 import portfolioboss.utils.Utils;
 
 import java.math.BigDecimal;
@@ -110,7 +111,7 @@ public class PortfolioReadService {
         Map<Integer, List<DailyClose>> dailyClosesByConId = dailyClosesOf(storedHoldings);
         Map<Long, StockAnalysisEntity> latestAnalysisByHoldingId = latestAnalysisByHoldingId();
         List<Integer> holdingConIds = storedHoldings.stream().map(HoldingEntity::conId).toList();
-        Map<Integer, Stock> finnhubDataByConId = stockRepository.finnhubDataByConId(holdingConIds);
+        Map<Integer, StockEntity> stocksByConId = stockRepository.stocksByConId(holdingConIds);
         Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId =
                 analystPriceTargetRepository.analystPriceTargetsByConId(holdingConIds);
         // How far an OPEN holding's day count runs (see HoldingHistory) — the last sync, in the local
@@ -125,7 +126,7 @@ public class PortfolioReadService {
                 storedHoldings.stream()
                         .map(holding -> holdingResponseOf(holding, snapshotDate, accountOwnerId,
                                 momentumOf(holding, dailyClosesByConId), latestAnalysisByHoldingId.get(holding.id()),
-                                finnhubDataByConId.get(holding.conId()),
+                                stocksByConId.get(holding.conId()),
                                 analystPriceTargetsByConId.getOrDefault(holding.conId(), List.of())))
                         .toList(),
                 closedPositionsOf(storedHoldings, manualPositions),
@@ -182,17 +183,16 @@ public class PortfolioReadService {
     /**
      * {@code snapshotDate} is how far a still-{@code OPEN} holding's day count runs — see {@link HoldingHistory} —,
      * and the day the analysts' targets and the timing note are counted from; {@code accountOwnerId} is who holds the
-     * shares the other investors' trades don't explain; {@code momentum}, {@code latestAnalysis} and
-     * {@code finnhubData} are {@code null} while there are no closes, no analysis, or no answer from Finnhub for the
-     * holding.
+     * shares the other investors' trades don't explain; {@code momentum}, {@code latestAnalysis} and {@code stock}
+     * (what Finnhub answered, and when) are {@code null} while there are no closes, no analysis, or no answer from
+     * Finnhub for the holding.
      */
     private HoldingResponse holdingResponseOf(HoldingEntity holdingEntity, LocalDate snapshotDate, long accountOwnerId,
-                                              Momentum momentum, StockAnalysisEntity latestAnalysis, Stock finnhubData,
+                                              Momentum momentum, StockAnalysisEntity latestAnalysis, StockEntity stock,
                                               List<AnalystPriceTarget> analystPriceTargets) {
         Holding holding = holdingEntity.toIbHolding();
         HoldingHistory holdingHistory = holdingEntity.tradeHistory();
         MomentumResponse momentumResponse = momentum == null ? null : new MomentumResponse(momentum);
-        RiskSignsCalculator riskSignsCalculator = new RiskSignsCalculator(finnhubData, momentum);
         AnalystTargetCalculator analystTargetCalculator = new AnalystTargetCalculator(analystPriceTargets,
                 Utils.finiteOrNull(holding.marketPrice()), snapshotDate);
 
@@ -223,11 +223,20 @@ public class PortfolioReadService {
                 analysisResponseOf(latestAnalysis, holding),
                 signalOf(latestAnalysis, momentum),
                 new AnalystTargetResponse(analystTargetCalculator),
-                finnhubData == null ? null : finnhubData.nextEarningsDate(),
-                finnhubData == null ? null : finnhubData.companyFacts(),
-                riskSignsCalculator.hasCompanyFacts() ? riskSignsCalculator.riskSigns() : null,
-                riskSignsCalculator.reportsWithin14Days(snapshotDate),
+                companyInfoOf(stock, momentum, snapshotDate),
                 holdingEntity.industry());
+    }
+
+    /**
+     * What Finnhub last answered about the holding's company, with the risk signs from it and from the closes, and the
+     * timing note counted from {@code snapshotDate}; {@code null} while Finnhub never answered for the holding.
+     */
+    private CompanyInfoResponse companyInfoOf(StockEntity stock, Momentum momentum, LocalDate snapshotDate) {
+        if (stock == null) {
+            return null;
+        }
+        RiskSignsCalculator riskSignsCalculator = new RiskSignsCalculator(stock.finnhubData(), momentum);
+        return new CompanyInfoResponse(riskSignsCalculator, stock.fetchedAt(), snapshotDate);
     }
 
     /**

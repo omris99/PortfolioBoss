@@ -31,7 +31,8 @@ Stage and commit the current changes.
 fits, leave it out.
 
 *In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection — with each holding's sector and
-industry from IB's contract details, its Dow Jones target and Finnhub's figures, served with its risk signs —, derived
+industry from IB's contract details, its Dow Jones target and Finnhub's figures, served with its risk signs as the
+company info a scanned stock has too, and shown in the Positions table and the holding drawer —, derived
 buy/sell dates, write endpoints for the trades, the UI that shows the positions and enters the trades, the
 reconciliation warnings, the closed positions — commissions, average cost, and manual positions with their own
 trades — several investors sharing the account, with their deposits, the momentum score from IB's daily closes, and the
@@ -61,7 +62,7 @@ short list of the hot stocks with enough upside):*
 | `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`, `NotPickableReason`), `AnalystConsensus`, and the news score's parts with their points (`WeighedNewsEvent`, `WeighedAnalystMove`) |
 | `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `AnalystTargetCalculator`, `RecommendationCandidate`, `RecommendationCalculator`, `NewsScoreCalculator`, `RiskSignsCalculator`, `OrderCommission`: derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score and the year's figures, the analysts' consensus and trend and the dot, the hot-stock rule and the page's order, the correlations, when a scan is due, the analysts' target from Dow Jones, the risk signs and the timing note (a scanned stock's and a holding's), the news score and the pick, the default commission — no Spring, no database |
 | `exceptions` | `portfolioboss.exceptions` (since 2026-10-26) — the app's own exceptions (`TwsUnavailableException`, `TwsBusyException`) |
-| `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
+| `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) — its pages, the Recommendations page's pieces in `components/recommendations/`, and what a holding and a scanned stock both show in `components/companyInfo/` and `components/AnalystTarget.tsx` — and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 
 Tests (`src/test/`) take the scope of the code they cover.

@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { formatSignedPercentOneDecimal } from '../../lib/format';
 import type { HotStock, NotPickableReason } from '../../types/recommendations';
-import { RiskSigns } from './RiskSignTag';
+import { CandidateRiskSigns } from './CandidateRiskSigns';
 
 /**
  * Why the recommendation can't pick a stock, in words, each with the figure behind it — the API's reasons, in its
@@ -24,7 +24,7 @@ function ReasonText({ reason, stock }: { reason: NotPickableReason; stock: HotSt
     case 'RISK_SIGNS_TOO_HEAVY':
       return (
         <>
-          <RiskSigns stock={stock} showFigures />
+          <CandidateRiskSigns stock={stock} showFigures />
           <span className="text-muted">weigh {stock.riskWeight}; a pick’s weigh 2 at most</span>
         </>
       );

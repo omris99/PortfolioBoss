@@ -1,24 +1,13 @@
-import {
-  EMPTY_VALUE,
-  formatDate,
-  formatMoney,
-  formatSignedPercentOneDecimal,
-  profitLossColorClass,
-} from '../../lib/format';
-import { EXPLAINED_CLASS } from '../../lib/styles';
-import type { AnalystPriceTarget, AnalystTarget } from '../../types/recommendations';
-import { SubHeading } from '../AnalysisPanel';
+import { EMPTY_VALUE, formatDate, formatMoney, formatSignedPercentOneDecimal, profitLossColorClass } from '../lib/format';
+import { EXPLAINED_CLASS } from '../lib/styles';
+import type { AnalystPriceTarget, AnalystTarget } from '../types/portfolio';
+import { SubHeading } from './AnalysisPanel';
 
 /**
- * The analysts' target from Dow Jones's headlines (RECOMMENDATIONS_TODO.md, decision 14): known for every scanned stock
- * before anything is paid for, and the one the recommendation's rule counts — the MarketBeat consensus of the analysis
- * stays beside it in the drawer. Every figure is the API's.
+ * The analysts' target from Dow Jones's headlines (RECOMMENDATIONS_TODO.md, decision 14), a holding's or a scanned
+ * stock's: known before anything is paid for — the MarketBeat consensus of the analysis stays beside it in the drawer.
+ * Every figure is the API's.
  */
-
-/** The rule in words — a copy of the API's numbers, for the words only. */
-export const TARGET_RULE_TEXT =
-  'A pick needs the median of 3 firms’ targets or more, at least 15% above the price — each firm’s latest of the ' +
-  'half year, from Dow Jones’s headlines.';
 
 function firmCountText(firmCount: number): string {
   if (firmCount === 0) return 'no firm';
@@ -26,7 +15,7 @@ function firmCountText(firmCount: number): string {
 }
 
 /** On hover: what the figure is — or why there is none. */
-export function analystTargetHint(analystTarget: AnalystTarget): string {
+function analystTargetHint(analystTarget: AnalystTarget): string {
   if (analystTarget.medianTarget === null) {
     return (
       `${firmCountText(analystTarget.firmCount)} gave a target in Dow Jones’s headlines of the half year: fewer than ` +
@@ -35,7 +24,7 @@ export function analystTargetHint(analystTarget: AnalystTarget): string {
   }
   return (
     `The median of ${analystTarget.firmCount} firms’ latest targets in Dow Jones’s headlines of the half year: ` +
-    `${formatMoney(analystTarget.medianTarget)}, against the last close.`
+    `${formatMoney(analystTarget.medianTarget)}, against the price.`
   );
 }
 
@@ -50,7 +39,7 @@ export function TargetUpside({ analystTarget }: { analystTarget: AnalystTarget }
   );
 }
 
-/** A list's cell: the upside, and how many firms under it. */
+/** A table's cell: the upside, and how many firms under it. */
 export function TargetCell({ analystTarget }: { analystTarget: AnalystTarget }) {
   return (
     <>
@@ -77,10 +66,10 @@ function FirmTargetRow({ firmTarget }: { firmTarget: AnalystPriceTarget }) {
 }
 
 /**
- * The drawer's "Analysts & news" tab, first: the median target and its upside, the rule, and each firm's latest target,
- * the newest first — the headline on hover.
+ * The drawer's "Analysts & news" tab, first: the median target and its upside, `ruleText` — what the target is for on
+ * this page —, and each firm's latest target, the newest first, the headline on hover.
  */
-export function AnalystTargetSection({ analystTarget }: { analystTarget: AnalystTarget }) {
+export function AnalystTargetSection({ analystTarget, ruleText }: { analystTarget: AnalystTarget; ruleText: string }) {
   return (
     <section className="mb-5">
       <SubHeading>Analysts’ target · Dow Jones</SubHeading>
@@ -94,7 +83,7 @@ export function AnalystTargetSection({ analystTarget }: { analystTarget: Analyst
           </>
         )}
       </p>
-      <p className="mb-2 text-caption text-faint">{TARGET_RULE_TEXT}</p>
+      <p className="mb-2 text-caption text-faint">{ruleText}</p>
       {analystTarget.latestTargetOfEachFirm.length > 0 && (
         <ul className="border-t">
           {analystTarget.latestTargetOfEachFirm.map((firmTarget) => (

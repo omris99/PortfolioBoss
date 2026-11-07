@@ -1,6 +1,7 @@
 import { EMPTY_VALUE, formatCorrelation, formatSignedPercentOneDecimal } from '../../lib/format';
 import type { Investor, Momentum } from '../../types/portfolio';
 import type { Correlation, HotStock } from '../../types/recommendations';
+import type { NotCheckedHints } from '../companyInfo/RiskSigns';
 import { hasSeveralInvestors, investorNameOf } from '../InvestorsContext';
 
 /** The texts the lists and the drawer share, so a stock reads the same in both. */
@@ -10,6 +11,20 @@ const MONTHS_IN_A_FULL_YEAR = 12;
 
 export const NO_CORRELATION_REASON =
   'No figure: the account holds no stocks, or none with 100 trading days in common.';
+
+/** Why an analyzed stock's risk signs are unknown: Finnhub is asked with the analysis, and without them no pick. */
+export const CANDIDATE_NOT_CHECKED_HINTS: NotCheckedHints = {
+  finnhubDidNotAnswer:
+    'Finnhub didn’t answer with the analysis, so four of the five signs were never checked — and it can’t be picked.',
+  finnhubHadNoFigures:
+    'Finnhub gave none of the company’s figures, so four of the five signs were never checked — and it can’t be ' +
+    'picked.',
+};
+
+/** The rule of the analysts' target in words — a copy of the API's numbers, for the words only. */
+export const TARGET_RULE_FOR_A_PICK =
+  'A pick needs the median of 3 firms’ targets or more, at least 15% above the price — each firm’s latest of the ' +
+  'half year, from Dow Jones’s headlines.';
 
 /** IB's two words, "Technology / Software"; one when IB sent only one; "—" when it sent none. */
 export function sectorText(stock: HotStock): string {

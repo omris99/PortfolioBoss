@@ -13,6 +13,7 @@ import portfolioboss.ai.NewsEvent;
 import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.Sentiment;
 import portfolioboss.api.response.AnalystTargetResponse;
+import portfolioboss.api.response.CompanyInfoResponse;
 import portfolioboss.api.response.CorrelationResponse;
 import portfolioboss.api.response.HotStockResponse;
 import portfolioboss.api.response.LatestRecommendationResponse;
@@ -106,14 +107,15 @@ class RecommendationsControllerTest {
                 .andExpect(jsonPath("$.hotStocks[0].analysis.sentiment").value("POSITIVE"))
                 .andExpect(jsonPath("$.hotStocks[0].analysis.moveReason.reason")
                         .value("A new contract lifted the shares."))
-                .andExpect(jsonPath("$.hotStocks[0].nextEarningsDate.date").value("2026-11-05"))
-                .andExpect(jsonPath("$.hotStocks[0].nextEarningsDate.hour").value("amc"))
-                .andExpect(jsonPath("$.hotStocks[0].companyFacts.revenueGrowthPercent").value(-4.5))
-                .andExpect(jsonPath("$.hotStocks[0].companyFacts.netMarginPercent").value(12.0))
-                .andExpect(jsonPath("$.hotStocks[0].companyFacts.debtToEquity").value(0.6))
-                .andExpect(jsonPath("$.hotStocks[0].companyFacts.peRatio").value(38.0))
-                .andExpect(jsonPath("$.hotStocks[0].riskSigns[0]").value("REVENUE_FALLING"))
-                .andExpect(jsonPath("$.hotStocks[0].reportsWithin14Days").value(true))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.finnhubAnsweredAt").value("2026-10-26T18:30:00Z"))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.nextEarningsDate.date").value("2026-11-05"))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.nextEarningsDate.hour").value("amc"))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.reportsWithin14Days").value(true))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.companyFacts.revenueGrowthPercent").value(-4.5))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.companyFacts.netMarginPercent").value(12.0))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.companyFacts.debtToEquity").value(0.6))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.companyFacts.peRatio").value(38.0))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.riskSigns[0]").value("REVENUE_FALLING"))
                 .andExpect(jsonPath("$.hotStocks[0].newsScore").value(0))
                 .andExpect(jsonPath("$.hotStocks[0].analysis.newsEvents[0].type").value("MAJOR_CONTRACT"))
                 .andExpect(jsonPath("$.hotStocks[0].analysis.newsEvents[0].magnitude").value("MEDIUM"))
@@ -145,8 +147,7 @@ class RecommendationsControllerTest {
                 .andExpect(jsonPath("$.correctingStocks[0].label").value("CORRECTING"))
                 .andExpect(jsonPath("$.correctingStocks[0].percentAboveSma50").value(-3.0))
                 .andExpect(jsonPath("$.correctingStocks[0].analysis").value(nullValue()))
-                .andExpect(jsonPath("$.correctingStocks[0].riskSigns").value(nullValue()))
-                .andExpect(jsonPath("$.correctingStocks[0].reportsWithin14Days").value(false))
+                .andExpect(jsonPath("$.correctingStocks[0].companyInfo").value(nullValue()))
                 .andExpect(jsonPath("$.correctingStocks[0].newsScore").value(nullValue()))
                 .andExpect(jsonPath("$.correctingStocks[0].weighedNewsEvents").value(empty()))
                 .andExpect(jsonPath("$.correctingStocks[0].countedAnalystMoves").value(empty()))
@@ -188,8 +189,9 @@ class RecommendationsControllerTest {
         return new HotStockResponse(11, 9001, "HOTA", "HOTA INC", "NASDAQ", "Technology", "Software",
                 HotStockLabel.HOT, momentumAt(110.0), 6.5, true, false,
                 List.of(new CorrelationResponse(7, "AAPL", 0.82, true)), List.of(1L), analysis,
-                new EarningsDate(LocalDate.of(2026, 11, 5), "amc"), new CompanyFacts(-4.5, 12.0, 0.6, 38.0),
-                List.of(RiskSign.REVENUE_FALLING), true, 0,
+                new CompanyInfoResponse(analysis.analyzedAt(), new EarningsDate(LocalDate.of(2026, 11, 5), "amc"), true,
+                        new CompanyFacts(-4.5, 12.0, 0.6, 38.0), List.of(RiskSign.REVENUE_FALLING)),
+                0,
                 List.of(new WeighedNewsEvent(analysis.newsEvents().getFirst(), 2)),
                 List.of(new WeighedAnalystMove(downgrade, -2)), 3, -3, false,
                 analystTarget, true, List.of(NotPickableReason.RISK_SIGNS_TOO_HEAVY));
@@ -199,8 +201,8 @@ class RecommendationsControllerTest {
     private HotStockResponse correctingStock() {
         AnalystTargetResponse noTarget = new AnalystTargetResponse(null, null, false, 0, List.of());
         return new HotStockResponse(12, 9002, "HOTB", "HOTB CORP", "NYSE", "Industrials", "Machinery",
-                HotStockLabel.CORRECTING, momentumAt(97.0), -3.0, false, true, List.of(), List.of(), null, null, null,
-                null, false, null, List.of(), List.of(), null, null, false,
+                HotStockLabel.CORRECTING, momentumAt(97.0), -3.0, false, true, List.of(), List.of(), null, null,
+                null, List.of(), List.of(), null, null, false,
                 noTarget, false, List.of(NotPickableReason.NO_ANALYST_TARGET, NotPickableReason.NO_COMPANY_FACTS));
     }
 

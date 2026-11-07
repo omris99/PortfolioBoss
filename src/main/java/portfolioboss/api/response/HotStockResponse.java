@@ -2,19 +2,18 @@ package portfolioboss.api.response;
 
 import portfolioboss.model.HotStockLabel;
 import portfolioboss.model.NotPickableReason;
-import portfolioboss.model.RiskSign;
 import portfolioboss.model.WeighedAnalystMove;
 import portfolioboss.model.WeighedNewsEvent;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.EarningsDate;
 
 import java.util.List;
 
 /**
  * One stock of a Recommendations list (RECOMMENDATIONS_TODO.md, session 1): what the scan stored about it, its momentum
  * from the stored closes — the price is {@code momentum.lastClose} —, what the rule of decision 1 says about it, and
- * (session 3) its latest analysis with Finnhub's answer and the risk signs worked out from them on this read. Finnhub's
- * records go into the JSON as they are. The component names are JSON keys: added to, never renamed or removed.
+ * (session 3) its latest analysis with Finnhub's answer and the risk signs worked out from them on this read. The
+ * component names are JSON keys ({@code ui/src/types/recommendations.ts} mirrors them): one is renamed or removed only
+ * together with the UI's types and every reader of it, in the same change — as Finnhub's four fields were, into
+ * {@code companyInfo} (MY_HOLDINGS_TODO.md, session 3): the same object a holding has.
  *
  * @param candidateId       the {@code scan_candidate} row
  * @param industry          IB's sector, e.g. "Technology"; {@code null} when IB sent none
@@ -26,13 +25,10 @@ import java.util.List;
  * @param heldByInvestorIds the investors who hold some of it, when it is an open holding already; empty otherwise
  * @param analysis            its latest analysis, from any scan (decision 12), the consensus measured against the last
  *                            close; {@code null} while it has never been analyzed
- * @param nextEarningsDate    Finnhub's, from that analysis; {@code null} without one, or without a report in the next
- *                            four months
- * @param companyFacts        Finnhub's four figures, from that analysis; {@code null} without Finnhub's answer
- * @param riskSigns           its risk signs (decision 5); {@code null} without Finnhub's figures — then they were never
- *                            checked
- * @param reportsWithin14Days the timing note: its report is due 0 to 14 days after the latest scan
- * @param newsScore           its news events and the analysts' moves weighed (decision 13), counted from the day of
+ * @param companyInfo         what Finnhub answered with that analysis, with its risk signs (decision 5) and the timing
+ *                            note counted from the latest scan's day; {@code null} while never analyzed, or when Finnhub
+ *                            didn't answer with the analysis
+ * @param newsScore          its news events and the analysts' moves weighed (decision 13), counted from the day of
  *                            the analysis — as the recommendation weighed them; {@code null} while never analyzed
  * @param weighedNewsEvents   every event of that analysis with what it weighs in {@code newsScore}; empty while never
  *                            analyzed
@@ -64,10 +60,7 @@ public record HotStockResponse(
         List<CorrelationResponse> correlations,
         List<Long> heldByInvestorIds,
         StockAnalysisResponse analysis,
-        EarningsDate nextEarningsDate,
-        CompanyFacts companyFacts,
-        List<RiskSign> riskSigns,
-        boolean reportsWithin14Days,
+        CompanyInfoResponse companyInfo,
         Integer newsScore,
         List<WeighedNewsEvent> weighedNewsEvents,
         List<WeighedAnalystMove> countedAnalystMoves,

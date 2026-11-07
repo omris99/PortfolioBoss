@@ -3,8 +3,9 @@ import { EMPTY_VALUE, formatMoney, formatPercent, formatSignedPercentOneDecimal 
 import { EXPLAINED_CLASS } from '../../lib/styles';
 import type { Investor } from '../../types/portfolio';
 import type { HotStock } from '../../types/recommendations';
+import { TargetCell } from '../AnalystTarget';
+import { RecoveringTag } from '../companyInfo/RiskSigns';
 import { MomentumChip } from '../Momentum';
-import { TargetCell } from './AnalystTarget';
 import {
   correlationsHint,
   correlationText,
@@ -14,7 +15,6 @@ import {
   yearReturnText,
 } from './hotStockTexts';
 import { InfoMark } from './InfoMark';
-import { RecoveringTag } from './RiskSignTag';
 
 /**
  * One column of a list's table: its header, its alignment, its width in the short lists (whose figures line up card to

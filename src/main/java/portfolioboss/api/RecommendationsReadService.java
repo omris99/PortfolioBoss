@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.api.response.AnalystTargetResponse;
+import portfolioboss.api.response.CompanyInfoResponse;
 import portfolioboss.api.response.CorrelationResponse;
 import portfolioboss.api.response.HotStockResponse;
 import portfolioboss.api.response.LatestRecommendationResponse;
@@ -312,10 +313,7 @@ public class RecommendationsReadService {
                 correlationsWithHoldings(candidate, openHoldings, dailyClosesByConId),
                 investorsHolding(candidate, openHoldings, accountOwnerId),
                 analysisResponseOf(latestAnalysis, hotStock),
-                finnhubStock == null ? null : finnhubStock.nextEarningsDate(),
-                finnhubStock == null ? null : finnhubStock.companyFacts(),
-                riskSignsChecked ? recommendationCandidate.riskSigns() : null,
-                recommendationCandidate.reportsWithin14Days(scanDate),
+                companyInfoOf(recommendationCandidate, latestAnalysis, scanDate),
                 newsScore == null ? null : newsScore.score(),
                 newsScore == null ? List.of() : newsScore.weighedNewsEvents(),
                 newsScore == null ? List.of() : newsScore.countedAnalystMoves(),
@@ -325,6 +323,19 @@ public class RecommendationsReadService {
                 new AnalystTargetResponse(candidateWithItsList.analystTarget()),
                 inShortList,
                 recommendationRule.reasonsNotPickable(recommendationCandidate));
+    }
+
+    /**
+     * What Finnhub answered with the stock's latest analysis, with the risk signs the pick weighs and the timing note
+     * counted from {@code scanDate}; {@code null} while never analyzed, or when Finnhub didn't answer with the analysis.
+     */
+    private CompanyInfoResponse companyInfoOf(RecommendationCandidate recommendationCandidate,
+                                              StockAnalysisEntity latestAnalysis, LocalDate scanDate) {
+        if (recommendationCandidate.stock() == null) {
+            return null;
+        }
+        return new CompanyInfoResponse(recommendationCandidate.riskSignsCalculator(), latestAnalysis.analyzedAt(),
+                scanDate);
     }
 
     private LocalDate dateOf(Instant instant) {

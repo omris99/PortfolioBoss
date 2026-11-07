@@ -19,6 +19,7 @@ import portfolioboss.api.response.AnalystTargetResponse;
 import portfolioboss.api.response.CashMovementResponse;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
+import portfolioboss.api.response.CompanyInfoResponse;
 import portfolioboss.api.response.EstimatedAnalysisCostResponse;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
@@ -247,17 +248,14 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].analystTarget.medianTarget").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].analystTarget.upsidePercent").value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm").value(empty()))
-                .andExpect(jsonPath("$.holdings[0].nextEarningsDate").value(nullValue()))
-                .andExpect(jsonPath("$.holdings[0].companyFacts").value(nullValue()))
-                .andExpect(jsonPath("$.holdings[0].riskSigns").value(nullValue()))
-                .andExpect(jsonPath("$.holdings[0].reportsWithin14Days").value(false))
+                .andExpect(jsonPath("$.holdings[0].companyInfo").value(nullValue()))
                 .andExpect(jsonPath("$.estimatedAnalysisCost").value(nullValue()));
     }
 
     /**
      * What a scanned stock has, on a holding too (MY_HOLDINGS_TODO.md, session 2): the analysts' target from Dow Jones,
-     * Finnhub's next report, figures and the risk signs they raise, and IB's two words for the company. Finnhub's
-     * records go into the JSON as they are.
+     * Finnhub's next report, figures and the risk signs they raise — together in {@code companyInfo}, as a scanned
+     * stock has them (session 3) —, and IB's two words for the company. Finnhub's records go into the JSON as they are.
      */
     @Test
     void servesWhatAScannedStockHasWithTheFieldNamesTheUiExpects() throws Exception {
@@ -280,14 +278,15 @@ class PortfolioControllerTest {
                         .value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm[0].headline")
                         .value("Apple Price Target Raised to $250.00/Share From $220.00 by Firm A"))
-                .andExpect(jsonPath("$.holdings[0].nextEarningsDate.date").value("2026-09-30"))
-                .andExpect(jsonPath("$.holdings[0].nextEarningsDate.hour").value("amc"))
-                .andExpect(jsonPath("$.holdings[0].companyFacts.revenueGrowthPercent").value(6.0))
-                .andExpect(jsonPath("$.holdings[0].companyFacts.netMarginPercent").value(25.0))
-                .andExpect(jsonPath("$.holdings[0].companyFacts.debtToEquity").value(1.5))
-                .andExpect(jsonPath("$.holdings[0].companyFacts.peRatio").value(55.0))
-                .andExpect(jsonPath("$.holdings[0].riskSigns[0]").value("EXPENSIVE"))
-                .andExpect(jsonPath("$.holdings[0].reportsWithin14Days").value(true))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.finnhubAnsweredAt").value("2026-10-06T20:30:00Z"))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.nextEarningsDate.date").value("2026-09-30"))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.nextEarningsDate.hour").value("amc"))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.reportsWithin14Days").value(true))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.companyFacts.revenueGrowthPercent").value(6.0))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.companyFacts.netMarginPercent").value(25.0))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.companyFacts.debtToEquity").value(1.5))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.companyFacts.peRatio").value(55.0))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.riskSigns[0]").value("EXPENSIVE"))
                 .andExpect(jsonPath("$.holdings[0].sector").value("Technology"))
                 .andExpect(jsonPath("$.holdings[0].industry").value("Computers"));
     }
@@ -472,9 +471,14 @@ class PortfolioControllerTest {
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
                 LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities, momentum,
-                appleAnalysis(), HoldingSignal.YELLOW, appleAnalystTarget(),
-                new EarningsDate(LocalDate.of(2026, 9, 30), "amc"), new CompanyFacts(6.0, 25.0, 1.5, 55.0),
-                List.of(RiskSign.EXPENSIVE), true, "Computers");
+                appleAnalysis(), HoldingSignal.YELLOW, appleAnalystTarget(), appleCompanyInfo(), "Computers");
+    }
+
+    /** Made-up figures from Finnhub: a P/E above 50 raises the one sign, and the report is 0–14 days away. */
+    private CompanyInfoResponse appleCompanyInfo() {
+        return new CompanyInfoResponse(Instant.parse("2026-10-06T20:30:00Z"),
+                new EarningsDate(LocalDate.of(2026, 9, 30), "amc"), true, new CompanyFacts(6.0, 25.0, 1.5, 55.0),
+                List.of(RiskSign.EXPENSIVE));
     }
 
     /** Three made-up firms' targets — 230, 240 and 250 —: a median of 240, 20% above the price of 200. */
@@ -513,8 +517,7 @@ class PortfolioControllerTest {
         HoldingWarning noTrades = new HoldingWarning(HoldingWarningType.NO_TRADES_LOGGED, NO_TRADES_MESSAGE);
         return new HoldingResponse("MSFT", "STK", "USD", 5.0, null, null, null, null, 0.0, ACCOUNT,
                 null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of(), List.of(noTrades),
-                List.of(), null, null, null, new AnalystTargetResponse(null, null, false, 0, List.of()), null, null,
-                null, false, null);
+                List.of(), null, null, null, new AnalystTargetResponse(null, null, false, 0, List.of()), null, null);
     }
 
     /** The account owner of INVESTORS_TODO.md's example, with a realized P&amp;L in two currencies. */

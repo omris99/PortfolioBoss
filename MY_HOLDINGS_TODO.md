@@ -197,7 +197,7 @@
 
 ## סשן 2 — נתונים להחזקות: backend (עקרון 4) 🟡
 
-> **סטטוס (05.11.2026): בנוי ונבדק מול TWS; בדיקת הדפדפן אצל המשתמש.** 443 בדיקות ו-`npm run build` עוברים. השמות שאושרו:
+> **סטטוס (05.11.2026): ✅ בוצע.** נבדק מול TWS ובדפדפן (המשתמש). 443 בדיקות ו-`npm run build` עוברים. השמות שאושרו:
 > `RiskSignsCalculator`, `Momentum.lowerThanAYearAgo()`, `readContractDetailsOfHoldings`, `companyNamesOfScannedStocks`,
 > `analystPriceTargetsOfStocks`, `hasCompanyName`, `stockOrNullOnFailure`, `readFinnhubDataOfHoldings`, `storeFinnhubData`,
 > `refreshSectorAndIndustryFromIb`, הטבלה `stock` עם `finnhub_data` (V13), ו-`holding.industry` (V14). V13 ו-V14 הוחלו על
@@ -276,6 +276,23 @@
 ---
 
 ## סשן 3 — נתונים להחזקות: UI (עקרון 4) 🟢
+
+> **סטטוס (07.11.2026): ✅ בוצע.** 444 בדיקות ו-`npm run build` עוברים, ונבדק בדפדפן (המשתמש): קודם הסשן, ואחר כך השינויים
+> שנבנו לבקשתו אחרי הבדיקה הראשונה:
+> - **הארכיטקטורה (בקשת המשתמש: לא להתפשר עליה):**
+>   - ארבעת השדות של Finnhub יצאו מהרמה העליונה של החזקה ושל מניה מהסריקה לאובייקט משותף אחד, `companyInfo`
+>     (`CompanyInfoResponse`, עם `finnhubAnsweredAt`; השם של המשתמש, במקום `CompanyCheck`).
+>   - החלקים המשותפים עברו מ-`recommendations/` ל-`components/companyInfo/` ול-`components/AnalystTarget.tsx`. כל אחד מקבל רק
+>     את החלק של המניה שהוא מציג.
+>   - הכלל "מפתחות רק מתווספים" נוסח מחדש ב-CLAUDE.md: מפתח משנים רק יחד עם הטיפוסים ב-UI וכל מי שקורא אותו.
+> - **אחרי הבדיקה:**
+>   - בעמודת Earnings: "in 6 days" מתחת לתאריך;
+>   - מרקר צהוב (`highlight`) במקום המסגרת של הערת התזמון, בכל המקומות;
+>   - "—" במקום "No risk signs";
+>   - שורת Warning signs במגירה: שלושת הסימנים של הנקודה וסימני הסיכון יחד;
+>   - בלי "Shown only: it doesn't change the dot".
+> - בניסיון הראשון לא היה צהוב, כי האפליקציה לא הופעלה מחדש אחרי השינוי ב-`tailwind.config.js`; אחרי ההפעלה מחדש המרקר
+>   והשורה המאוחדת נראו.
 
 - **טבלת ה-Positions:** שתי עמודות חדשות שמופיעות דרך תפריט ה-Columns:
   - "Analysts' target": התא של `TARGET_COLUMN`, עם המרחק בצבע של רווח או הפסד והפירמות מתחת;

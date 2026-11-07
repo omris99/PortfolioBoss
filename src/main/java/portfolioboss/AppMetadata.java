@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.29.0";
+    public static final String VERSION = "0.30.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,15 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.30.0: [The holdings' figures on screen]
+ * CompanyInfoResponse added: Finnhub's four fields of a holding and of a scanned stock moved into one companyInfo object, with when Finnhub answered; null while it never answered.
+ * Positions table: Analysts' target (the upside, the firms under it) and Earnings (the date, "in 6 days" under it within 14 days) can be turned on in the Columns menu.
+ * Holding drawer: a Warning signs row under the key figures — the Signal dot's warning signs and the risk signs together, each risk sign with its figure, then the timing note.
+ * Holding drawer: Analysts & news opens with the analysts' target from Dow Jones, and a new Company tab shows Finnhub's next report and four figures with their rules; open holdings only.
+ * Timing note: run over with a yellow highlighter (the new color highlight) instead of the outlined box with a calendar icon, everywhere a report 0–14 days away shows.
+ * Risk signs: "—" for a stock that has none, instead of "No risk signs"; "Not checked" explains on hover whether Finnhub never answered or gave none of the figures.
+ * Scanned stock's Company tab: "From Finnhub, answered …" instead of "with the analysis of …"; when Finnhub didn't answer, the reason replaces the list of dashes.
+ *
  * VERSION 0.29.0: [The holdings get what a scanned stock has]
  * Sector from IB: every sync takes a holding's sector (IB's broad word, "Technology") and its new industry ("Semiconductors") from its contract details; before, the sector was typed by hand.
  * PUT /api/holdings/{id}/sector removed with SectorRequest; the Positions table's sector cell is text now, the sector over the industry, and the drawer shows "Technology / Semiconductors".

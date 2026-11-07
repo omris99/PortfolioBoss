@@ -49,6 +49,12 @@
   --color-warn-real-soft: #fde6da;
   --color-on-warn-real: #ffffff;
 
+  /*
+   * A highlighter, not a warning: "look at this date" — the next report 0–14 days away (MY_HOLDINGS_TODO.md, session 3,
+   * the user's choice). Brighter and more saturated than the minor warning's pale band, so the two read apart.
+   */
+  --color-highlight: #ffe94d;
+
   --color-signal-green: #1f8a47;
   --color-signal-yellow: #b88400;
   --color-signal-red: #c8322a;

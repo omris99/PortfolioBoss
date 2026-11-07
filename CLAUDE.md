@@ -102,7 +102,14 @@ target, Finnhub's next report and four figures, the risk signs —, read on ever
 contract details and headlines in the same rounds as the scan's, then Finnhub for each holding in USD (decision 10, the
 symbol only). And (decision 11, the user's choice) a holding's **sector comes only from IB** — IB's broad word, with its
 finer one as the holding's `industry` (V14) —, never typed by hand: the sector endpoint and the editable cell are gone.
-Session 3 (the UI of those figures) comes next.
+Session 3 (2026-11-05/07, 444 tests) shows them: Finnhub's four fields moved into one object a holding and a scanned
+stock share, `companyInfo` (with when Finnhub answered); the shared pieces left `recommendations/` for
+`components/companyInfo/` and `components/AnalystTarget.tsx`; the Positions table has Analysts' target and Earnings (under
+Columns), and an open holding's drawer the target first in Analysts & news and a Company tab. After the first browser
+check, at his asks: the next report 0–14 days away marked with a yellow highlighter wherever the outlined timing note
+was ("in 6 days" under the date in the table), "—" for no risk signs, and the drawer's row of risk signs turned into
+Warning signs — the dot's three and the risk signs together; all of it browser-checked by the user. Session 4 (holdings
+that move together, a market drop of 20%) is next.
 
 ## Hard invariant: read-only
 
@@ -173,7 +180,8 @@ npm run build            # tsc -b && vite build; the type check is the only UI c
 
 A change to `ui/tailwind.config.js` (a new color role, say) reaches a running dev server only after a restart — stop
 the app and run it again: the CSS variables in `index.css` reload, but the classes built from the config don't (the
-sector ring came up black on 2026-10-13, its fill classes missing).
+sector ring came up black on 2026-10-13, its fill classes missing; on 2026-11-05 the new highlighter showed no yellow
+until the restart).
 
 The UI shows the portfolio as of the last sync. It reloads `/api/portfolio` after every write (trades,
 manual positions, investors, deposits) and after every analysis run, but new figures from IB need a new `run.sh`
@@ -212,7 +220,8 @@ reasons in the order of the checks) cover the Recommendations rules.
 `PortfolioSyncServiceTest` (since MY_HOLDINGS_TODO.md's session 2 also: the sector and industry from the contract
 details — empty words none, no details the old ones kept —, the holdings' targets replaced per stock, a holding the scan
 found too stored once, Finnhub's data replaced per contract), `PortfolioReadServiceTest` (and each holding's analysts'
-target and Finnhub data, `riskSigns` `null` without them), `HoldingWriteServiceTest`,
+target and company info — with when Finnhub answered, `null` without an answer, `riskSigns` `null` for an answer with no
+figure), `HoldingWriteServiceTest`,
 `ManualPositionWriteServiceTest` and `InvestorWriteServiceTest` are `@DataJpaTest`s against the real
 `portfolioboss_test` database (`src/test/resources/application-test.properties`, `@ActiveProfiles("test")`), each test
 rolled back automatically. The test profile caps each context's pool at 3 connections: Spring keeps every test context
@@ -577,7 +586,8 @@ into memory —, and `findLatestScannedAt`, a `max` in JPQL), `ScanCandidateRepo
 analysis or a pick of an earlier scan was of), `InvestmentRecommendationRepository`
 (`findFirstByOrderByRecommendedAtDesc`), `AnalystPriceTargetRepository` (`findByConIdIn`, its default method
 `analystPriceTargetsByConId` — empty for no contract —, and `deleteForContracts`, like the closes') and `StockRepository`
-(`findByConIdIn`, its default method `finnhubDataByConId`, `deleteForContracts`) are the repositories.
+(`findByConIdIn`, its default method `stocksByConId` — the rows, so that the read has `StockEntity.fetchedAt()` too —,
+`deleteForContracts`) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
   checksum): a schema change is a new `V15__….sql`.
@@ -916,8 +926,10 @@ filters. `PortfolioReadService` puts the whole response together: its private me
 most a constructor that copies fields from one entity or one computed object (`TradeResponse(TradeEntity)`,
 `MomentumResponse(Momentum)`, `InvestorResponse(InvestorEntity, InvestorSummary)`, …). They live in
 `api/response/`; Jackson
-turns them into JSON, so their component names **are** the JSON keys and must stay stable
-(`ui/src/types/portfolio.ts` mirrors them) — add fields, don't rename or remove. Beyond the original IB
+turns them into JSON, so their component names **are** the JSON keys (`ui/src/types/portfolio.ts` mirrors them, by
+hand: nothing checks that the two agree, and a key the UI no longer finds is `undefined`, not an error) — a key is
+renamed or removed only together with `ui/src/types` and every reader of it, in the same change (MY_HOLDINGS_TODO.md
+session 3 moved four so, into `companyInfo`); otherwise add fields. Beyond the original IB
 fields, `HoldingResponse` also carries `id`, `conId`, `sector` (IB's since 2026-11-05, see below), `status`, and — derived via
 `calculation.HoldingHistory`, see above — `firstBuyDate`, `lastSellDate`, `holdingDays` and `trades`
 (a `List<TradeResponse>`, one entry per `trade` row), and `warnings` (a `List<model.HoldingWarning>`, see above);
@@ -953,11 +965,15 @@ while the holding has never been analyzed, and the
 query. Appended after them (MY_HOLDINGS_TODO.md, session 2, 2026-11-04/05), what a scanned stock has, shown only — none of
 it changes the dot: `analystTarget` (the same `AnalystTargetResponse` as the Recommendations page's, from the holding's
 stored Dow Jones targets against IB's latest price, counted back from the last sync's day — `account_state.as_of`),
-`nextEarningsDate` and `companyFacts` (Finnhub's records as they are, from the `stock` table; `null` without an
-answer), `riskSigns` (`RiskSignsCalculator`; `null` without Finnhub's figures — not checked, which `[]` would hide; an
-ETF gets every figure `null`), `reportsWithin14Days` (from the last sync's day), and `industry` (IB's `category`;
-`sector` is IB's `industry` — the market's names, decision 11). Two more queries: the stored targets and Finnhub's
-answers of every holding. `PortfolioResponse.estimatedAnalysisCost` (appended last, at the top level) is what the Analyze buttons quote
+`companyInfo` and `industry` (IB's `category`; `sector` is IB's `industry` — the market's names, decision 11). A
+`CompanyInfoResponse(finnhubAnsweredAt, nextEarningsDate, reportsWithin14Days, companyFacts, riskSigns)` (session 3, the
+same record a `HotStockResponse` has) is what Finnhub answered — its records as they are — with the risk signs and the
+timing note worked out on this read, built once, by its copy constructor from a `RiskSignsCalculator` (which holds
+Finnhub's answer and the closes; the calculator knows nothing of the response), the answer's time and the day the note
+counts from; `riskSigns` is `null` when Finnhub gave none of the four figures (not checked, which `[]` would hide — an
+ETF), and `companyInfo` itself `null` while Finnhub never answered for the holding (not in USD, no key, every call
+failed). For a holding, `finnhubAnsweredAt` is the `stock` row's `fetched_at` and the note counts from the last sync's
+day (`PortfolioReadService.companyInfoOf`). Two more queries: the stored targets and the `stock` rows of every holding. `PortfolioResponse.estimatedAnalysisCost` (appended last, at the top level) is what the Analyze buttons quote
 before a paid run, in place of a figure written by hand: an `EstimatedAnalysisCostResponse(costUsdPerStock,
 tavilyCreditsPerStock, basedOnAnalyses)` — the average over those same latest analyses (`StockAnalysisEntity.costUsd()` /
 `tavilyCredits()`), so the older, cheaper runs of fewer searches don't count; `BigDecimal`s to 4 places — or `null`
@@ -977,15 +993,17 @@ holdings, never with itself, as `CorrelationResponse(holdingId, symbol, coeffici
 `heldByInvestorIds` (the `partsByInvestor` keys of the holding it is, if any); appended in session 3: `analysis` (a
 `StockAnalysisResponse`, the stock's latest **by conId, from any scan** — decision 12, so a new scan, once a trading day,
 doesn't hide what was paid for —, consensus against the last close; two queries: the analyses, then
-`ScanCandidateRepository.findAllById` for which stock each was), Finnhub's `nextEarningsDate` and `companyFacts` as they
-are, `riskSigns` (`null` without Finnhub's figures — not checked, which `[]` would hide), `reportsWithin14Days` (from the
-latest scan's date, not the clock) and `newsScore` (from the analysis's own date, as the pick weighed it; `null` never
+`ScanCandidateRepository.findAllById` for which stock each was), `companyInfo` (the `CompanyInfoResponse` a holding has,
+since MY_HOLDINGS_TODO.md session 3 in place of four flat keys: Finnhub's answer stored with that analysis, the analysis's
+`analyzedAt` as its time, built from `RecommendationCandidate.riskSignsCalculator()` — the same calculator the pick
+weighs —, the timing note from the latest scan's date, not the clock; `null` while never analyzed, or when Finnhub
+didn't answer with the analysis) and `newsScore` (from the analysis's own date, as the pick weighed it; `null` never
 analyzed); appended in session 4, so that the page shows the rule's verdict without holding a weight:
 `weighedNewsEvents` (every event of the analysis with its points, `model.WeighedNewsEvent(event, points)` — 0 for
 `NOT_IN_THE_LIST`) and `countedAnalystMoves` (`model.WeighedAnalystMove(action, points)`, only the moves that count),
 both from `NewsScoreCalculator`'s `weighedNewsEvents()` / `countedAnalystMoves()`, which `score()` now sums, and empty
 while never analyzed; `riskWeight` and `score` (`RecommendationCalculator.riskWeightOf` / `scoreOf`, `null` like
-`riskSigns`) and `canBePicked` (`RecommendationCalculator.canBePicked`, public since; false without Finnhub's figures) —
+`companyInfo.riskSigns`) and `canBePicked` (`RecommendationCalculator.canBePicked`, public since; false without Finnhub's figures) —
 asked of a `RecommendationCalculator` of that one stock, since none of it depends on the rest of a short list; appended
 in session 4ב (decision 14): `analystTarget` (an `AnalystTargetResponse(medianTarget, upsidePercent, hasEnoughUpside,
 firmCount, latestTargetOfEachFirm)` — the last a list of `ib.AnalystPriceTarget` as it is, `publishedAt` a local
@@ -1058,16 +1076,19 @@ Correcting, each a `StockListCard` (a `ListHeading` with its meaning and a grey 
 table, whose last column is the stock's Analyze). The columns are defined like `POSITION_COLUMNS`, one entry each
 (`hotStockColumns.tsx`: `HOT_COLUMNS`, `TOO_HOT_COLUMNS`, `CORRECTING_COLUMNS`), cells on two lines, the figure then its
 mark: `InfoMark` (Pulled back, Moves together — grey, information) and `RiskSignTag` (the five risk signs, in the
-warning-sign tone, with the figure that raised each — "Expensive · P/E 52" — where there is room; `RiskSigns` sets a
-stock's in a row: "No risk signs" muted, "Not checked" without Finnhub's figures, "—" never analyzed). Every list has
+warning-sign tone — `WARNING_SIGN_TAG_CLASS` —, with the figure that raised each — "Expensive · P/E 52" — where there is
+room; `CandidateRiskSigns` sets a scanned stock's in a row: "—" never analyzed, then the shared `RiskSigns` — "—" with
+"No risk signs" on hover, "Not checked" with `CANDIDATE_NOT_CHECKED_HINTS`' reason). Every list has
 "Analysts' target" after the price (`TARGET_COLUMN`, decision 14, no new design round: the upside in its profit/loss tone
 as `TargetWithUpside` colors one, the firms under it, the median on hover — `AnalystTarget.tsx`). Under each analyzed
 Hot row, `AnalysisDetailLine`: one labeled line — "Risk signs … · Analysts BUY IMPROVING · Earnings … · News +2" (the
 MarketBeat upside left it in session 4ב: two different upsides on one row would confuse; it stays in the drawer)
 — and "Why it moves: …" in full under it when the news says (the user's pick, 2026-10-27, over the design's second header
 row of slots, which didn't line up with the columns and cut the reason); the row and its line hover and select together
-(`[&:has(+tr:hover)]` / `[tr:hover+&]`). `TimingNote` is the report within 14 days, outlined in the text color — never
-the warning tone; in the line only its date. The texts the lists and the drawer share are in `hotStockTexts.ts`.
+(`[&:has(+tr:hover)]` / `[tr:hover+&]`). The timing note — the report within 14 days — is run over with the yellow
+highlighter (`HIGHLIGHTER_CLASS`, the `highlight` color, the user's choice in MY_HOLDINGS_TODO.md session 3 over the
+design's outline), never the warning tone; in the line the date and "in 6 days" beside it. The texts the lists and the
+drawer share are in `hotStockTexts.ts`.
 `RecommendationCard` has three states: none yet (an invitation with Analyze & recommend, primary, and the estimate),
 the picks (up to 3 `PickCard`s, numbered: name and IB's sector, the risk signs with their figures and the timing note, a
 line the code writes from the figures — pulled back, Dow Jones's target against the price and its firms, the earnings
@@ -1093,9 +1114,9 @@ figures once analyzed; ‹ › through the three lists): Summary — why it is i
 it moves with —, the existing `MomentumPanel`, Analysts & news (first `AnalystTargetSection` — "Analysts' target · Dow
 Jones": the median and its upside, the rule, each firm's latest target with the one it replaced, the headline on hover;
 there before any analysis —, then the shared `AnalysisPanel` with the news score's parts under the news), Company
-(`CompanyPanel`: the next earnings date, Finnhub's four figures each with its rule and the sign it raises, then "For the
-recommendation" — the analysts' target, the signs' weight, whether it can be picked with every reason against it, the
-score) and If I buy
+(`CandidateCompanyPanel`: "Not analyzed yet…", else the shared `CompanyPanel` with "For the recommendation" as its
+children — the analysts' target, the signs' weight, whether it can be picked with every reason against it, the score)
+and If I buy
 (`weightCalculator/IfIBuyPanel`: an amount → whole shares at the last close, the commission, the stock's weight after
 and its sector's — of the money in stocks — on each weights tab, the cash checked; the sector picked from the open
 holdings' sectors (IB's since 2026-11-05, so a scanned stock's first word now matches exactly), already picked when one
@@ -1103,6 +1124,27 @@ of IB's two words matches one, or "A sector not held yet";
 `ifIBuy.ts` the arithmetic, beside `targetWeight.ts`). `useRecommendations` treats 503 as "no scan yet", not an error;
 `useScanAgain` runs `scanAgain()` then the reload, and tells 409 (another reading runs) from a failure by `ApiError.status`.
 `lib/drawerAddress.ts` (`idFromAddress`, `OPENED_FROM_TABLE`) is shared with Positions.
+
+What a holding and a scanned stock both show (MY_HOLDINGS_TODO.md session 3, 2026-11-05/07) is outside
+`recommendations/`, each piece taking only the part of a stock it shows — never a whole `HotStock` or `Holding`, whose
+same-named fields can mean different things (a scanned stock's `analysis` is when Finnhub was asked, a holding's isn't).
+`components/companyInfo/` takes a `CompanyInfo`: `RiskSigns.tsx` (`RiskSignTag`, `RecoveringTag`, `RiskSignTagList` — the
+tags only, so another row can hold them —, `RiskSigns` — the tags, "—" or "Not checked" —, `RiskSignsLine` — a scanned
+stock's drawer —, `NotCheckedHints` — the words, per kind of stock, for the two ways the signs go unchecked, Finnhub never
+answered or gave no figure; `notCheckedHintOf` picks one), `TimingNote.tsx` (`earningsText`, `TimingNoteWhenDue` — the
+whole note with the highlighter —, `NextEarnings` — the Company tab's words —, `NextEarningsDate({companyInfo,
+markPlacement})` — the date with "in 6 days" `below` it in a table cell or `beside` it in a line; `bmo` / `amc` / `dmh`
+are Finnhub's codes for before the open / after the close / during the session) and `CompanyPanel.tsx` (the Company tab:
+"From Finnhub, answered …", the next report and the four figures with their rules, `CompanyRow`; the reason in place of
+it when Finnhub never answered; `children` after it). `components/AnalystTarget.tsx` takes an `AnalystTarget`
+(`TargetUpside`, `TargetCell`, `AnalystTargetSection({analystTarget, ruleText})` — the rule line is the caller's:
+`TARGET_RULE_FOR_A_PICK` in `hotStockTexts.ts`, `TARGET_RULE_FOR_A_HOLDING` in `HoldingDrawer.tsx`). The holding's side:
+the Positions table's Analysts' target (`TargetCell`) and Earnings (`NextEarningsDate`, below) — under Columns, "—" on a
+closed holding —, and an open holding's drawer: `HoldingWarningSignsLine` under the key figures — "Warning signs", the
+dot's three (`SignalWarningSignTags` in `Signal.tsx`, from `warningSignsOf`) and the risk signs in the same red tags, "—"
+for none, "risk signs not checked" with `HOLDING_NOT_CHECKED_HINTS`' reason, the timing note; shown together only, the
+dot still counts its three —, `AnalystTargetSection` first in Analysts & news, and a Company tab (`CompanyPanel`, no
+children); a closed holding gets none of them, its company info and targets no longer read.
 
 The drawers' "Analysts & news" tab is one `AnalysisPanel` for a holding and a scanned stock (`HoldingAnalysisPanel` adds
 the holding's button, open holdings only, and the dot's "?"): under the news, "Why it moves" (`moveReason`), and in the
@@ -1219,7 +1261,10 @@ Things that are easy to break:
   (`WarnMark`: a yellow outlined triangle for minor, a solid orange one for real), and the only red fill is the confirm
   dialog's Delete. The one set of colors that only tells things apart is the sector ring's `chart-1` … `chart-4` (with
   the grey `chart-rest`): none of them green, red, yellow or orange, which already mean something. The stocks and the
-  cash keep one color each wherever they appear side by side (`STOCKS_COLOR_CLASS`, `CASH_COLOR_CLASS`).
+  cash keep one color each wherever they appear side by side (`STOCKS_COLOR_CLASS`, `CASH_COLOR_CLASS`). One yellow is
+  not a warning: `highlight` (#ffe94d, `HIGHLIGHTER_CLASS`), a highlighter over a date to look at — the next report 0–14
+  days away (MY_HOLDINGS_TODO.md session 3, the user's choice) —, brighter and more saturated than the minor warning's
+  pale band so the two read apart.
 - One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` runs the startup flow. `ib.TwsReader`
   owns the TWS host/port/client id and opens each `IbGateway`, one at a time — the startup and the Scan again button
   both read through it. Don't add a second entry point or a second place that connects to TWS.
@@ -1274,7 +1319,8 @@ Things that are easy to break:
   first full run from the page) are in, and so is session 4ב (the analysts' target from Dow Jones, decision 14), checked
   live with V12; the measurement (session 5) comes after. MY_HOLDINGS_TODO.md is the current plan: its sessions 1 (the
   new average in the Weight tab) and 2 (the holdings' analysts' target, Finnhub's figures and risk signs in the API, the
-  sector and industry from IB — V13, V14 —, checked live 2026-11-05) are in; session 3 (their UI) is next.
+  sector and industry from IB — V13, V14 —, checked live 2026-11-05) and 3 (their UI, with `companyInfo` shared by a
+  holding and a scanned stock) are in; session 4 (holdings that move together, a market drop of 20%) is next.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. There is **no written thesis per holding** (decided 2026-10-06: data, not text): the product is the data on
   each holding that helps decide whether to stay in it — not the IB reader.

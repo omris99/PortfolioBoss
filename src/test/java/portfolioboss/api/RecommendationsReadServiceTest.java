@@ -15,6 +15,7 @@ import portfolioboss.ai.NewsEvent;
 import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.api.response.AnalystTargetResponse;
+import portfolioboss.api.response.CompanyInfoResponse;
 import portfolioboss.api.response.CorrelationResponse;
 import portfolioboss.api.response.HotStockResponse;
 import portfolioboss.api.response.LatestRecommendationResponse;
@@ -180,8 +181,8 @@ class RecommendationsReadServiceTest {
 
     /**
      * Decision 12: HOTA is found again in the next scan, as a new row, and keeps the latest analysis of its row in the
-     * first one. Its risk signs and the timing note come from that analysis's Finnhub answer: a debt 2.5 times the
-     * equity, and a report ten days after the latest scan.
+     * first one. Its company info comes from that analysis's Finnhub answer, with the analysis's time: a debt 2.5 times
+     * the equity, and a report ten days after the latest scan.
      */
     @Test
     void aStockKeepsItsLatestAnalysisFromAnEarlierScan() {
@@ -197,10 +198,12 @@ class RecommendationsReadServiceTest {
 
         assertThat(hota.candidateId()).isNotEqualTo(hotaOfTheFirstScan.id());
         assertThat(hota.analysis().analyzedAt()).isEqualTo(SYNCED_AT.plusSeconds(7200));
-        assertThat(hota.companyFacts()).isEqualTo(finnhubStock.companyFacts());
-        assertThat(hota.nextEarningsDate()).isEqualTo(finnhubStock.nextEarningsDate());
-        assertThat(hota.riskSigns()).containsExactly(RiskSign.HIGH_DEBT);
-        assertThat(hota.reportsWithin14Days()).isTrue();
+        CompanyInfoResponse companyInfo = hota.companyInfo();
+        assertThat(companyInfo.finnhubAnsweredAt()).isEqualTo(SYNCED_AT.plusSeconds(7200));
+        assertThat(companyInfo.companyFacts()).isEqualTo(finnhubStock.companyFacts());
+        assertThat(companyInfo.nextEarningsDate()).isEqualTo(finnhubStock.nextEarningsDate());
+        assertThat(companyInfo.riskSigns()).containsExactly(RiskSign.HIGH_DEBT);
+        assertThat(companyInfo.reportsWithin14Days()).isTrue();
         assertThat(hota.riskWeight()).isEqualTo(2);
         assertThat(hota.score()).isEqualTo(-2);
         assertThat(hota.canBePicked()).isTrue();
@@ -232,7 +235,7 @@ class RecommendationsReadServiceTest {
         assertThat(hota.newsScore()).isEqualTo(5);
         assertThat(hota.weighedNewsEvents()).containsExactly(new WeighedNewsEvent(partnership, 3));
         assertThat(hota.countedAnalystMoves()).containsExactly(new WeighedAnalystMove(upgrade, 2));
-        assertThat(hota.riskSigns()).containsExactly(RiskSign.EXPENSIVE);
+        assertThat(hota.companyInfo().riskSigns()).containsExactly(RiskSign.EXPENSIVE);
         assertThat(hota.riskWeight()).isEqualTo(1);
         assertThat(hota.score()).isEqualTo(5 - 1);
         assertThat(hota.canBePicked()).isTrue();
@@ -245,10 +248,7 @@ class RecommendationsReadServiceTest {
         HotStockResponse tooHot = stockNamed("TOOHOT");
 
         assertThat(tooHot.analysis()).isNull();
-        assertThat(tooHot.nextEarningsDate()).isNull();
-        assertThat(tooHot.companyFacts()).isNull();
-        assertThat(tooHot.riskSigns()).isNull();
-        assertThat(tooHot.reportsWithin14Days()).isFalse();
+        assertThat(tooHot.companyInfo()).isNull();
         assertThat(tooHot.newsScore()).isNull();
         assertThat(tooHot.weighedNewsEvents()).isEmpty();
         assertThat(tooHot.countedAnalystMoves()).isEmpty();
@@ -314,8 +314,7 @@ class RecommendationsReadServiceTest {
         HotStockResponse hota = stockNamed("HOTA");
 
         assertThat(hota.analysis()).isNotNull();
-        assertThat(hota.companyFacts()).isNull();
-        assertThat(hota.riskSigns()).isNull();
+        assertThat(hota.companyInfo()).isNull();
         assertThat(hota.riskWeight()).isNull();
         assertThat(hota.score()).isNull();
         assertThat(hota.canBePicked()).isFalse();

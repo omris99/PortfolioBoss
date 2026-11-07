@@ -17,6 +17,7 @@ import portfolioboss.ai.SourceConsensus;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.api.response.ClosedPositionResponse;
 import portfolioboss.api.response.ClosedPositionSource;
+import portfolioboss.api.response.CompanyInfoResponse;
 import portfolioboss.api.response.EstimatedAnalysisCostResponse;
 import portfolioboss.api.response.HoldingResponse;
 import portfolioboss.api.response.InvestorQuantityResponse;
@@ -432,11 +433,12 @@ class PortfolioReadServiceTest {
     /**
      * What a scanned stock has, for a holding too (MY_HOLDINGS_TODO.md, session 2). Apple: three firms' targets, 230,
      * 240 and 250 — a median of 240, 20% above IB's price of 200 —, and Finnhub's answer: a report 10 days after the
-     * sync, and a P/E of 55, which is expensive. Microsoft: no headline held a target, and Finnhub never answered for
-     * it — its risk signs were never checked, so they are {@code null}, not an empty list.
+     * sync, and a P/E of 55, which is expensive — with the time the sync stored it. Microsoft: no headline held a
+     * target, and Finnhub never answered for it, so it has no company info at all (session 3).
      */
     @Test
     void servesTheAnalystsTargetAndFinnhubsDataOfEachHolding() {
+        Instant beforeTheSync = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         LocalDate syncDate = FIRST_RUN.atZone(ZoneId.systemDefault()).toLocalDate();
         TwsReading reading = new TwsReading(
                 snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0), microsoft(5, 300.0)),
@@ -454,18 +456,36 @@ class PortfolioReadServiceTest {
         assertThat(apple.analystTarget().upsidePercent()).isCloseTo(20.0, within(1e-9));
         assertThat(apple.analystTarget().hasEnoughUpside()).isTrue();
         assertThat(apple.analystTarget().firmCount()).isEqualTo(3);
-        assertThat(apple.nextEarningsDate().date()).isEqualTo(syncDate.plusDays(10));
-        assertThat(apple.companyFacts().peRatio()).isEqualTo(55.0);
-        assertThat(apple.riskSigns()).containsExactly(RiskSign.EXPENSIVE);
-        assertThat(apple.reportsWithin14Days()).isTrue();
+        CompanyInfoResponse appleCompanyInfo = apple.companyInfo();
+        assertThat(appleCompanyInfo.finnhubAnsweredAt()).isBetween(beforeTheSync, Instant.now());
+        assertThat(appleCompanyInfo.nextEarningsDate().date()).isEqualTo(syncDate.plusDays(10));
+        assertThat(appleCompanyInfo.reportsWithin14Days()).isTrue();
+        assertThat(appleCompanyInfo.companyFacts().peRatio()).isEqualTo(55.0);
+        assertThat(appleCompanyInfo.riskSigns()).containsExactly(RiskSign.EXPENSIVE);
         HoldingResponse microsoft = portfolio.holdings().get(1);
         assertThat(microsoft.symbol()).isEqualTo("MSFT");
         assertThat(microsoft.analystTarget().medianTarget()).isNull();
         assertThat(microsoft.analystTarget().firmCount()).isZero();
-        assertThat(microsoft.nextEarningsDate()).isNull();
-        assertThat(microsoft.companyFacts()).isNull();
-        assertThat(microsoft.riskSigns()).isNull();
-        assertThat(microsoft.reportsWithin14Days()).isFalse();
+        assertThat(microsoft.companyInfo()).isNull();
+    }
+
+    /**
+     * Finnhub answered for the holding but gave none of the four figures — what it answers for an ETF: there is company
+     * info, but its risk signs were never checked, so they are {@code null}, not an empty list.
+     */
+    @Test
+    void aHoldingFinnhubGaveNoFiguresForHasNoRiskSigns() {
+        TwsReading reading = new TwsReading(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0)),
+                Map.of(APPLE_CON_ID, risingCloses(0.003)), null, Map.of(), Map.of());
+        Stock withoutFigures = new Stock("AAPL", null, new CompanyFacts(null, null, null, null));
+        syncService.sync(reading, Map.of(APPLE_CON_ID, withoutFigures));
+
+        CompanyInfoResponse companyInfo = readPortfolio().orElseThrow().holdings().getFirst().companyInfo();
+
+        assertThat(companyInfo).isNotNull();
+        assertThat(companyInfo.nextEarningsDate()).isNull();
+        assertThat(companyInfo.reportsWithin14Days()).isFalse();
+        assertThat(companyInfo.riskSigns()).isNull();
     }
 
     /**

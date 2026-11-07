@@ -1,10 +1,9 @@
 /**
  * Mirrors the JSON served by `GET /api/portfolio` (the `*Response` records in
  * src/main/java/portfolioboss/api/response/) and sent to the write endpoints (the `*Request` records in
- * api/request/). A figure IB did not report arrives as `null`.
+ * api/request/). A figure IB did not report arrives as `null`. What a holding and a scanned stock both have — the
+ * momentum, the analysis, the analysts' target, the company info — is here too, and `recommendations.ts` builds on it.
  */
-
-import type { AnalystTarget, CompanyFacts, EarningsDate, RiskSign } from './recommendations';
 
 export type HoldingStatus = 'OPEN' | 'CLOSED';
 export type TradeSide = 'BUY' | 'SELL';
@@ -140,17 +139,14 @@ export interface Holding {
   analysis: StockAnalysis | null;
   /** The colored dot; `null` without an analysis, or while fewer than two of its three signs are known. */
   signal: HoldingSignal | null;
-  // What a scanned stock has (MY_HOLDINGS_TODO.md, session 2); shown only — none of it changes the dot.
+  // What a scanned stock has (MY_HOLDINGS_TODO.md, sessions 2 and 3); shown only — none of it changes the dot.
   /** From the holding's Dow Jones headlines, against IB's latest price; no median under three firms. */
   analystTarget: AnalystTarget;
-  /** Finnhub's; `null` without its answer, or without a report in the next four months. */
-  nextEarningsDate: EarningsDate | null;
-  /** Finnhub's four figures; `null` without its answer. */
-  companyFacts: CompanyFacts | null;
-  /** `null` without Finnhub's figures: then they were never checked, which an empty list would hide. */
-  riskSigns: RiskSign[] | null;
-  /** The next report is 0–14 days after the last sync. */
-  reportsWithin14Days: boolean;
+  /**
+   * What Finnhub last answered about the company, with the timing note counted from the last sync; `null` while it
+   * never answered — it is asked about the holdings in dollars only.
+   */
+  companyInfo: CompanyInfo | null;
   /**
    * IB's finer word, "Semiconductors", under `sector`; `null` until a sync reads it, and when IB gives none. IB names
    * the two the other way round — a scanned stock's `industry` is the sector, its `category` this.
@@ -357,6 +353,73 @@ export interface MoveReason {
   /** The title of the result it rests on, word for word. */
   title: string;
   url: string;
+}
+
+/** One firm's price target, read from one Dow Jones headline. */
+export interface AnalystPriceTarget {
+  /** 'yyyy-MM-ddTHH:mm:ss', in IB's time zone. */
+  publishedAt: string;
+  /** As Dow Jones names it: "Piper Sandler", "B of A Securities". */
+  firm: string;
+  priceTarget: number;
+  /** The target it replaced; null when the headline names none ("Maintained", "Announced"). */
+  previousPriceTarget: number | null;
+  headline: string;
+}
+
+/**
+ * The analysts' target from a stock's Dow Jones headlines (RECOMMENDATIONS_TODO.md, decision 14): the median of each
+ * firm's latest target of the half year before the scan, or before a holding's last sync — the API's, never worked out
+ * here.
+ */
+export interface AnalystTarget {
+  /** null under three firms: an opinion, not a target. */
+  medianTarget: number | null;
+  /** How far it is above the price, in percent; null without a target or a price. */
+  upsidePercent: number | null;
+  /** 15% or more above the price: a scanned stock can be on the short list. */
+  hasEnoughUpside: boolean;
+  firmCount: number;
+  /** The newest first. */
+  latestTargetOfEachFirm: AnalystPriceTarget[];
+}
+
+/** The five risk signs (RECOMMENDATIONS_TODO.md, decision 5), in the order they are listed. */
+export type RiskSign = 'LOSES_MONEY' | 'HIGH_DEBT' | 'EXPENSIVE' | 'REVENUE_FALLING' | 'RECOVERING';
+
+/** A company's next earnings report, as Finnhub's calendar gives it. */
+export interface EarningsDate {
+  /** 'yyyy-MM-dd' */
+  date: string;
+  /** 'bmo' before the market opens, 'amc' after it closes, 'dmh' during the trading hours; null while not known. */
+  hour: string | null;
+}
+
+/** Four of a company's figures from Finnhub; each null when Finnhub doesn't give it. */
+export interface CompanyFacts {
+  /** The last 12 months' revenue against the 12 before, in percent. */
+  revenueGrowthPercent: number | null;
+  /** The last 12 months' net profit out of the revenue, in percent; negative for a loss. */
+  netMarginPercent: number | null;
+  /** The debt divided by the equity — a ratio: 2 is twice the equity. */
+  debtToEquity: number | null;
+  peRatio: number | null;
+}
+
+/**
+ * What Finnhub answered about a stock's company, with the risk signs and the timing note the API worked out from it —
+ * the same for a holding and a scanned stock.
+ */
+export interface CompanyInfo {
+  /** ISO instant: a holding's on the last run Finnhub answered for it, a scanned stock's with its analysis. */
+  finnhubAnsweredAt: string;
+  /** null when Finnhub's calendar has no report in the next four months. */
+  nextEarningsDate: EarningsDate | null;
+  /** The timing note: the next report is 0–14 days after a holding's last sync, or after the latest scan. */
+  reportsWithin14Days: boolean;
+  companyFacts: CompanyFacts;
+  /** null when Finnhub gave none of the four figures: then they were never checked, which an empty list would hide. */
+  riskSigns: RiskSign[] | null;
 }
 
 /**

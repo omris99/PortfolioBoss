@@ -3,9 +3,9 @@ import { EMPTY_VALUE } from '../../lib/format';
 import { RATING_TONES, textClassOf, TREND_TONES } from '../../lib/signalColors';
 import type { HotStock } from '../../types/recommendations';
 import { siteOf } from '../AnalysisPanel';
+import { NextEarningsDate } from '../companyInfo/TimingNote';
+import { CandidateRiskSigns } from './CandidateRiskSigns';
 import { formatPoints, NEWS_SCORE_HINT, pointsColorClass } from './NewsScore';
-import { RiskSigns } from './RiskSignTag';
-import { earningsText, TimingNote } from './TimingNote';
 
 /**
  * The line under an analyzed row of the Hot list: its risk signs, the analysts, the next earnings and the news score,
@@ -31,15 +31,6 @@ function AnalystsPart({ stock }: { stock: HotStock }) {
       )}
     </span>
   );
-}
-
-/** The next report's date, outlined with the calendar when it is within 14 days of the scan — the timing note. */
-function EarningsPart({ stock }: { stock: HotStock }) {
-  if (stock.nextEarningsDate === null) {
-    return <span title="None in the next four months, or Finnhub gave none">{EMPTY_VALUE}</span>;
-  }
-  if (stock.reportsWithin14Days) return <TimingNote earningsDate={stock.nextEarningsDate} showsDateOnly />;
-  return <span title={earningsText(stock.nextEarningsDate)}>{stock.nextEarningsDate.date}</span>;
 }
 
 function NewsPart({ stock }: { stock: HotStock }) {
@@ -93,9 +84,9 @@ export function AnalysisDetailLine({ stock }: { stock: HotStock }) {
     <div className="flex flex-col gap-1 text-caption">
       <NamedParts
         parts={[
-          { name: 'Risk signs', value: <RiskSigns stock={stock} showFigures={false} /> },
+          { name: 'Risk signs', value: <CandidateRiskSigns stock={stock} showFigures={false} /> },
           { name: 'Analysts', value: <AnalystsPart stock={stock} /> },
-          { name: 'Earnings', value: <EarningsPart stock={stock} /> },
+          { name: 'Earnings', value: <NextEarningsDate companyInfo={stock.companyInfo} markPlacement="beside" /> },
           { name: 'News', value: <NewsPart stock={stock} /> },
         ]}
       />

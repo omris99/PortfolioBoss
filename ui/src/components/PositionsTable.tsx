@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import {
+  EMPTY_VALUE,
   formatDate,
   formatMoney,
   formatQuantity,
@@ -16,7 +17,9 @@ import {
   tableRowClass,
 } from '../lib/styles';
 import type { Holding, HoldingSignal } from '../types/portfolio';
+import { TargetCell } from './AnalystTarget';
 import type { ColumnChoice } from './ColumnsMenu';
+import { NextEarningsDate } from './companyInfo/TimingNote';
 import { HelpPopover } from './HelpPopover';
 import { HoldingPeriod } from './HoldingPeriod';
 import { HoldingWarningMark } from './HoldingWarnings';
@@ -97,7 +100,7 @@ interface ColumnDefinition extends ColumnChoice {
   alignment: 'left' | 'right';
   /** What the column sorts by; an empty value (`null`) always sorts last. */
   sortValue: (holding: Holding) => SortValue | null;
-  /** The order on the first click: A→Z for text, oldest first for dates, largest first for numbers. */
+  /** The order on the first click: A→Z for text, oldest (or nearest) first for dates, largest first for numbers. */
   firstSortDirection: SortDirection;
   renderValue: (holding: Holding, tableActions: TableActions) => ReactNode;
   /** Text colour classes for the cell, on an open holding; a closed one's cells are all muted. */
@@ -252,6 +255,27 @@ export const POSITION_COLUMNS: ColumnDefinition[] = [
     firstSortDirection: 'descending',
     renderValue: (holding) => formatSignedPercent(holding.unrealizedPnlPercent),
     valueColorClass: (holding) => profitLossColorClass(holding.unrealizedPnlPercent),
+  },
+  // What a scanned stock has (MY_HOLDINGS_TODO.md, session 3): an open holding's only — a closed one's is no longer read.
+  {
+    key: 'analystTarget',
+    title: 'Analysts’ target',
+    isShownByDefault: false,
+    alignment: 'right',
+    sortValue: (holding) => (isClosed(holding) ? null : holding.analystTarget.upsidePercent),
+    firstSortDirection: 'descending',
+    renderValue: (holding) =>
+      isClosed(holding) ? EMPTY_VALUE : <TargetCell analystTarget={holding.analystTarget} />,
+  },
+  {
+    key: 'earnings',
+    title: 'Earnings',
+    isShownByDefault: false,
+    alignment: 'right',
+    sortValue: (holding) => (isClosed(holding) ? null : (holding.companyInfo?.nextEarningsDate?.date ?? null)),
+    firstSortDirection: 'ascending',
+    renderValue: (holding) =>
+      isClosed(holding) ? EMPTY_VALUE : <NextEarningsDate companyInfo={holding.companyInfo} markPlacement="below" />,
   },
   {
     key: 'holdingDays',

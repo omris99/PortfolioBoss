@@ -50,7 +50,8 @@ public record RecommendationCandidate(long candidateId, HotStockCalculator hotSt
         return riskSignsCalculator().reportsWithin14Days(today);
     }
 
-    private RiskSignsCalculator riskSignsCalculator() {
+    /** The stock's risk signs and timing note, from Finnhub's answer and the closes: the API shows them from it too. */
+    public RiskSignsCalculator riskSignsCalculator() {
         return new RiskSignsCalculator(stock, hotStock.momentum());
     }
 }

@@ -3,32 +3,19 @@
  * Java records in `api/response/` — the record component names are the JSON keys, so keep the two in sync.
  */
 
-import type { AnalysisRun, AnalystAction, Momentum, NewsEvent, StockAnalysis } from './portfolio';
+import type {
+  AnalysisRun,
+  AnalystAction,
+  AnalystTarget,
+  CompanyInfo,
+  Momentum,
+  NewsEvent,
+  RiskSign,
+  StockAnalysis,
+} from './portfolio';
 
 /** Which of the three lists a stock is in, by where its last close stands against its 50-day average. */
 export type HotStockLabel = 'HOT' | 'TOO_HOT' | 'CORRECTING';
-
-/** The five risk signs of a stock the recommendation may pick, in the order they are listed. */
-export type RiskSign = 'LOSES_MONEY' | 'HIGH_DEBT' | 'EXPENSIVE' | 'REVENUE_FALLING' | 'RECOVERING';
-
-/** A company's next earnings report, as Finnhub's calendar gives it. */
-export interface EarningsDate {
-  /** 'yyyy-MM-dd' */
-  date: string;
-  /** 'bmo' before the market opens, 'amc' after it closes, 'dmh' during the trading hours; null while not known. */
-  hour: string | null;
-}
-
-/** Four of a company's figures from Finnhub; each null when Finnhub doesn't give it. */
-export interface CompanyFacts {
-  /** The last 12 months' revenue against the 12 before, in percent. */
-  revenueGrowthPercent: number | null;
-  /** The last 12 months' net profit out of the revenue, in percent; negative for a loss. */
-  netMarginPercent: number | null;
-  /** The debt divided by the equity — a ratio: 2 is twice the equity. */
-  debtToEquity: number | null;
-  peRatio: number | null;
-}
 
 /** One event of the analysis and what it weighs in the news score — the API's weight, never worked out here. */
 export interface WeighedNewsEvent {
@@ -49,34 +36,6 @@ export interface WeighedAnalystMove {
  * stock before anything is paid for —, then Finnhub's figures.
  */
 export type NotPickableReason = 'NO_ANALYST_TARGET' | 'TARGET_TOO_CLOSE' | 'NO_COMPANY_FACTS' | 'RISK_SIGNS_TOO_HEAVY';
-
-/** One firm's price target, read from one Dow Jones headline. */
-export interface AnalystPriceTarget {
-  /** 'yyyy-MM-ddTHH:mm:ss', in IB's time zone. */
-  publishedAt: string;
-  /** As Dow Jones names it: "Piper Sandler", "B of A Securities". */
-  firm: string;
-  priceTarget: number;
-  /** The target it replaced; null when the headline names none ("Maintained", "Announced"). */
-  previousPriceTarget: number | null;
-  headline: string;
-}
-
-/**
- * The analysts' target from a stock's Dow Jones headlines (RECOMMENDATIONS_TODO.md, decision 14): the median of each
- * firm's latest target of the half year before the scan — the API's, never worked out here.
- */
-export interface AnalystTarget {
-  /** null under three firms: an opinion, not a target. */
-  medianTarget: number | null;
-  /** How far it is above the last close, in percent; null without a target. */
-  upsidePercent: number | null;
-  /** 15% or more above the last close: the stock can be on the short list. */
-  hasEnoughUpside: boolean;
-  firmCount: number;
-  /** The newest first. */
-  latestTargetOfEachFirm: AnalystPriceTarget[];
-}
 
 /** How closely a scanned stock moves with one open holding: 1 exactly together, 0 unrelated, −1 opposite. */
 export interface Correlation {
@@ -115,14 +74,11 @@ export interface HotStock {
   heldByInvestorIds: number[];
   /** Its latest analysis, from any scan; the consensus measured against the last close. null while never analyzed. */
   analysis: StockAnalysis | null;
-  /** From that analysis's Finnhub answer; null without one, or without a report in the next four months. */
-  nextEarningsDate: EarningsDate | null;
-  /** From that analysis's Finnhub answer; null without one. */
-  companyFacts: CompanyFacts | null;
-  /** null without Finnhub's figures — then the signs were never checked. */
-  riskSigns: RiskSign[] | null;
-  /** Its report is due 0 to 14 days after the latest scan: wait for it. */
-  reportsWithin14Days: boolean;
+  /**
+   * What Finnhub answered with that analysis, the timing note counted from the latest scan; null while never analyzed,
+   * or when Finnhub didn't answer with the analysis.
+   */
+  companyInfo: CompanyInfo | null;
   /** Its news events and the analysts' moves weighed, as the recommendation weighed them; null while never analyzed. */
   newsScore: number | null;
   /** Every event of the analysis with what it weighs in `newsScore`; empty while never analyzed. */

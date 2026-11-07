@@ -13,27 +13,28 @@ import { TAG_CLASS } from '../../lib/styles';
 import type { EstimatedAnalysisCost, Holding, Momentum } from '../../types/portfolio';
 import type { Correlation, HotStock, HotStockLabel } from '../../types/recommendations';
 import { AnalysisPanel } from '../AnalysisPanel';
+import { AnalystTargetSection } from '../AnalystTarget';
+import { RecoveringTag, RiskSignsLine } from '../companyInfo/RiskSigns';
 import { DrawerFrame, KeyFigure, KeyFigureExtra, KeyFigures, type DrawerTab } from '../DrawerFrame';
 import type { InvestmentsAndCash } from '../graphs/investmentsAndCash';
 import { useInvestors } from '../InvestorsContext';
 import { MomentumPanel } from '../Momentum';
 import { IfIBuyPanel } from '../weightCalculator/IfIBuyPanel';
-import { AnalystTargetSection } from './AnalystTarget';
 import { AnalyzeCandidateButton } from './AnalyzeButtons';
-import { CompanyPanel } from './CompanyPanel';
+import { CandidateCompanyPanel } from './CandidateCompanyPanel';
 import {
+  CANDIDATE_NOT_CHECKED_HINTS,
   fromHighText,
   heldByText,
   isYoungStock,
   monthsInMarketText,
   NO_CORRELATION_REASON,
   sectorText,
+  TARGET_RULE_FOR_A_PICK,
 } from './hotStockTexts';
 import { InfoMark } from './InfoMark';
 import { LIST_WORDS } from './ListHeading';
 import { NewsScoreSection } from './NewsScore';
-import { RecoveringTag, RiskSigns } from './RiskSignTag';
-import { TimingNote } from './TimingNote';
 
 type CandidateTab = 'summary' | 'momentum' | 'analysis' | 'company' | 'ifIBuy';
 
@@ -273,17 +274,15 @@ function SummaryPanel({ stock }: { stock: HotStock }) {
 
 // ── the drawer ──────────────────────────────────────────────────────────────────────────────────
 
-/** Under the key figures, once analyzed: the risk signs with their figures, and the timing note apart. */
-function RiskLine({ stock }: { stock: HotStock }) {
+/** Under the key figures, once analyzed — Finnhub is asked only with the analysis: the risk signs and the timing note. */
+function CandidateRiskSignsLine({ stock }: { stock: HotStock }) {
   if (stock.analysis === null) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-caption">
-      <span className="text-muted">Risk signs</span>
-      <RiskSigns stock={stock} showFigures />
-      {stock.reportsWithin14Days && stock.nextEarningsDate !== null && (
-        <TimingNote earningsDate={stock.nextEarningsDate} showsDateOnly={false} />
-      )}
-    </div>
+    <RiskSignsLine
+      companyInfo={stock.companyInfo}
+      yearReturnPercent={stock.momentum.yearReturnPercent}
+      notCheckedHints={CANDIDATE_NOT_CHECKED_HINTS}
+    />
   );
 }
 
@@ -330,7 +329,7 @@ export function CandidateDrawer({
       case 'analysis':
         return (
           <>
-            <AnalystTargetSection analystTarget={stock.analystTarget} />
+            <AnalystTargetSection analystTarget={stock.analystTarget} ruleText={TARGET_RULE_FOR_A_PICK} />
             <AnalysisPanel
               analysis={stock.analysis}
               analyzeButton={
@@ -348,7 +347,7 @@ export function CandidateDrawer({
           </>
         );
       case 'company':
-        return <CompanyPanel stock={stock} />;
+        return <CandidateCompanyPanel stock={stock} />;
       case 'ifIBuy':
         return <IfIBuyPanel stock={stock} tabs={weightsTabs} openHoldings={openHoldings} />;
     }
@@ -366,7 +365,7 @@ export function CandidateDrawer({
       }
       subline={`${stock.companyName ?? EMPTY_VALUE} · ${sectorText(stock)}`}
       figures={<CandidateKeyFigures stock={stock} />}
-      warning={<RiskLine stock={stock} />}
+      warning={<CandidateRiskSignsLine stock={stock} />}
       tabs={TABS}
       activeTab={activeTab}
       onTabChange={setActiveTab}

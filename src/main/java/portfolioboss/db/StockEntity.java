@@ -51,4 +51,9 @@ public class StockEntity {
     public Stock finnhubData() {
         return finnhubData;
     }
+
+    /** When Finnhub gave this answer: the sync that stored it. */
+    public Instant fetchedAt() {
+        return fetchedAt;
+    }
 }

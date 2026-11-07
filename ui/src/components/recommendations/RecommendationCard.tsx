@@ -5,13 +5,13 @@ import { formatDateTime, EMPTY_VALUE } from '../../lib/format';
 import { CARD_CLASS } from '../../lib/styles';
 import type { EstimatedAnalysisCost } from '../../types/portfolio';
 import type { HotStock, LatestRecommendation, PickedStock, Recommendations } from '../../types/recommendations';
+import { TargetUpside } from '../AnalystTarget';
 import { costEstimateOf } from '../AnalyzeControls';
-import { TargetUpside } from './AnalystTarget';
+import { earningsText, TimingNoteWhenDue } from '../companyInfo/TimingNote';
 import { AnalyzeShortListControl, shortListCountsOf, shortListWords, type ShortListCounts } from './AnalyzeButtons';
+import { CandidateRiskSigns } from './CandidateRiskSigns';
 import { formatPoints, NEWS_SCORE_HINT, NewsScoreParts, pointsColorClass } from './NewsScore';
 import { NotPickableReasons } from './NotPickableReasons';
-import { RiskSigns } from './RiskSignTag';
-import { earningsText, TimingNote } from './TimingNote';
 import { sectorText } from './hotStockTexts';
 
 /**
@@ -72,7 +72,8 @@ function pickFactsText(stock: HotStock): string {
         `${stock.analystTarget.firmCount} firms`,
     );
   }
-  if (stock.nextEarningsDate !== null) facts.push(`earnings on ${earningsText(stock.nextEarningsDate)}`);
+  const nextEarningsDate = stock.companyInfo?.nextEarningsDate ?? null;
+  if (nextEarningsDate !== null) facts.push(`earnings on ${earningsText(nextEarningsDate)}`);
   if (facts.length === 0) return 'Nothing more in the figures.';
   const sentence = facts.join(' · ');
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
@@ -141,10 +142,8 @@ function PickCard({
       </div>
       <p className="-mt-1.5 text-caption text-muted">{sectorText(stock)}</p>
       <div className="flex flex-wrap items-center gap-1.5 text-caption">
-        <RiskSigns stock={stock} showFigures />
-        {stock.reportsWithin14Days && stock.nextEarningsDate !== null && (
-          <TimingNote earningsDate={stock.nextEarningsDate} showsDateOnly={false} />
-        )}
+        <CandidateRiskSigns stock={stock} showFigures />
+        <TimingNoteWhenDue companyInfo={stock.companyInfo} />
       </div>
       <p className="rounded-md bg-subtle px-3 py-2 text-[13px] leading-[19px]">{pickFactsText(stock)}</p>
       <ScoreLine stock={stock} />
@@ -168,7 +167,7 @@ function NotPickedReason({ stock }: { stock: HotStock }) {
   if (!stock.canBePicked) return <NotPickableReasons stock={stock} />;
   return (
     <>
-      {stock.riskSigns !== null && stock.riskSigns.length > 0 && <RiskSigns stock={stock} showFigures />}
+      {(stock.companyInfo?.riskSigns ?? []).length > 0 && <CandidateRiskSigns stock={stock} showFigures />}
       <span className="text-muted">
         score {stock.score === null ? EMPTY_VALUE : formatPoints(stock.score)}, below the picks
       </span>
