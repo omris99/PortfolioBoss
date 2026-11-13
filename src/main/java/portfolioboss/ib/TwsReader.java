@@ -21,9 +21,10 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * The one place that connects to TWS. It owns the TWS host, port and client id, opens a new {@link IbGateway} for each
  * reading and disconnects at its end, and lets one reading through at a time: TWS refuses a second connection with the
- * same client id. {@code ./run.sh} reads the portfolio through it at startup ({@code TwsPortfolioRunner}), and the Scan
- * again button reads a new scan ({@code api.ScanService}, RECOMMENDATIONS_TODO.md, session 1b). Read-only, like
- * everything that talks to IB: it never places, modifies or cancels an order.
+ * same client id. {@code ./run.sh} reads the portfolio through it at startup and the Sync now button reads it again
+ * ({@code api.SyncService}, MY_HOLDINGS_TODO.md, session 5א), and the Scan again button reads a new scan
+ * ({@code api.ScanService}, RECOMMENDATIONS_TODO.md, session 1b). Read-only, like everything that talks to IB: it never
+ * places, modifies or cancels an order.
  *
  * <p>{@code ./run.sh 7497 102} arrives as the two non-option arguments (port, client id).
  */
@@ -43,8 +44,11 @@ public class TwsReader {
     // Jones headlines in half a year (CRWD) — four pages.
     private static final int NEWS_ROUND_TIMEOUT_SECONDS = 20;
     private static final int MOST_NEWS_ROUNDS = 8;
-    /** The Scan again button's answer when TWS can't be read; the console line says why. */
-    private static final String TWS_NOT_REACHABLE = "TWS is not reachable: open TWS and log in, then scan again.";
+    /** The Scan again and Sync now buttons' answer when TWS can't be read; the console line says why. */
+    private static final String TWS_NOT_REACHABLE = "TWS is not reachable: open TWS and log in, then try again.";
+    /** The two buttons' answer while another reading runs: TWS takes one connection per client id. */
+    private static final String ANOTHER_READING_RUNS =
+            "TWS is already being read — by a sync, a scan or the startup: try again in a moment.";
 
     private final int twsPort;
     private final int twsClientId;
@@ -57,14 +61,50 @@ public class TwsReader {
     }
 
     /**
-     * {@code ./run.sh}: the portfolio, then — when {@code withScan} — the scans for hot stocks with the contract details
-     * of the stocks they found, then the holdings' contract details, then the analysts' price targets in the Dow Jones
-     * headlines of the stocks the scan kept and of the holdings, in the same rounds, then the daily closes of the
-     * holdings, of SPY and of the stocks the scan kept. Waits for a reading already running to end. {@code null} when the
-     * portfolio could not be read; the reason has been printed.
+     * {@code ./run.sh}'s startup: everything {@link #readEverythingOnOneConnection} reads. Waits for a reading already
+     * running to end. {@code null} when the portfolio could not be read; the reason has been printed.
      */
     public TwsReading readPortfolio(boolean withScan) throws InterruptedException {
         oneReadingAtATime.lock();
+        try {
+            return readEverythingOnOneConnection(withScan);
+        } catch (TwsUnavailableException e) {
+            System.err.println(e.reason());
+            return null;
+        } finally {
+            oneReadingAtATime.unlock();
+        }
+    }
+
+    /**
+     * The Sync now button: the same reading as the startup's, without waiting for another one to end.
+     *
+     * @throws TwsBusyException        while another reading runs: the startup's, a scan, or another press of the button
+     * @throws TwsUnavailableException when TWS can't be read; the reason has been printed
+     */
+    public TwsReading readPortfolioUnlessBusy(boolean withScan) throws InterruptedException {
+        if (!oneReadingAtATime.tryLock()) {
+            throw new TwsBusyException(ANOTHER_READING_RUNS);
+        }
+        try {
+            return readEverythingOnOneConnection(withScan);
+        } catch (TwsUnavailableException e) {
+            System.err.println(e.reason());
+            throw e;
+        } finally {
+            oneReadingAtATime.unlock();
+        }
+    }
+
+    /**
+     * One connection, opened here and closed at the end: the portfolio, then — when {@code withScan} — the scans for hot
+     * stocks with the contract details of the stocks they found, then the holdings' contract details, then the analysts'
+     * price targets in the Dow Jones headlines of the stocks the scan kept and of the holdings, in the same rounds, then
+     * the daily closes of the holdings, of SPY and of the stocks the scan kept. The caller holds the lock.
+     *
+     * @throws TwsUnavailableException when the portfolio could not be read
+     */
+    private TwsReading readEverythingOnOneConnection(boolean withScan) throws InterruptedException {
         IbGateway gateway = new IbGateway();
         try {
             PortfolioSnapshot snapshot = connectAndReadPortfolio(gateway);
@@ -95,12 +135,8 @@ public class TwsReader {
             }
             return new TwsReading(snapshot, readDailyCloses(gateway, conIds), scanWithAnalystPriceTargets,
                     holdingContractDetailsByConId, holdingAnalystPriceTargetsByConId);
-        } catch (TwsUnavailableException e) {
-            System.err.println(e.reason());
-            return null;
         } finally {
             gateway.disconnect();
-            oneReadingAtATime.unlock();
         }
     }
 
@@ -110,13 +146,12 @@ public class TwsReader {
      * — it is how the connection proves it works — but is not kept: the holdings stay as {@code ./run.sh} last read
      * them.
      *
-     * @throws TwsBusyException        while another reading runs: the startup's, or another press of the button
+     * @throws TwsBusyException        while another reading runs: the startup's, a sync, or another press of the button
      * @throws TwsUnavailableException when TWS can't be read, or no scan answered
      */
     public ScanReading readScan() throws InterruptedException {
         if (!oneReadingAtATime.tryLock()) {
-            throw new TwsBusyException("A scan is already running, or the startup is still reading TWS: try again in "
-                    + "a moment.");
+            throw new TwsBusyException(ANOTHER_READING_RUNS);
         }
         IbGateway gateway = new IbGateway();
         try {

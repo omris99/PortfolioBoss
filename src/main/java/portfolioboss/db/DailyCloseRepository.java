@@ -4,11 +4,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import portfolioboss.calculation.DailyClosesWithSpy;
+import portfolioboss.ib.Benchmark;
 import portfolioboss.ib.DailyClose;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /** Reads and writes {@link DailyCloseEntity} rows; Spring generates the class at startup, like {@link HoldingRepository}. */
@@ -25,6 +29,13 @@ public interface DailyCloseRepository extends JpaRepository<DailyCloseEntity, Lo
         return findByConIdInOrderByConIdAscBarDateAsc(conIds).stream()
                 .collect(Collectors.groupingBy(DailyCloseEntity::conId,
                         Collectors.mapping(DailyCloseEntity::toDailyClose, Collectors.toList())));
+    }
+
+    /** The closes of these contracts and of SPY, in the same query: each contract's momentum is measured against SPY's. */
+    default DailyClosesWithSpy dailyClosesWithSpy(Collection<Integer> conIds) {
+        Set<Integer> conIdsWithSpy = new HashSet<>(conIds);
+        conIdsWithSpy.add(Benchmark.SPY_CON_ID);
+        return new DailyClosesWithSpy(dailyClosesByConId(conIdsWithSpy));
     }
 
     /**

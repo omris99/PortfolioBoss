@@ -11,8 +11,9 @@ import { RecommendationCard } from '../components/recommendations/Recommendation
 import { ScanCard } from '../components/recommendations/ScanCard';
 import { StockListCard } from '../components/recommendations/StockListCard';
 import { useRecommendationAnalysis } from '../hooks/useRecommendationAnalysis';
+import { useReadingFromTws } from '../hooks/useReadingFromTws';
 import { useRecommendations } from '../hooks/useRecommendations';
-import { useScanAgain } from '../hooks/useScanAgain';
+import { scanAgain } from '../lib/apiClient';
 import { idFromAddress, OPENED_FROM_TABLE, wasOpenedFromTable } from '../lib/drawerAddress';
 import { openHoldingsOf } from '../lib/holdings';
 import type { PortfolioSnapshot } from '../types/portfolio';
@@ -61,8 +62,8 @@ export function RecommendationsPage({ snapshot }: { snapshot: PortfolioSnapshot 
   const navigate = useNavigate();
   const location = useLocation();
   const openCandidateId = idFromAddress(useParams().candidateId);
-  const { recommendations, hasNoScanYet, errorMessage, isLoading, reload } = useRecommendations();
-  const { scanAgainState, runScanAgain } = useScanAgain(reload);
+  const { recommendations, hasNoScanYet, errorMessage, isLoading, reload } = useRecommendations(snapshot.asOf);
+  const { readingState: scanAgainState, startReading: runScanAgain } = useReadingFromTws(scanAgain, reload);
   const { analysisState, runAnalysis } = useRecommendationAnalysis(reload);
   const estimate = snapshot.estimatedAnalysisCost;
   const openHoldings = openHoldingsOf(snapshot.holdings);

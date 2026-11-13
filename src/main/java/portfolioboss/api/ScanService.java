@@ -1,8 +1,6 @@
 package portfolioboss.api;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.api.response.ScanRunResponse;
 import portfolioboss.db.PortfolioSyncService;
 import portfolioboss.exceptions.TwsBusyException;
@@ -30,16 +28,12 @@ public class ScanService {
         this.syncService = syncService;
     }
 
-    /** 409 while another reading from TWS runs, 503 when TWS can't be read or no scan answered — the message says which. */
+    /**
+     * @throws TwsBusyException        while another reading from TWS runs — 409 ({@link ApiErrorHandler})
+     * @throws TwsUnavailableException when TWS can't be read or no scan answered — 503, the message says which
+     */
     public ScanRunResponse scanAgain() throws InterruptedException {
-        ScanReading reading;
-        try {
-            reading = twsReader.readScan();
-        } catch (TwsBusyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
-        } catch (TwsUnavailableException e) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
-        }
+        ScanReading reading = twsReader.readScan();
         Scan scan = reading.scan();
         syncService.syncScan(scan, reading.dailyCloses());
         return new ScanRunResponse(scan.scannedAt(), scan.candidates().size());

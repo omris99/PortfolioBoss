@@ -3,8 +3,10 @@ import type {
   CashMovementRequest,
   ManualPositionRequest,
   NewManualPositionRequest,
+  SyncRun,
   TradeRequest,
 } from '../types/portfolio';
+import type { AlertSetting } from '../types/alerts';
 import type { RecommendationAnalysisRun, ScanRun } from '../types/recommendations';
 
 /**
@@ -111,6 +113,31 @@ export async function analyzeRecommendations(candidateId: number | null): Promis
 export async function scanAgain(): Promise<ScanRun> {
   const response = await sendRequest('POST', '/api/scans', {});
   return (await response.json()) as ScanRun;
+}
+
+/**
+ * Sync now: reads TWS again — everything ./run.sh reads at startup: the portfolio, the scan when one is due, the
+ * holdings' contract details and Dow Jones targets, the closes, and Finnhub for the holdings in dollars — and stores
+ * it, without restarting the app. TWS must be open. Refused with 503 when TWS can't be read, and with 409 while another
+ * reading runs. The body is `{}`: JSON only, so no other site can start one.
+ */
+export async function syncNow(): Promise<SyncRun> {
+  const response = await sendRequest('POST', '/api/syncs', {});
+  return (await response.json()) as SyncRun;
+}
+
+/** The bell was opened: every alert it shows is seen, and its number goes back to none. The body is `{}`: JSON only. */
+export async function markAlertsAsSeen(): Promise<void> {
+  await sendJson('POST', '/api/alerts/seen', {});
+}
+
+/**
+ * The settings drawer's Save: every type's line — on or off, and its number. The server checks the alerts again with
+ * them at once, from the stored data (no TWS needed). 400 with the line named when one is wrong.
+ */
+export async function saveAlertSettings(settings: AlertSetting[]): Promise<void> {
+  const lines = settings.map(({ alertType, enabled, threshold }) => ({ alertType, enabled, threshold }));
+  await sendJson('PUT', '/api/alerts/settings', { settings: lines });
 }
 
 /** Sends one write whose answer is not needed: after a write the caller reloads the whole portfolio. */

@@ -116,8 +116,15 @@ against the tab's cash, with a line of what to know under each holding (TODO.md'
 this price?", answered with data). Designed first in Claude Design's fourth round (DESIGN_BRIEF.md §9; his picks:
 arrangement A, and "1 purchase planned" on the folded section), built the same day and browser-checked by him. The
 Weight tab stays — selling to a target and an investor's first purchase exist only there, and the Overview's bars lead to
-it — with a link to the page under its calculator, always shown (his ask). Session 4 (holdings that move together, a
-market drop of 20%) is next.
+it — with a link to the page under its calculator, always shown (his ask). Session 5 (2026-11-11) came before session 4,
+at his ask, and changed with decision 14: **no daily run** (the app doesn't stay open) — instead **Sync now** (5א), a
+button in the top bar that reads TWS as the startup does (`POST /api/syncs`), browser-checked against TWS the same day —,
+and **the alerts** (5ב) are checked on every sync, against the alerts still open: nine kinds (decisions 6 and 16), a
+**bell** at the top bar's left with the number not yet seen (decision 15, the accent blue), and a settings drawer behind
+its ⚙ (decision 17: each kind on or off, four numbers), all in a package of its own, `alerts` (his ask). 5ב is built (505
+tests, V15 on the real database after a backup, 14 of 14 tables equal) and his first browser look moved the bell to the
+left of the name; the rest of its check is open. The alerts' channel (session 6, Telegram) is a plan for later. Session 4
+(holdings that move together, a market drop of 20%) is next.
 
 ## Hard invariant: read-only
 
@@ -138,25 +145,29 @@ trades the user enters, through `HoldingWriteController`, the manual positions w
 through `ManualPositionWriteController`, the investors with their deposits and withdrawals, through
 `InvestorWriteController`, the stock analyses (`stock_analysis` rows), through `AnalysisController` and
 `RecommendationAnalysisController` — the second also the recommendations (`investment_recommendation` rows) —, and a new
-scan (`scan` / `scan_candidate` rows and its stocks' daily closes), through `ScanController` — and never
-creates or deletes a holding (only the sync does). `AnalysisController` and `RecommendationAnalysisController` are the two
+scan (`scan` / `scan_candidate` rows and its stocks' daily closes), through `ScanController`, a sync (what the startup
+writes), through `SyncController`, and the alerts' "seen" and their settings (`alert`, `alert_setting`), through
+`alerts.AlertController` — and never creates or deletes a holding (only the sync does). `AnalysisController` and `RecommendationAnalysisController` are the two
 endpoints that reach outside the machine: they send each stock's symbol to Tavily, and the symbol, currency, the price
 (IB's, or a scanned stock's last close), today's date and the search results to Claude — **never** a quantity, a cost, an
 investor or the account number (AI_ANALYSIS_TODO.md, decision 8), and nothing about the portfolio
 (RECOMMENDATIONS_TODO.md, decision 6) — and they run only when the user presses the button. `stocks.FinnhubClient`
 sends Finnhub only a symbol (RECOMMENDATIONS_TODO.md, decision 8), from two callers: the second endpoint, on its button,
-and — **without a button press**, on every `./run.sh` that reached TWS — `TwsPortfolioRunner`, for each open holding in
-USD (MY_HOLDINGS_TODO.md, decision 10: on a foreign exchange IB's symbol is not Finnhub's and may be another company's).
-`ScanController` (`POST /api/scans`, the Scan again button) is the one
-endpoint that reads TWS: a scan, read-only and free, through the same `ib.TwsReader` as `./run.sh`. `PortfolioController`
-and `RecommendationsController` stay GET-only (Spring answers 405 to every other method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
+and `api.SyncService`, for each open holding in USD (MY_HOLDINGS_TODO.md, decision 10: on a foreign exchange IB's symbol
+is not Finnhub's and may be another company's) — **without a button press** on every `./run.sh` that reached TWS, and
+on Sync now. Two endpoints read TWS, both read-only and free, through the same `ib.TwsReader` as `./run.sh`:
+`ScanController` (`POST /api/scans`, the Scan again button: a scan) and `SyncController` (`POST /api/syncs`, Sync now:
+the startup's whole reading). The alerts send nothing out of the machine (their channel is a plan for later).
+`PortfolioController` and `RecommendationsController` stay GET-only, and `GET /api/alerts` is `AlertController`'s one
+read (Spring answers 405 to every other method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
 `application.properties`), there is **no CORS configuration**, and every write endpoint with a body accepts
 JSON only: a page on another site can make the browser send a request to localhost without asking first
 only as text or a form (415 here), while JSON, PUT and DELETE need a CORS preflight that nothing grants —
 `POST /api/analysis` and `POST /api/recommendations/analysis` take a JSON body even to analyze everything (`{}`), so no
-other site can start a paid run, and `POST /api/scans` takes `{}` (`ScanRequest`, a record with nothing in it) for the
-same reason. Don't add CORS configuration, don't add an endpoint that writes anything other than PortfolioBoss's own data
-(what the user enters, the analyses, the recommendations and the scans), and don't expose the API beyond localhost (the connection to TWS and the API are both
+other site can start a paid run, and `POST /api/scans`, `POST /api/syncs` and `POST /api/alerts/seen` take `{}`
+(`ScanRequest`, `SyncRequest`, `AlertsSeenRequest`, records with nothing in them) for the same reason. Don't add CORS
+configuration, don't add an endpoint that writes anything other than PortfolioBoss's own data (what the user enters, the
+analyses, the recommendations, the scans, a sync, and the alerts with their settings), and don't expose the API beyond localhost (the connection to TWS and the API are both
 unencrypted, which is fine only while local).
 
 ## Build & run
@@ -174,8 +185,8 @@ Boot 4's name, not `-web`), JUnit 5. [run.sh](run.sh) is a thin wrapper around `
 `./run.sh` reads the portfolio from TWS once, prints it, scans for hot stocks when a scan is due (once a US trading
 day: only when the market has closed since the last scan, `calculation.ScanSchedule` — otherwise `[ib] scan skipped:
 …`), reads the holdings' contract details (their sector and industry) and Dow Jones targets, asks Finnhub about the
-holdings in USD once TWS is disconnected, syncs it all into PostgreSQL, and then keeps
-running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
+holdings in USD once TWS is disconnected, syncs it all into PostgreSQL, checks the alerts (`[alerts] checked: 2 new
+(ABCD, WXYZ), 1 no longer true`), and then keeps running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
 and opens `http://localhost:5174` in the browser (stop everything with Ctrl+C). If TWS could not be
 read this run, it serves whatever the previous sync stored instead (see "Running requires TWS" below).
 The UI is a separate Vite app (Node 20.19+ — which is why react-router stays on 7.x: 8.x needs Node 22) whose
@@ -193,9 +204,10 @@ sector ring came up black on 2026-10-13, its fill classes missing; on 2026-11-05
 until the restart).
 
 The UI shows the portfolio as of the last sync. It reloads `/api/portfolio` after every write (trades,
-manual positions, investors, deposits) and after every analysis run, but new figures from IB need a new `run.sh`
-(a refresh button is a later step). The one exception is the scan: Recommendations' Scan again reads a new one on
-demand and reloads `/api/recommendations` (TWS must be open).
+manual positions, investors, deposits) and after every analysis run; new figures from IB come with a new `run.sh` or
+the top bar's **Sync now** (since 2026-11-11: the startup's whole reading on demand, `POST /api/syncs`, then a reload —
+the Recommendations page and the alerts bell load again when the portfolio's `asOf` changes). Recommendations' Scan
+again reads only a new scan on demand and reloads `/api/recommendations`. Both need TWS open.
 
 Tests: `mvn -q test` (JUnit 5; no TWS, but the database tests need `portfolioboss_test` running — see
 above). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc` + `@MockitoBean` on `PortfolioReadService`)
@@ -270,8 +282,25 @@ pick over the risk limit, the lighter risk and good news first, Finnhub failing,
 pick, the picks stored in order (an empty list too), 503 without a key — the full run without Finnhub's —, 404;
 `RecommendationAnalysisControllerTest` its JSON (`picks` `null` for one stock), 415, 503, 404 and 405;
 `RecommendationsControllerTest` its JSON, 503 and 405; `ScanServiceTest` (`@DataJpaTest`, `TwsReader` a `@MockitoBean`:
-**no test connects to TWS**) a scan stored with its closes, 409 and 503 storing nothing; `ScanControllerTest` the status
-codes and the JSON-only rule; `FinnhubClientTest` Finnhub's two calls against a fake Finnhub (`MockRestServiceServer`,
+**no test connects to TWS**) a scan stored with its closes, nothing stored while busy or when TWS can't be read (the
+exceptions pass through; their 409 / 503 are `ApiErrorHandler`'s); `ScanControllerTest` the status codes — the app's two
+TWS exceptions turned into 409 and 503 with the user's message — and the JSON-only rule; `SyncServiceTest` (`@DataJpaTest`,
+`TwsReader` and `FinnhubClient` `@MockitoBean`s, `@RecordApplicationEvents`) Sync now storing the holdings with Finnhub's
+answer, only the holdings in USD asked about, no key no Finnhub, the scan asked for only when due, busy and unreachable
+storing nothing, the startup's sync and TWS off at startup, and `PortfolioSyncedEvent` published once per stored sync and
+never for a failed one; `SyncControllerTest` 200, 415, 503, 409, 405. The alerts (package `alerts`):
+`HoldingAlertsCalculatorTest` each rule at its limit (a report in 7 days counts, 8 doesn't, today counts, past doesn't, the
+settings' number of days; a cut 7 days back counts, 8 doesn't, a raise and a target without an earlier one don't, two
+firms two conditions; exactly −15% counts, −14.9% doesn't; exactly the 15% weight limit doesn't, 15.1% does, a limit of
+20 from the settings; a warning with its type as the subject; a closed holding has only its warning checked; a type
+turned off), `AlertChangesCalculatorTest` (true twice in a row one alert, no longer true ends, back again a new alert, two
+firms two alerts, a key twice in one check one alert), `PortfolioWeightsCalculatorTest` (the dollar holdings and the
+cash; another currency, no market value, 0 or less left out; no cash, nothing), `AlertServiceTest` (`@DataJpaTest`,
+the short list a `@MockitoBean`: nothing before the first sync, the first check, a second check adding nothing, ended
+and back, a holding's warning, a short-list stock without a holding, a type off neither checked nor shown and its open
+alert left open, saving the settings checks again, the newest first with each holding's id, "seen" and a later unseen
+alert) and `AlertControllerTest` (the JSON and `no-store`, 204, a number out of range or for a type without one, days not
+whole, a type missing — 400 naming the line —, 415, 405); `FinnhubClientTest` Finnhub's two calls against a fake Finnhub (`MockRestServiceServer`,
 shortened copies of its real answers): the earliest report of a calendar out of order, an hour not known yet, a missing
 figure, an unknown symbol, a refused call, a key of spaces. After a
 change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
@@ -334,7 +363,8 @@ what delivers real quantity and **average cost** from the broker.
 
 ```
 Main (Spring Boot: brings the web server up, then Spring runs the runner)
-  └──> TwsPortfolioRunner ──asks ScanSchedule whether a scan is due, then──> TwsReader (the one place that connects;
+  └──> TwsPortfolioRunner ──> api.SyncService.syncAtStartup() (the same sync as Sync now's syncNow())
+        │   SyncService ──asks ScanSchedule whether a scan is due, then──> TwsReader (the one place that connects;
         │                                                                     one reading at a time)
         │        TwsReader ──> IbGateway ──owns──> PortfolioWrapper ──> Holding (+conId), PortfolioSnapshot, Scan
         │                      (socket + reader loop)  (EWrapper callbacks,  (rows + contract details + the analysts'
@@ -345,7 +375,17 @@ Main (Spring Boot: brings the web server up, then Spring runs the runner)
         ├──after TWS, asks──> FinnhubClient ──HTTPS──> Finnhub (each holding in USD, the symbol only)
         ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state · daily_close · scan ·
         │                                                      analyst_price_target · stock)
-        └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser
+        ├──publishes PortfolioSyncedEvent──> alerts.AlertsAfterSync ──> AlertService.checkAlerts() (alert rows)
+        └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser (the runner, after the sync)
+
+SyncController ──> SyncService.syncNow() ──> TwsReader.readPortfolioUnlessBusy() — the same sync as above, then the
+        ▲                                    event; 409 while another reading runs, 503 when TWS can't be read
+        └──JSON── POST /api/syncs — only from the top bar's Sync now, then a reload of /api/portfolio
+
+AlertController ──> AlertService ──reads── Postgres (the holdings, closes, stock, analyst_price_target, the short list
+        ▲           (alerts/: HoldingAlertsCalculator,    through RecommendationsReadService) ──writes── alert,
+        │            AlertChangesCalculator)               alert_setting
+        └──JSON── GET /api/alerts, POST /api/alerts/seen, PUT /api/alerts/settings — ui/'s bell and its settings drawer
 
 PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
         │                     (builds api/response/*Response              driven by HTTP requests, not by TWS)
@@ -408,8 +448,9 @@ The sync-at-connection lifecycle, which is the part worth knowing:
 4. `accountDownloadEnd` stores a `PortfolioSnapshot` (exposed by `IbGateway.snapshot()`), prints the
    report, **unsubscribes** (`reqAccountUpdates(false, …)` — we want a snapshot, not the ~3-minute
    live updates), and counts down a `CountDownLatch`.
-5. `TwsReader.readPortfolio(withScan)` is blocked on that latch with a 15s timeout. With a snapshot, **still
-   connected**: when `withScan` (the runner asked `ScanSchedule` first), the scans for hot stocks
+5. `TwsReader.readPortfolio(withScan)` — or Sync now's `readPortfolioUnlessBusy(withScan)`, the same reading
+   (`readEverythingOnOneConnection`) — is blocked on that latch with a 15s timeout. With a snapshot, **still
+   connected**: when `withScan` (`SyncService` asked `ScanSchedule` first), the scans for hot stocks
    (`IbGateway.requestHotStockScans`: `SCAN_histPerfRatio3m_DESC` and `…6m_DESC`, `STK.US.MAJOR`, `CORP`, the filters
    `priceAbove` 15, `marketCapAbove1e6` 2,000, `avgVolumeAbove` 1,000,000 — `ib.HotStockScan` —, up to 50 rows each,
    10s), then `reqContractDetails` for every stock found (15s) — a scan's row carries no exchange or sector —; then,
@@ -425,28 +466,35 @@ The sync-at-connection lifecycle, which is the part worth knowing:
    held) and every stock the scan kept, by conId + `SMART`, `"1 Y"` of `"1 day"` `TRADES` bars, regular hours, dates as
    `yyyyMMdd` — and waits up to 20s (`awaitDailyCloses`); late or failed contracts are just left out (`[ib] daily closes
    received for N of M contracts`). Then it disconnects and returns a `TwsReading` (the snapshot, the closes, the scan —
-   `null` when none was due or none answered —, the holdings' contract details and targets). The runner asks Finnhub
-   about every holding in USD, all at once on virtual threads (`readFinnhubDataOfHoldings`, through
+   `null` when none was due or none answered —, the holdings' contract details and targets). `api.SyncService` asks
+   Finnhub about every holding in USD, all at once on virtual threads (`readFinnhubDataOfHoldings`, through
    `FinnhubClient.stockOrNullOnFailure`: a failed call prints `[stocks error]` and leaves that holding out; nothing
-   without the key), and hands both to `PortfolioSyncService.sync(reading, finnhubDataByConId)`, which upserts them into
-   the database (see below). Either
-   way — synced or not — it then launches the UI and returns; Tomcat's non-daemon threads keep the
+   without the key), hands both to `PortfolioSyncService.sync(reading, finnhubDataByConId)`, which upserts them into
+   the database (see below), and publishes `api.PortfolioSyncedEvent` — the alerts are checked on it, in the same
+   thread, before the sync returns (a failed check prints `[alerts error]` and keeps the sync). `TwsPortfolioRunner`
+   (`syncAtStartupOrExit`), synced or not, then launches the UI and returns; Tomcat's non-daemon threads keep the
    JVM alive until Ctrl+C. If the sync itself throws (a database problem, not a TWS problem) it prints
    `[db error]` and calls `System.exit(SpringApplication.exit(applicationContext, () -> 1))`: the database
-   is required, TWS is not.
+   is required, TWS is not. On Sync now the same failure is only the request's error; the app goes on.
 
 `ib.TwsReader` (a `@Service`, since 2026-10-26) is the one place that connects to TWS: it owns the host, the port and
 the client id (`ApplicationArguments`: `./run.sh 7497 102`), opens a new `IbGateway` per reading and disconnects at its
 end, and a `ReentrantLock` lets one reading through at a time — TWS refuses a second connection with the same client
-id. `readPortfolio` (the startup) waits for the lock; `readScan` (the Scan again button: a scan, its contract details
-and the closes of its stocks and SPY, the portfolio that comes with every connection not kept) takes it only if free,
-else `exceptions.TwsBusyException` (409), and turns any failure — no socket, refused, no portfolio in time, no scan
-answered — into `exceptions.TwsUnavailableException`, whose message is the user's ("TWS is not reachable: open TWS and
-log in, then scan again.") and whose `reason()` is the console's.
+id. `readPortfolio` (the startup) waits for the lock and answers `null` when TWS can't be read; `readPortfolioUnlessBusy`
+(Sync now, 2026-11-11 — the same reading, `readEverythingOnOneConnection`, which opens and closes its own connection) and
+`readScan` (the Scan again button: a scan, its contract details and the closes of its stocks and SPY, the portfolio that
+comes with every connection not kept) take it only if free, else `exceptions.TwsBusyException` with
+`ANOTHER_READING_RUNS` ("TWS is already being read — by a sync, a scan or the startup: try again in a moment."), and turn
+any failure — no socket, refused, no portfolio in time, no scan answered — into `exceptions.TwsUnavailableException`,
+whose message is the user's ("TWS is not reachable: open TWS and log in, then try again.") and whose `reason()` is the
+console's. `api.ApiErrorHandler` answers the two with 409 and 503 for every endpoint that reads TWS (since 2026-11-11;
+`ScanService` turned them into `ResponseStatusException`s itself before), so the services let them pass.
 
 `TwsPortfolioRunner` is an `ApplicationRunner`, so Spring runs it once, **after the web server is
 already listening** — a request that arrives while TWS is still being read (up to 15s) gets a 503 from
-the controller, not an error. It is a `@Component` of its own rather than a `@Bean` method on `Main`
+the controller, not an error. Since 2026-11-11 it holds no flow of its own: the sync is `api.SyncService.syncAtStartup()`
+(whether a scan is due, the reading, Finnhub, the store, the event — what Sync now's `syncNow()` runs too); the runner
+exits on a database failure and launches the UI. It is a `@Component` of its own rather than a `@Bean` method on `Main`
 on purpose: Spring's test slices (`@WebMvcTest`) load everything declared on the main class and run
 every `ApplicationRunner`, so a runner declared on `Main` connected to the real TWS from every test.
 Slices skip plain `@Component`s.
@@ -578,13 +626,22 @@ what Finnhub answered about each holding in USD, replaced per contract by every 
 ("Semiconductors"; the holding's `sector` is IB's `industry`, "Technology" — the market's names, which IB has the other
 way round; `scan_candidate` keeps IB's). Both reached the real database on 2026-11-04 and 05 in runs that missed TWS,
 before a backup — harmless, a table and a column added empty; the 2026-11-05 backup (14 of 14 tables equal) came before
-the first run that wrote to them.
+the first run that wrote to them. `V15__alerts.sql` (MY_HOLDINGS_TODO.md session 5ב, 2026-11-11; on the real database
+since that day, after `portfolioboss-2026-11-11.sql.gz`, 14 of 14 tables equal) added `alert` (`alert_type`, `con_id`,
+`symbol`, `subject` — what tells two alerts of one type on one stock apart, `NULL` when nothing must —, `message`,
+`created_at`, `ended_at` — `NULL` while the condition is still true: the alert is open —, `seen_at`) with a partial unique
+index, `alert_one_open_per_condition` on `(alert_type, con_id, subject) NULLS NOT DISTINCT WHERE ended_at IS NULL` (one open
+alert per condition even with a bug, and the index that finds the open ones), and `alert_setting` (`alert_type` the key,
+`enabled`, `threshold` `NUMERIC(5,2)`, `NULL` for a type without a number; a row only for a type saved). Their entities and
+repositories live in the `alerts` package (below), not in `db`.
 `HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
 default method `accountOwner()`), `InvestorCashMovementRepository`, `AccountStateRepository`, `DailyCloseRepository`
-(`findByConIdInOrderByConIdAscBarDateAsc`, its default method `dailyClosesByConId` — the same closes grouped by contract,
-used by both read services —, and `deleteForContracts` — a hand-written `@Modifying @Query` bulk `DELETE`,
+(`findByConIdInOrderByConIdAscBarDateAsc`, its default method `dailyClosesByConId` — the same closes grouped by contract —,
+`dailyClosesWithSpy(conIds)` — the same with SPY's added, as a `calculation.DailyClosesWithSpy` (`closesOf(conId)`,
+`momentumOf(conId)`), what both read services and the alerts use (2026-11-11: the line that measured a stock's momentum
+against SPY was written twice, and the alerts would have been a third) —, and `deleteForContracts` — a hand-written `@Modifying @Query` bulk `DELETE`,
 because a derived `deleteBy…` loads every row and deletes them one at a time), `StockAnalysisRepository`
 (`findLatestOfEveryHolding` — PostgreSQL's own `DISTINCT ON (holding_id)` in a `nativeQuery`, with `WHERE holding_id IS
 NOT NULL`: `DISTINCT ON` would keep one of the scanned stocks' rows as if it were a holding's —, and
@@ -599,7 +656,7 @@ analysis or a pick of an earlier scan was of), `InvestmentRecommendationReposito
 `deleteForContracts`) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V15__….sql`.
+  checksum): a schema change is a new `V16__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -619,12 +676,12 @@ Things that are easy to break:
   back up before **any** `./run.sh` that brings a migration, not only before the one meant to sync (2026-11-04, V13).
 - Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
   `ManualPositionWriteServiceTest`, `InvestorWriteServiceTest`, `StockAnalysisRepositoryTest`, `AnalysisServiceTest`,
-  `RecommendationsReadServiceTest`, `RecommendationAnalysisServiceTest`, `ScanServiceTest`) are
-  `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
+  `RecommendationsReadServiceTest`, `RecommendationAnalysisServiceTest`, `ScanServiceTest`, `SyncServiceTest`,
+  `alerts.AlertServiceTest`) are `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
   database and compared table by table first). One that only adds a table or a column (V5, V6, V7, V9, V10, V11, V12,
-  V13, V14) or
+  V13, V14, V15) or
   a constraint (V8, after counting the rows it would refuse: none; V10's, which every stored row met) still gets the
   backup first, checked for the same row counts as the database (V12's: each table's `COPY` rows in the dump against a
   `count(*)`, 12 of 12 equal, 2026-10-29). `backup-db.sh` names a backup by the day, so a second backup
@@ -637,7 +694,10 @@ files were not calculations: `HoldingHistory`, `ClosedPosition`, `TradeFact`, fo
 analysis `ConsensusCalculator`, `AnalystTrendCalculator` and `SignalCalculator`, for the Recommendations page
 `HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `AnalystTargetCalculator`, `RecommendationCandidate`,
 `RecommendationCalculator` and `NewsScoreCalculator`, `RiskSignsCalculator` (the risk signs and the timing note, a
-scanned stock's and a holding's), and `OrderCommission` (the default commission) — pure Java, no
+scanned stock's and a holding's), `OrderCommission` (the default commission), and since 2026-11-11 `DailyClosesWithSpy`
+(stored closes with SPY's: a stock's momentum) and `PortfolioWeightsCalculator(openHoldings, cash)` (a holding's share of
+the whole account — the dollar holdings worth more than 0 plus IB's cash, not `netLiquidation` —, the twin of
+`wholeAccountOf` in `ui/src/components/graphs/portfolioWeights.ts`: change both together) — pure Java, no
 Spring and no database, so it is unit tested directly. What it computes on comes from four packages of plain data:
 `ib` (what IB reports, above), `ai` (Claude's answer, below), `stocks` (Finnhub's) and **`model`** — the values the
 whole app shares: the enums the entities and the JSON share with the computation (`TradeSide`, `HoldingStatus`,
@@ -716,8 +776,9 @@ is `null`, so is every check that needs it, and the score and label exist only w
 guess. Appended for the Recommendations page (and in every holding's `MomentumResponse` too): the year's figures over
 every close given — a year, what IB sends —, `firstCloseDate`, `high52Weeks`, `yearReturnPercent` (the last close against
 the first) and `maxDrawdownPercent` (the biggest fall from a close to a later, lower one), and derived `monthsInMarket()`
-and `percentBelowHigh52Weeks()`. The private record `DailyCloses` sorts one contract's closes once and computes the
-figures from them, so only `of` is static. Things that are easy to break:
+and `percentBelowHigh52Weeks()`. Appended for the alerts (2026-11-11): `aboveSma200()`, beside `aboveSma50()` — not one
+of the five checks, so the score doesn't change. The private record `DailyCloses` sorts one contract's closes once and
+computes the figures from them, so only `of` is static. Things that are easy to break:
 - `beatsSpy` is a strict "greater than", so SPY itself can never score more than 4/5.
 - The 20-day average and the one-month comparison react fast on purpose (an early warning after a drop): the label
   changes far more often than a 200-day rule would.
@@ -1024,7 +1085,56 @@ before the first full run. No cost estimate here: the page quotes `/api/portfoli
 stocks marked `inShortList`, the same work per stock. `ui/src/types/recommendations.ts` mirrors them. `ScanController` /
 `ScanService` serve `POST /api/scans` (JSON only, `{}`): `TwsReader.readScan()`, then `PortfolioSyncService.syncScan`, and
 200 with a `ScanRunResponse(scannedAt, candidateCount)`; `TwsBusyException` is 409, `TwsUnavailableException` 503, its
-user's message as the `detail`. `ScanService` is not `@Transactional`: no connection waits on TWS.
+user's message as the `detail` — `ApiErrorHandler`'s, since 2026-11-11. `ScanService` is not `@Transactional`: no
+connection waits on TWS.
+
+Sync now (MY_HOLDINGS_TODO.md session 5א, decision 14, 2026-11-11; browser-checked by him against TWS the same day):
+`SyncController` / `api.SyncService` serve `POST /api/syncs` (JSON only, `{}` — `SyncRequest`): `syncNow()` —
+`isScanDue()`, `TwsReader.readPortfolioUnlessBusy`, then `storeWithFinnhubData` (Finnhub, `PortfolioSyncService.sync`,
+and `PortfolioSyncedEvent`) — and 200 with a `SyncRunResponse(syncedAt, holdingCount)`; 409 / 503 as for a scan. The
+startup runs the same flow through `syncAtStartup()` (it waits for a reading already running, and TWS off is a console
+line, not an error). Not `@Transactional`, like `ScanService`. Its time was not measured (the console has no times).
+
+The alerts (MY_HOLDINGS_TODO.md session 5ב, decisions 14–17, 2026-11-11) are a package of their own, `portfolioboss.alerts`
+(console `[alerts]` / `[alerts error]`; the user's ask — "the files spread over the packages is really bad"): its data,
+rules, tables, service, controller and its `request/` and `response/`. It sits **on top**: it uses `api` (only
+`RecommendationsReadService.shortListOfLatestScan`, for the short-list alert), `db`, `calculation`, `ib`, `stocks` and
+`model`, and nothing uses it — the sync tells it through a Spring application event (`api.PortfolioSyncedEvent`, published
+by `SyncService`; `alerts.AlertsAfterSync` listens with `@EventListener`, a class of its own because a call from inside
+`AlertService` to its own `@Transactional` method would skip the transaction), and the bell has its own `GET /api/alerts`
+(`/api/portfolio` doesn't carry the alerts). `AlertType` holds the nine kinds — `MOMENTUM_TURNED_WEAK`,
+`CLOSED_BELOW_SMA50`, `CLOSED_BELOW_SMA200` (decision 6's א, split in three), `EARNINGS_SOON` (default 7 days),
+`ANALYST_CUT_TARGET` (7 days), `FAR_BELOW_AVERAGE_COST` (15%), `ABOVE_WEIGHT_LIMIT` (15%), `TRADES_DONT_MATCH_IB`,
+`ENTERED_SHORT_LIST` — each with its default number and `ThresholdUnit` (`DAYS` 1–60 whole, `PERCENT` 1–100);
+`AlertSettings` is the saved `alert_setting` rows, a type never saved on and with its default. A check
+(`AlertService.checkAlerts()`, after every sync and after the settings are saved — not after Scan again) builds, for every
+holding of the account, a `HoldingAlertsCalculator(holding, status, momentum, finnhubData, analystPriceTargets, warnings,
+percentOfAccount, settings, today)` — today is the last sync's day — whose `conditionsTrueNow()` are `AlertCondition(key,
+symbol, message)`s: the momentum `WEAK`, the close not above the 50- / 200-day average, the next report 0–N days away
+(subject: its date), every target cut — the new one below the one it replaced — in the last N days, that day included
+(subject: the firm and the headline's time; a rolling window, so a week without a sync misses a cut that left it), the
+unrealized P&L −N% or worse (exactly N counts), more than N% of the whole account (`PortfolioWeightsCalculator`; exactly
+N doesn't), and the holding's warning triangle (subject: the warning's type) — a closed holding only that last one —; and
+for every stock of the latest scan's short list an `ENTERED_SHORT_LIST` condition (built in `AlertService`: the rule is the
+short list itself). Then `AlertChangesCalculator(openAlertKeys, conditionsTrueNow)`: a condition with no open alert of its
+`AlertKey(type, conId, subject)` becomes a new `alert` row, an open alert no longer true gets its `ended_at`; the open alerts
+are the previous check's state, so the first check alerts everything already true once (24 alerts on the real data,
+2026-11-11). A type turned off is left out of both sides — not checked, not shown, its open alerts left open. Messages are
+English, written when the condition became true (`Locale.ROOT` numbers: "Down 17.3% from the average cost of 182.40").
+`AlertController`: `GET /api/alerts` (`no-store`) → `AlertsResponse(alerts, settings)` — `AlertResponse(id, alertType,
+conId, symbol, holdingId, message, createdAt, seenAt)`, the types turned on only, newest first, ended ones too (history),
+`holdingId` from the latest account's holdings by `con_id`, `null` for a stock not held —, `AlertSettingResponse(alertType,
+enabled, threshold, defaultThreshold)` per type; `POST /api/alerts/seen` (`{}`, 204: one `UPDATE` of the shown types'
+unseen rows); `PUT /api/alerts/settings` (204, `@Valid AlertSettingsRequest` — every type exactly once,
+`isEveryTypeGivenOnce`, and each `AlertSettingRequest(alertType, enabled, threshold)` with `isThresholdRightForItsType`, both
+`@AssertTrue` —; saves, then checks at once). `ui/src/types/alerts.ts` mirrors them. Things that are easy to break:
+- The partial unique index refuses a second open alert of one key: a key found twice in one check (one firm's two
+  headlines at the same minute) is made once (`conditionsToAlert` keeps the first).
+- `@Id` on an enum (`AlertSettingEntity.alertType`, `@Enumerated(STRING)`) works in this Hibernate; `save` of a type
+  already saved replaces its row (a merge).
+- The bulk `markAsSeen` doesn't touch the entities already loaded in the same transaction — none are written back after
+  it in a check, since a check changes only `ended_at` and adds rows.
+- `ui/src/components/alerts/alertTexts.ts` copies `ThresholdUnit`'s ranges by hand: change both together.
 
 The Overview's weight graphs and the holding drawer's Weight tab (2026-10-13) are worked out in the UI from what
 `/api/portfolio` already sends — no endpoint, nothing stored. Both show a row of tabs (`graphs/WeightsTabs.tsx`, hidden
@@ -1159,9 +1269,31 @@ and If I buy
 and its sector's — of the money in stocks — on each weights tab, the cash checked; the sector picked from the open
 holdings' sectors (IB's since 2026-11-05, so a scanned stock's first word now matches exactly), already picked when one
 of IB's two words matches one, or "A sector not held yet";
-`ifIBuy.ts` the arithmetic, beside `targetWeight.ts`). `useRecommendations` treats 503 as "no scan yet", not an error;
-`useScanAgain` runs `scanAgain()` then the reload, and tells 409 (another reading runs) from a failure by `ApiError.status`.
-`lib/drawerAddress.ts` (`idFromAddress`, `OPENED_FROM_TABLE`) is shared with Positions.
+`ifIBuy.ts` the arithmetic, beside `targetWeight.ts`). `useRecommendations(portfolioSyncedAt)` treats 503 as "no scan
+yet", not an error, and loads again when the portfolio's `asOf` changes (a sync may have scanned).
+`useReadingFromTws(readFromTws, reloadAfterReading)` (2026-11-11, in place of `useScanAgain`) is every button that reads
+TWS — Scan again here, Sync now in the top bar: it runs the call then the reload, and tells 409 (another reading runs,
+"busy") from a failure by `ApiError.status`; both draw `ReadingFromTwsButton` (↻, a spinner and the running text while it
+runs; size `regular` here, `small` in the top bar). `lib/drawerAddress.ts` (`idFromAddress`, `OPENED_FROM_TABLE`) is
+shared with Positions.
+
+The top bar (`AppShell.tsx`, 2026-11-11): the alerts bell first, **left of the "PortfolioBoss" wordmark** (his place,
+after two tries: right of Sync now, then right of the name), the tabs `gap-4` after them (was `gap-8`: with a tab's 12px
+padding the first tab now sits as far from the name as the tabs from each other — he found the gap too wide; "Averaging
+calculator" wraps to two lines at the 1200px width, as before), and on the right the account, "Synced from TWS …", Sync
+now and the load dot. A Sync now that fails or finds another reading running shows the shared `ErrorBanner` (its sentence
+and button text are parameters now) with the server's words, "The figures below are from the last sync." and Try again.
+`components/alerts/` (no design round, decision 17 — built from the existing pieces): `AlertsBell` (`useAlerts
+(portfolioSyncedAt)` — `GET /api/alerts` on mount and on every new `asOf` —; a Radix popover; the badge is the unseen
+count in the accent blue, `text-on-accent`, not red — red is loss and the signal's tones only, his pick; opening marks
+the shown alerts seen at once (`markAlertsAsSeen`, then a reload), so the badge lasts only until the click — his first
+look missed it, 24 alerts seen 15 seconds after they came — and the ones new at the opening keep a blue dot while the
+list is open), `AlertList` ("Alerts" with ⚙; each row a link to the holding's drawer, `/positions/{holdingId}`, or to
+`/recommendations`; the date under the message) and `AlertSettingsDrawer` (on `DrawerShell`: a `Switch` per type in the
+groups of `alertTexts.ts`, `NumberInputWithUnit` for the four numbers, "default 15%" when changed, Save checks the ranges
+first, then `saveAlertSettings` and a reload). `DrawerShell` (2026-11-11, taken out of `DrawerFrame`) is every drawer's
+frame — the Radix dialog, 640px from the right under the top bar, the veil, Esc not while typing, `DrawerTitle`,
+`DrawerCloseButton` —; `DrawerFrame` (a holding's, a closed position's, a scanned stock's) builds on it.
 
 What a holding and a scanned stock both show (MY_HOLDINGS_TODO.md session 3, 2026-11-05/07) is outside
 `recommendations/`, each piece taking only the part of a stock it shows — never a whole `HotStock` or `Holding`, whose
@@ -1275,14 +1407,24 @@ Things that are easy to break:
   Recommendations page's full run then `[ai] recommended ABCD, EFGH, WXYZ (of 7 analyzed; 7 of 41 hot stocks have the
   analysts' target 15% above the price)` or `[ai] no recommendation: none of 7 qualified (…)`. Finnhub prints `[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)` at startup
   when its key is missing, and nothing when it is set; `[stocks error] SYMBOL: why` when a call fails during a run.
+  The alerts print `[alerts] checked: 2 new (ABCD, WXYZ), 1 no longer true` (or `checked: nothing new, 0 no longer true`)
+  after every sync and every save of the settings, and `[alerts error] could not check the alerts: …` when a check after a
+  sync fails (the sync stays stored).
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
-  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`, `stocks` / `[stocks]`. `calculation`,
-  `model`, `utils` and `exceptions` print nothing.
+  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`, `stocks` / `[stocks]`, `alerts` /
+  `[alerts]`. `calculation`, `model`, `utils` and `exceptions` print nothing.
+- A feature of several files gets a package of its own, named after it, holding all of it — data, rules, entities,
+  service, controller, `request/`, `response/` — rather than a file in each layer's package (`alerts`, 2026-11-11, the
+  user's call: "the files spread over the packages is really bad"); only what is general (`PortfolioWeightsCalculator`,
+  `DailyClosesWithSpy`) goes to `calculation`.
 - Package dependencies point one way, with no cycle: `utils ← ai ← model ← calculation ← db ← api`, and `ib` — which
   uses none of them — is used by `calculation`, `db` and `api`. `exceptions` (2026-10-26, the user's request: the app's
   own exceptions in one package — `TwsUnavailableException`, `TwsBusyException`) uses nothing and is used by `ib` and
   `api`. `stocks` (2026-10-27: Finnhub's client and what it reads) uses only `utils`; like `ib` it is a source of data,
-  used by `calculation`, `db` and `api` (since session 3). `calculation` holds only what computes; the
+  used by `calculation`, `db` and `api` (since session 3). `alerts` (2026-11-11) sits on top of them all: it uses `api`
+  (only `RecommendationsReadService`, for the short list), `db`, `calculation`, `ib`, `stocks` and `model`, and no package
+  uses it — `api.SyncService` announces a sync with `PortfolioSyncedEvent` instead of calling it. `TwsPortfolioRunner`
+  (the root package) uses `api.SyncService`. `calculation` holds only what computes; the
   data it computes on lives where it comes from — IB's readings in `ib`, Claude's answer in `ai`, Finnhub's in `stocks` —
   or, when the whole app shares
   it (an enum both an entity and the computation need, like `TradeSide`; a warning; a label), in `model`. `calculation`
@@ -1304,10 +1446,12 @@ Things that are easy to break:
   not a warning: `highlight` (#ffe94d, `HIGHLIGHTER_CLASS`), a highlighter over a date to look at — the next report 0–14
   days away (MY_HOLDINGS_TODO.md session 3, the user's choice) —, brighter and more saturated than the minor warning's
   pale band so the two read apart.
-- One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` runs the startup flow. `ib.TwsReader`
-  owns the TWS host/port/client id and opens each `IbGateway`, one at a time — the startup and the Scan again button
-  both read through it. Don't add a second entry point or a second place that connects to TWS.
-- API response types go in `portfolioboss.api.response`, request bodies in `portfolioboss.api.request`; the
+- One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` runs the startup (its sync is
+  `api.SyncService`'s, shared with Sync now). `ib.TwsReader` owns the TWS host/port/client id and opens each `IbGateway`,
+  one at a time — the startup, Sync now and the Scan again button all read through it. Don't add a second entry point or
+  a second place that connects to TWS.
+- API response types go in `portfolioboss.api.response`, request bodies in `portfolioboss.api.request` (a feature
+  package keeps its own: `alerts.request`, `alerts.response`); the
   accessors, derived-math and write methods another package needs (`Holding.costBasis()`,
   `HoldingEntity.id()`/`sector()`/`industry()`/`trades()`/`toIbHolding()`, `TradeEntity`'s constructors and
   `changeDetails()`/`changeInvestor()`, `ManualPositionEntity`'s constructor and `changeDetails()`, `InvestorEntity`'s
@@ -1359,8 +1503,10 @@ Things that are easy to break:
   live with V12; the measurement (session 5) comes after. MY_HOLDINGS_TODO.md is the current plan: its sessions 1 (the
   new average in the Weight tab) and 2 (the holdings' analysts' target, Finnhub's figures and risk signs in the API, the
   sector and industry from IB — V13, V14 —, checked live 2026-11-05) and 3 (their UI, with `companyInfo` shared by a
-  holding and a scanned stock) are in, and so is session 3ב (the Averaging calculator, a sixth page, UI only); session 4
-  (holdings that move together, a market drop of 20%) is next.
+  holding and a scanned stock) are in, and so is session 3ב (the Averaging calculator, a sixth page, UI only); session 5
+  came before 4 (2026-11-11): Sync now (5א, browser-checked) and the alerts with their bell and settings drawer (5ב, V15,
+  built; its browser check under way — the bell already moved to the left of the name), with no daily run (decision 14)
+  and the alerts' channel left for later; session 4 (holdings that move together, a market drop of 20%) is next.
   HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. There is **no written thesis per holding** (decided 2026-10-06: data, not text): the product is the data on
   each holding that helps decide whether to stay in it — not the IB reader.

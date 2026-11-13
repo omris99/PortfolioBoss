@@ -5,6 +5,8 @@ import { EmptyBox } from './components/EmptyBox';
 import { InvestorsProvider } from './components/InvestorsContext';
 import { SectorOptionsList } from './components/SectorCell';
 import { usePortfolio } from './hooks/usePortfolio';
+import { useReadingFromTws } from './hooks/useReadingFromTws';
+import { syncNow } from './lib/apiClient';
 import { formatDateTime } from './lib/format';
 import { AveragingCalculatorPage } from './pages/AveragingCalculatorPage';
 import { ClosedPositionsPage } from './pages/ClosedPositionsPage';
@@ -27,6 +29,8 @@ function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStat
  */
 function App() {
   const { snapshot, errorMessage, isLoading, reload } = usePortfolio();
+  // Sync now, in the top bar of every page: a new reading from TWS, then the portfolio loaded again.
+  const { readingState: syncNowState, startReading: startSyncNow } = useReadingFromTws(syncNow, reload);
 
   /** The page, once the first snapshot is in; until then, a box saying it is loading (or that nothing came). */
   const pageOnceLoaded = (renderPage: (loadedSnapshot: PortfolioSnapshot) => ReactNode): ReactNode =>
@@ -38,10 +42,13 @@ function App() {
       <AppShell
         account={snapshot?.account ?? null}
         syncedAt={snapshot === null ? null : formatDateTime(snapshot.asOf)}
+        portfolioSyncedAt={snapshot?.asOf ?? null}
         loadStatus={loadStatusOf(errorMessage, isLoading)}
         errorMessage={errorMessage}
         hasData={snapshot !== null}
         onRetry={() => void reload()}
+        syncNowState={syncNowState}
+        onSyncNow={() => void startSyncNow()}
       >
         {snapshot !== null && (
           <SectorOptionsList

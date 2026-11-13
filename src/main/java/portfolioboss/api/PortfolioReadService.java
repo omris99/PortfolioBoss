@@ -17,6 +17,7 @@ import portfolioboss.api.response.TradeResponse;
 import portfolioboss.calculation.AnalystTargetCalculator;
 import portfolioboss.calculation.AnalystTrendCalculator;
 import portfolioboss.calculation.ConsensusCalculator;
+import portfolioboss.calculation.DailyClosesWithSpy;
 import portfolioboss.calculation.HoldingHistory;
 import portfolioboss.calculation.InvestorSummary;
 import portfolioboss.calculation.InvestorSummaryCalculator;
@@ -39,8 +40,6 @@ import portfolioboss.db.StockAnalysisRepository;
 import portfolioboss.db.StockEntity;
 import portfolioboss.db.StockRepository;
 import portfolioboss.ib.AnalystPriceTarget;
-import portfolioboss.ib.Benchmark;
-import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Holding;
 import portfolioboss.model.AnalystConsensus;
 import portfolioboss.model.AnalystTrend;
@@ -53,11 +52,9 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -108,9 +105,9 @@ public class PortfolioReadService {
         List<HoldingEntity> storedHoldings = holdingRepository.findByAccountOrderById(accountState.account());
         List<ManualPositionEntity> manualPositions = manualPositionRepository.findAllByOrderById();
         List<InvestorEntity> investors = investorRepository.findAllByOrderById();
-        Map<Integer, List<DailyClose>> dailyClosesByConId = dailyClosesOf(storedHoldings);
-        Map<Long, StockAnalysisEntity> latestAnalysisByHoldingId = latestAnalysisByHoldingId();
         List<Integer> holdingConIds = storedHoldings.stream().map(HoldingEntity::conId).toList();
+        DailyClosesWithSpy dailyCloses = dailyCloseRepository.dailyClosesWithSpy(holdingConIds);
+        Map<Long, StockAnalysisEntity> latestAnalysisByHoldingId = latestAnalysisByHoldingId();
         Map<Integer, StockEntity> stocksByConId = stockRepository.stocksByConId(holdingConIds);
         Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId =
                 analystPriceTargetRepository.analystPriceTargetsByConId(holdingConIds);
@@ -125,21 +122,13 @@ public class PortfolioReadService {
                 accountState.totalCashValue(),
                 storedHoldings.stream()
                         .map(holding -> holdingResponseOf(holding, snapshotDate, accountOwnerId,
-                                momentumOf(holding, dailyClosesByConId), latestAnalysisByHoldingId.get(holding.id()),
+                                dailyCloses.momentumOf(holding.conId()), latestAnalysisByHoldingId.get(holding.id()),
                                 stocksByConId.get(holding.conId()),
                                 analystPriceTargetsByConId.getOrDefault(holding.conId(), List.of())))
                         .toList(),
                 closedPositionsOf(storedHoldings, manualPositions),
                 investorsOf(accountState, storedHoldings, manualPositions, investors, accountOwnerId),
                 estimatedAnalysisCostOf(latestAnalysisByHoldingId.values()));
-    }
-
-    /** The stored closes of every holding and of SPY, by contract id — one query for all of them. */
-    private Map<Integer, List<DailyClose>> dailyClosesOf(List<HoldingEntity> holdings) {
-        Set<Integer> conIds = new HashSet<>();
-        holdings.forEach(holding -> conIds.add(holding.conId()));
-        conIds.add(Benchmark.SPY_CON_ID);
-        return dailyCloseRepository.dailyClosesByConId(conIds);
     }
 
     /** The latest analysis of every holding that has one, by holding id — one query for all of them. */
@@ -262,12 +251,6 @@ public class PortfolioReadService {
         StockAnalysisResult result = latestAnalysis.result();
         AnalystTrend analystTrend = new AnalystTrendCalculator(result.recentActions()).trend();
         return new SignalCalculator(momentumLabel, analystTrend, result.sentiment()).signal();
-    }
-
-    /** Derived on every read from the stored closes, never stored itself — like {@code firstBuyDate}. */
-    private Momentum momentumOf(HoldingEntity holding, Map<Integer, List<DailyClose>> dailyClosesByConId) {
-        return Momentum.of(dailyClosesByConId.getOrDefault(holding.conId(), List.of()),
-                dailyClosesByConId.getOrDefault(Benchmark.SPY_CON_ID, List.of()));
     }
 
     private List<InvestorQuantityResponse> investorQuantitiesOf(HoldingEntity holdingEntity, long accountOwnerId) {

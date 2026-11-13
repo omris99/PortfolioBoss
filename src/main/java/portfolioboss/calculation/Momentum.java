@@ -116,6 +116,11 @@ public record Momentum(
 
     // ── what the UI shows ───────────────────────────────────────────────────────────────────────
 
+    /** The long-term average, beside the 50-day one: not one of the five checks, an alert of its own. */
+    public Boolean aboveSma200() {
+        return sma200 == null ? null : lastClose > sma200;
+    }
+
     /** How far the last close is below the 20-day high, in percent (0 at the high). */
     public Double percentBelowHigh() {
         return high20 == null ? null : (1 - lastClose / high20) * 100;

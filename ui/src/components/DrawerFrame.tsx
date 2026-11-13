@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { LARGE_ICON_BUTTON_CLASS } from '../lib/styles';
+import { DrawerCloseButton, DrawerShell, DrawerTitle } from './DrawerShell';
 
 export interface DrawerTab<TabKey extends string> {
   key: TabKey;
@@ -51,16 +51,10 @@ function TabBar<TabKey extends string>({
   );
 }
 
-/** An Esc meant for a field — one being typed in — is not one that closes the drawer. */
-function isTypingInAField(target: EventTarget | null): boolean {
-  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
-}
-
 /**
- * The drawer's shell, shared by a holding's and a closed position's: 640px from the right, under the top bar, over a
- * light veil that keeps the table readable. Its header — `dot`, `title`, `currency`, `tags`, ‹ › and ✕, `subline`,
- * `figures`, `warning` — stays put; only the open tab's panel (`children`) scrolls. ✕, Esc or a click outside closes
- * it. Radix's dialog moves the focus in, keeps Tab inside, and gives it back when the drawer closes.
+ * The drawer of a holding, a closed position or a scanned stock, in the shared frame (`DrawerShell`). Its header —
+ * `dot`, `title`, `currency`, `tags`, ‹ › and ✕, `subline`, `figures`, `warning` — stays put; only the open tab's panel
+ * (`children`) scrolls.
  */
 export function DrawerFrame<TabKey extends string>({
   ariaLabel,
@@ -100,59 +94,45 @@ export function DrawerFrame<TabKey extends string>({
   children: ReactNode;
 }) {
   return (
-    <Dialog.Root open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-x-0 bottom-0 top-topbar z-40 bg-scrim" />
-        <Dialog.Content
-          aria-label={ariaLabel}
-          aria-describedby={undefined}
-          onEscapeKeyDown={(event) => {
-            if (isTypingInAField(event.target)) event.preventDefault();
-          }}
-          className="fixed bottom-0 right-0 top-topbar z-40 flex w-[640px] max-w-full flex-col border-l bg-surface-raised text-ink shadow-raised outline-none"
-        >
-          <div className="flex flex-col gap-3 px-6 py-4">
-            <div className="flex items-center gap-2">
-              {dot}
-              <Dialog.Title className="text-[22px] font-semibold leading-7 tracking-[-0.01em]">{title}</Dialog.Title>
-              <span className="text-faint">{currency}</span>
-              {tags}
-              <span className="ml-auto inline-flex items-center gap-0.5">
-                <button
-                  type="button"
-                  aria-label="Previous"
-                  title={`Previous: ${previousLabel}`}
-                  onClick={onPrevious}
-                  className={LARGE_ICON_BUTTON_CLASS}
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Next"
-                  title={`Next: ${nextLabel}`}
-                  onClick={onNext}
-                  className={LARGE_ICON_BUTTON_CLASS}
-                >
-                  <ChevronRight size={18} />
-                </button>
-                <span aria-hidden="true" className="mx-1 h-4 w-px bg-line" />
-                <Dialog.Close aria-label="Close" title="Close (Esc)" className={LARGE_ICON_BUTTON_CLASS}>
-                  <X size={18} />
-                </Dialog.Close>
-              </span>
-            </div>
-            {subline && <div className="-mt-1.5 text-muted">{subline}</div>}
-            {figures}
-            {warning}
-          </div>
-          <TabBar tabs={tabs} activeTab={activeTab} onTabChange={onTabChange} />
-          <div role={tabs.length > 1 ? 'tabpanel' : undefined} className="flex-1 overflow-y-auto px-6 pb-8 pt-5">
-            {children}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <DrawerShell ariaLabel={ariaLabel} onClose={onClose}>
+      <div className="flex flex-col gap-3 px-6 py-4">
+        <div className="flex items-center gap-2">
+          {dot}
+          <DrawerTitle>{title}</DrawerTitle>
+          <span className="text-faint">{currency}</span>
+          {tags}
+          <span className="ml-auto inline-flex items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="Previous"
+              title={`Previous: ${previousLabel}`}
+              onClick={onPrevious}
+              className={LARGE_ICON_BUTTON_CLASS}
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              type="button"
+              aria-label="Next"
+              title={`Next: ${nextLabel}`}
+              onClick={onNext}
+              className={LARGE_ICON_BUTTON_CLASS}
+            >
+              <ChevronRight size={18} />
+            </button>
+            <span aria-hidden="true" className="mx-1 h-4 w-px bg-line" />
+            <DrawerCloseButton />
+          </span>
+        </div>
+        {subline && <div className="-mt-1.5 text-muted">{subline}</div>}
+        {figures}
+        {warning}
+      </div>
+      <TabBar tabs={tabs} activeTab={activeTab} onTabChange={onTabChange} />
+      <div role={tabs.length > 1 ? 'tabpanel' : undefined} className="flex-1 overflow-y-auto px-6 pb-8 pt-5">
+        {children}
+      </div>
+    </DrawerShell>
   );
 }
 

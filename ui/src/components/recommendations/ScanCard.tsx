@@ -1,8 +1,9 @@
 import { Fragment, type ReactNode } from 'react';
-import { Check, Info, LoaderCircle, RefreshCw, TriangleAlert, Wallet } from 'lucide-react';
-import type { ScanAgainState } from '../../hooks/useScanAgain';
+import { Check, Info, TriangleAlert, Wallet } from 'lucide-react';
+import type { ReadingFromTwsState } from '../../hooks/useReadingFromTws';
 import { formatDateTime, formatMoney } from '../../lib/format';
-import { CARD_CLASS, EXPLAINED_CLASS, SECONDARY_BUTTON_CLASS } from '../../lib/styles';
+import { CARD_CLASS, EXPLAINED_CLASS } from '../../lib/styles';
+import { ReadingFromTwsButton } from '../ReadingFromTwsButton';
 import type { Recommendations } from '../../types/recommendations';
 import { hasSeveralInvestors, useInvestors } from '../InvestorsContext';
 
@@ -37,9 +38,9 @@ function ScanFigures({ recommendations }: { recommendations: Recommendations }) 
 }
 
 /** Scan again's status, to the left of the button. */
-function ScanAgainStatus({ scanAgainState }: { scanAgainState: ScanAgainState }) {
+function ScanAgainStatus({ scanAgainState }: { scanAgainState: ReadingFromTwsState }) {
   let status: ReactNode = null;
-  if (scanAgainState.kind === 'scanning') {
+  if (scanAgainState.kind === 'reading') {
     status = <span className="text-muted">Scanning… about 10 seconds</span>;
   } else if (scanAgainState.kind === 'done') {
     status = (
@@ -70,21 +71,6 @@ function ScanAgainStatus({ scanAgainState }: { scanAgainState: ScanAgainState })
   );
 }
 
-/** The free scan of IB, on demand (TWS must be open); disabled while it runs. */
-function ScanAgainButton({ scanAgainState, onScanAgain }: { scanAgainState: ScanAgainState; onScanAgain: () => void }) {
-  const isScanning = scanAgainState.kind === 'scanning';
-  return (
-    <button type="button" disabled={isScanning} onClick={onScanAgain} className={SECONDARY_BUTTON_CLASS}>
-      {isScanning ? (
-        <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-      ) : (
-        <RefreshCw size={16} aria-hidden="true" />
-      )}
-      {isScanning ? 'Scanning…' : 'Scan again'}
-    </button>
-  );
-}
-
 /**
  * The scan line (DESIGN_BRIEF.md §8.2): when the scan ran and what it found, with Scan again on the right — or, before
  * the first scan, what will bring one.
@@ -95,7 +81,7 @@ function ScanLine({
   onScanAgain,
 }: {
   recommendations: Recommendations | null;
-  scanAgainState: ScanAgainState;
+  scanAgainState: ReadingFromTwsState;
   onScanAgain: () => void;
 }) {
   return (
@@ -117,7 +103,14 @@ function ScanLine({
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-3">
         <ScanAgainStatus scanAgainState={scanAgainState} />
-        <ScanAgainButton scanAgainState={scanAgainState} onScanAgain={onScanAgain} />
+        {/* The free scan of IB, on demand (TWS must be open). */}
+        <ReadingFromTwsButton
+          readingState={scanAgainState}
+          idleText="Scan again"
+          readingText="Scanning…"
+          size="regular"
+          onClick={onScanAgain}
+        />
       </div>
     </div>
   );
@@ -159,7 +152,7 @@ export function ScanCard({
   onScanAgain,
 }: {
   recommendations: Recommendations | null;
-  scanAgainState: ScanAgainState;
+  scanAgainState: ReadingFromTwsState;
   onScanAgain: () => void;
 }) {
   return (

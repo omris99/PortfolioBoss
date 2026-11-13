@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
 import { CloudOff, Info, RefreshCw } from 'lucide-react';
 import { Link, NavLink } from 'react-router';
+import type { ReadingFromTwsState } from '../hooks/useReadingFromTws';
 import { SECONDARY_BUTTON_CLASS } from '../lib/styles';
+import { AlertsBell } from './alerts/AlertsBell';
+import { ReadingFromTwsButton } from './ReadingFromTwsButton';
 
 export type LoadStatus = 'loading' | 'ready' | 'error';
 
@@ -38,22 +41,46 @@ function navigationLinkClass({ isActive }: { isActive: boolean }): string {
     : `${baseClass} text-muted hover:text-ink`;
 }
 
-/** The name, the four pages, and on the right the account, the last sync from TWS and whether the data loaded. */
+/** What went wrong with the last Sync now — TWS not reachable, or another reading running —; `null` otherwise. */
+function syncProblemMessageOf(syncNowState: ReadingFromTwsState): string | null {
+  if (syncNowState.kind === 'busy' || syncNowState.kind === 'failed') {
+    return syncNowState.message;
+  }
+  return null;
+}
+
+/**
+ * The alerts bell with the name after it, the pages, and on the right the account, the last sync from TWS with Sync
+ * now, and whether the data loaded.
+ *
+ * @param portfolioSyncedAt the portfolio's `asOf`, as the API sends it: the bell loads its alerts again when it changes
+ */
 function TopBar({
   account,
   syncedAt,
+  portfolioSyncedAt,
   loadStatus,
+  syncNowState,
+  onSyncNow,
 }: {
   account: string | null;
   syncedAt: string | null;
+  portfolioSyncedAt: string | null;
   loadStatus: LoadStatus;
+  syncNowState: ReadingFromTwsState;
+  onSyncNow: () => void;
 }) {
   return (
     <header className="border-b bg-surface">
-      <div className={`${CONTAINER_CLASS} flex h-topbar items-stretch gap-8`}>
-        <Link to="/" className="flex items-center whitespace-nowrap text-wordmark text-ink">
-          PortfolioBoss
-        </Link>
+      {/* gap-4 (16px): with a tab's own 12px padding, the first tab sits as far from the name as the tabs from each
+          other (12 + 4 + 12). */}
+      <div className={`${CONTAINER_CLASS} flex h-topbar items-stretch gap-4`}>
+        <div className="flex items-center gap-1.5">
+          <AlertsBell portfolioSyncedAt={portfolioSyncedAt} />
+          <Link to="/" className="flex items-center whitespace-nowrap text-wordmark text-ink">
+            PortfolioBoss
+          </Link>
+        </div>
         <nav aria-label="Main" className="flex">
           <ul className="flex items-stretch gap-1">
             {NAVIGATION.map((page) => (
@@ -82,6 +109,14 @@ function TopBar({
           ) : (
             <span>{loadStatus === 'loading' ? 'Loading…' : 'Not loaded'}</span>
           )}
+          <ReadingFromTwsButton
+            readingState={syncNowState}
+            idleText="Sync now"
+            readingText="Syncing…"
+            size="small"
+            title="Read the portfolio from TWS again, as ./run.sh does at startup. TWS must be open."
+            onClick={onSyncNow}
+          />
           <span role="status" title={STATUS_TEXTS[loadStatus]} className="inline-flex items-center">
             <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_CLASSES[loadStatus]}`} />
             <span className="sr-only">{STATUS_TEXTS[loadStatus]}</span>
@@ -92,15 +127,20 @@ function TopBar({
   );
 }
 
-/** Under the top bar while the API can't be reached; whatever loaded before stays on the page under it. */
+/**
+ * Under the top bar when the API can't be reached, or Sync now couldn't read TWS: `message` says what, and whatever
+ * loaded before stays on the page under it — `note` says so.
+ */
 function ErrorBanner({
   message,
-  hasData,
+  note,
+  retryButtonText,
   isRetrying,
   onRetry,
 }: {
   message: string;
-  hasData: boolean;
+  note: string | null;
+  retryButtonText: string;
   isRetrying: boolean;
   onRetry: () => void;
 }) {
@@ -110,11 +150,11 @@ function ErrorBanner({
         <CloudOff size={20} className="shrink-0 text-negative" />
         <div className="flex-1">
           <span className="font-semibold">{message}</span>
-          {hasData && <span className="text-muted"> The figures below are from the last load.</span>}
+          {note !== null && <span className="text-muted"> {note}</span>}
         </div>
         <button type="button" onClick={onRetry} disabled={isRetrying} className={SECONDARY_BUTTON_CLASS}>
           <RefreshCw size={16} />
-          {isRetrying ? 'Retrying…' : 'Retry'}
+          {retryButtonText}
         </button>
       </div>
     </div>
@@ -133,35 +173,61 @@ function Footer() {
 }
 
 /**
- * The frame of every page: the top bar, the error banner when the API can't be reached, the page itself (`children`)
- * in the centred column, and the footer.
+ * The frame of every page: the top bar, an error banner when the API can't be reached or Sync now failed, the page
+ * itself (`children`) in the centred column, and the footer.
  */
 export function AppShell({
   account,
   syncedAt,
+  portfolioSyncedAt,
   loadStatus,
   errorMessage,
   hasData,
   onRetry,
+  syncNowState,
+  onSyncNow,
   children,
 }: {
   account: string | null;
   syncedAt: string | null;
+  portfolioSyncedAt: string | null;
   loadStatus: LoadStatus;
   errorMessage: string | null;
   hasData: boolean;
   onRetry: () => void;
+  syncNowState: ReadingFromTwsState;
+  onSyncNow: () => void;
   children: ReactNode;
 }) {
+  const isRetrying = loadStatus === 'loading';
+  const syncProblemMessage = syncProblemMessageOf(syncNowState);
   return (
     <div className="flex min-h-full flex-col">
-      <TopBar account={account} syncedAt={syncedAt} loadStatus={loadStatus} />
+      <TopBar
+        account={account}
+        syncedAt={syncedAt}
+        portfolioSyncedAt={portfolioSyncedAt}
+        loadStatus={loadStatus}
+        syncNowState={syncNowState}
+        onSyncNow={onSyncNow}
+      />
       {errorMessage && (
         <ErrorBanner
           message={errorMessage}
-          hasData={hasData}
-          isRetrying={loadStatus === 'loading'}
+          note={hasData ? 'The figures below are from the last load.' : null}
+          retryButtonText={isRetrying ? 'Retrying…' : 'Retry'}
+          isRetrying={isRetrying}
           onRetry={onRetry}
+        />
+      )}
+      {/* While Sync now runs again its state is 'reading', so the banner is gone and the button shows "Syncing…". */}
+      {syncProblemMessage !== null && (
+        <ErrorBanner
+          message={syncProblemMessage}
+          note="The figures below are from the last sync."
+          retryButtonText="Try again"
+          isRetrying={false}
+          onRetry={onSyncNow}
         />
       )}
       <main className="flex-1 pb-10 pt-6">

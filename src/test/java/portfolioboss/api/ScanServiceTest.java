@@ -6,11 +6,9 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.api.response.ScanRunResponse;
 import portfolioboss.db.PortfolioSyncService;
 import portfolioboss.exceptions.TwsBusyException;
@@ -76,31 +74,23 @@ class ScanServiceTest {
         assertThat(countOf("select count(*) from holding")).isEqualTo(holdingCountBefore);   // the portfolio untouched
     }
 
+    /** The 409 comes from {@code ApiErrorHandler} ({@code ScanControllerTest}). */
     @Test
-    void answers409WhileAnotherReadingRunsAndStoresNothing() throws InterruptedException {
-        given(twsReader.readScan()).willThrow(new TwsBusyException("A scan is already running."));
+    void storesNothingWhileAnotherReadingRuns() throws InterruptedException {
+        given(twsReader.readScan()).willThrow(new TwsBusyException("TWS is already being read."));
 
-        assertThatThrownBy(() -> scanService.scanAgain())
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-                    assertThat(exception.getReason()).isEqualTo("A scan is already running.");
-                });
+        assertThatThrownBy(() -> scanService.scanAgain()).isInstanceOf(TwsBusyException.class);
         assertThat(countOf("select count(*) from scan")).isZero();
     }
 
-    /** The user's message goes to the browser; the console line with the detail stays in the console. */
+    /** The 503 comes from {@code ApiErrorHandler} ({@code ScanControllerTest}). */
     @Test
-    void answers503WhenTwsCantBeReadAndStoresNothing() throws InterruptedException {
+    void storesNothingWhenTwsCantBeRead() throws InterruptedException {
         given(twsReader.readScan()).willThrow(new TwsUnavailableException(
-                "TWS is not reachable: open TWS and log in, then scan again.",
+                "TWS is not reachable: open TWS and log in, then try again.",
                 "Timed out after 15s waiting for portfolio data. Is TWS running and logged in on port 7496?"));
 
-        assertThatThrownBy(() -> scanService.scanAgain())
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-                    assertThat(exception.getReason())
-                            .isEqualTo("TWS is not reachable: open TWS and log in, then scan again.");
-                });
+        assertThatThrownBy(() -> scanService.scanAgain()).isInstanceOf(TwsUnavailableException.class);
         assertThat(countOf("select count(*) from scan")).isZero();
     }
 

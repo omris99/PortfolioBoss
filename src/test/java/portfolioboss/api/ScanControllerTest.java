@@ -3,13 +3,13 @@ package portfolioboss.api;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.api.response.ScanRunResponse;
+import portfolioboss.exceptions.TwsBusyException;
+import portfolioboss.exceptions.TwsUnavailableException;
 
 import java.time.Instant;
 
@@ -56,25 +56,27 @@ class ScanControllerTest {
         verifyNoInteractions(scanService);
     }
 
+    /** The user's message is the answer's {@code detail}; the console's reason is not sent. */
     @Test
     void answers503WhenTwsCantBeRead() throws Exception {
-        given(scanService.scanAgain()).willThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "TWS is not reachable: open TWS and log in, then scan again."));
+        given(scanService.scanAgain()).willThrow(new TwsUnavailableException(
+                "TWS is not reachable: open TWS and log in, then try again.",
+                "Connection was refused by TWS. Check the port and that API access is enabled."));
 
         postScan("{}")
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.detail").value("TWS is not reachable: open TWS and log in, then scan again."));
+                .andExpect(jsonPath("$.detail").value("TWS is not reachable: open TWS and log in, then try again."));
     }
 
     @Test
     void answers409WhileAnotherReadingRuns() throws Exception {
-        given(scanService.scanAgain()).willThrow(new ResponseStatusException(HttpStatus.CONFLICT,
-                "A scan is already running, or the startup is still reading TWS: try again in a moment."));
+        given(scanService.scanAgain()).willThrow(new TwsBusyException(
+                "TWS is already being read — by a sync, a scan or the startup: try again in a moment."));
 
         postScan("{}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail")
-                        .value("A scan is already running, or the startup is still reading TWS: try again in a moment."));
+                        .value("TWS is already being read — by a sync, a scan or the startup: try again in a moment."));
     }
 
     @Test

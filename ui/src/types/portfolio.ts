@@ -567,3 +567,10 @@ export interface PortfolioSnapshot {
   /** `null` while nothing has been analyzed. */
   estimatedAnalysisCost: EstimatedAnalysisCost | null;
 }
+
+/** What `POST /api/syncs` (Sync now) answers once the new reading from TWS is stored. */
+export interface SyncRun {
+  /** The `asOf` the reloaded portfolio will carry. */
+  syncedAt: string;
+  holdingCount: number;
+}

@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.31.0";
+    public static final String VERSION = "0.32.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,21 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.32.0: [Sync now and the alerts]
+ * Sync now added: a button in the top bar that reads TWS as the startup does — the portfolio, a scan when due, the holdings' details and targets, Finnhub — through POST /api/syncs, then reloads the page.
+ * Sync now: while another reading runs, or when TWS can't be read, a banner gives the server's words over the last sync's figures, with Try again.
+ * SyncService added: the startup's sync and Sync now's are one flow — whether a scan is due, the reading, Finnhub, the store — that announces every stored sync with PortfolioSyncedEvent; TwsPortfolioRunner only exits on a database failure and starts the UI.
+ * ApiErrorHandler: TwsBusyException is 409 and TwsUnavailableException 503, with the user's message, for every endpoint that reads TWS; ScanService no longer turns them into its own errors.
+ * Alerts added, in a package of their own (alerts): nine kinds — momentum turned weak, a close below the 50- or 200-day average, a report soon, an analyst cutting a target, far below the average cost, above the weight limit, trades that don't match IB, a stock entering the short list.
+ * Alerts: checked after every sync against the alerts still open — a condition true for the first time is a new alert, one no longer true ends it; nothing leaves the machine.
+ * V15 alert and alert_setting: one open alert per condition, guarded by a partial unique index, the ended ones kept as history; a kind's settings stored only once saved.
+ * Alerts bell: at the top bar's left, before the name, with the number not yet seen in the accent blue; opening it marks them seen and lists them newest first, each a link to its holding's drawer or to Recommendations.
+ * Alert settings drawer: behind the bell's ⚙, each kind on or off and four numbers — days before a report, days back for a target cut, the drop from the average cost, the weight limit —; saving checks the alerts again at once.
+ * DailyClosesWithSpy added: a stock's momentum against SPY from the stored closes, shared by both read services and the alerts instead of written in each; PortfolioWeightsCalculator: a holding's share of the whole account, the UI's rule in Java.
+ * Momentum: aboveSma200() beside aboveSma50(), for the alerts; the score is unchanged.
+ * DrawerShell taken out of DrawerFrame as every drawer's frame, the alert settings' too; useReadingFromTws and ReadingFromTwsButton replace useScanAgain, shared by Scan again and Sync now.
+ * Console: [alerts] checked: N new (ABCD, WXYZ), M no longer true after every sync and every save of the settings, and [alerts error] when a check after a sync fails.
+ *
  * VERSION 0.31.0: [The Averaging calculator]
  * Averaging calculator added: a new page, /averaging, third in the navigation, that plans buying more of several holdings at once, each with the Weight tab's purchase for a target weight or an amount.
  * Averaging calculator: the weights' tabs, each a plan of its own; the holdings below their average cost first, the farthest below first, the rest folded with "1 purchase planned" while folded.
