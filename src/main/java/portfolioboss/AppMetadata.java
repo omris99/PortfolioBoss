@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.33.0";
+    public static final String VERSION = "0.34.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,17 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.34.0: [The Bank of Israel's exchange rates for the tax]
+ * exchangerates package added: the Bank of Israel's representative rates, under tax — a source of data like stocks that downloads, stores and says which rate a day takes, knowing nothing of trades.
+ * BankOfIsraelClient added: the Bank of Israel's SDMX service — a currency's rates of a period as CSV, no key (none for the Hong Kong dollar); a 404 is "no rate in these days" unless over 14 days.
+ * BankOfIsraelRatesReader added: the CSV's columns found by name (TIME_PERIOD, OBS_VALUE); a line with another number of fields or an unreadable value fails the answer, naming the line.
+ * V17 exchange_rate: a row per currency and day the Bank of Israel published a rate, one unbroken stretch, never replaced — a published rate is final.
+ * ExchangeRates added: the rate a settlement day takes — its own, or the last one before it on a day the Bank of Israel published none (a holiday); none after the last stored rate.
+ * ExchangeRateDownloadSchedule added: only the days really missing are asked for, before or after the stored stretch, never a stored day; a holiday inside the stretch is never asked again.
+ * SettlementDayRatesService added: the dollar settlement days of the Flex trades and cash transactions, and the typed trades' estimated by UsSettlementDayEstimate (T+1 since 28.05.2024, T+2 before).
+ * SyncService: after the Flex reports, every sync that reached TWS downloads the dollar rates still missing; a failure prints [exchangerates error] and never fails the sync.
+ * Console: [exchangerates] Bank of Israel: asking for the USD rates of …, stored N USD rates (…), no USD rate published in … and skipped: every settlement day up to 16.11 has its USD rate.
+ *
  * VERSION 0.33.0: [IB's Flex reports for the capital gains tax]
  * tax package added: the capital gains tax's own package, under api; its first part stores every trade and cash transaction of the account from IB's Flex reports, day trades included.
  * FlexClient added: IB's Flex Web Service — SendRequest for a period, then GetStatement until the report is ready —, with FLEX_TOKEN and FLEX_QUERY_ID from config/local.env; read only.

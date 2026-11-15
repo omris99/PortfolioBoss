@@ -14,6 +14,7 @@ import portfolioboss.ib.TwsReading;
 import portfolioboss.stocks.FinnhubClient;
 import portfolioboss.stocks.Stock;
 import portfolioboss.tax.FlexDownloadService;
+import portfolioboss.tax.SettlementDayRatesService;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -31,11 +32,13 @@ import java.util.concurrent.Future;
  * (MY_HOLDINGS_TODO.md, session 5א): whether a scan is due, then the reading from TWS through {@link TwsReader} — the
  * portfolio, the scan when due, the holdings' contract details and Dow Jones targets, the daily closes —, then what
  * Finnhub knows about the holdings in dollars, then all of it stored in one transaction
- * ({@link PortfolioSyncService}), then a {@link PortfolioSyncedEvent} for whoever reacts to a sync — the alerts —, and
- * last the days of IB's Flex reports not stored yet ({@link FlexDownloadService}, CAPITAL_GAINS_TAX_TODO.md, session 1).
+ * ({@link PortfolioSyncService}), then a {@link PortfolioSyncedEvent} for whoever reacts to a sync — the alerts —, then
+ * the days of IB's Flex reports not stored yet ({@link FlexDownloadService}, CAPITAL_GAINS_TAX_TODO.md, session 1), and
+ * last the Bank of Israel's dollar rates of the settlement days that have none yet ({@link SettlementDayRatesService},
+ * session 2).
  *
- * <p>Not {@code @Transactional}: reading TWS, asking Finnhub and waiting for IB to prepare a Flex report take seconds,
- * and no database connection should wait on them. Each store is a transaction of its own.
+ * <p>Not {@code @Transactional}: reading TWS, asking Finnhub, waiting for IB to prepare a Flex report and asking the Bank
+ * of Israel take seconds, and no database connection should wait on them. Each store is a transaction of its own.
  */
 @Service
 public class SyncService {
@@ -54,14 +57,17 @@ public class SyncService {
     private final FinnhubClient finnhubClient;
     private final ApplicationEventPublisher eventPublisher;
     private final FlexDownloadService flexDownloadService;
+    private final SettlementDayRatesService settlementDayRatesService;
 
     public SyncService(TwsReader twsReader, PortfolioSyncService portfolioSyncService, FinnhubClient finnhubClient,
-                       ApplicationEventPublisher eventPublisher, FlexDownloadService flexDownloadService) {
+                       ApplicationEventPublisher eventPublisher, FlexDownloadService flexDownloadService,
+                       SettlementDayRatesService settlementDayRatesService) {
         this.twsReader = twsReader;
         this.portfolioSyncService = portfolioSyncService;
         this.finnhubClient = finnhubClient;
         this.eventPublisher = eventPublisher;
         this.flexDownloadService = flexDownloadService;
+        this.settlementDayRatesService = settlementDayRatesService;
     }
 
     /**
@@ -77,6 +83,7 @@ public class SyncService {
         }
         storeWithFinnhubData(reading);
         downloadMissingFlexReports(reading.snapshot());
+        downloadMissingDollarRates(reading.snapshot());
     }
 
     /**
@@ -89,6 +96,7 @@ public class SyncService {
         TwsReading reading = twsReader.readPortfolioUnlessBusy(isScanDue());
         storeWithFinnhubData(reading);
         downloadMissingFlexReports(reading.snapshot());
+        downloadMissingDollarRates(reading.snapshot());
         PortfolioSnapshot snapshot = reading.snapshot();
         return new SyncRunResponse(snapshot.asOf(), snapshot.holdings().size());
     }
@@ -124,7 +132,19 @@ public class SyncService {
         flexDownloadService.downloadWhatIsMissing(syncDateOf(snapshot));
     }
 
-    /** The sync's day, by the local calendar: Finnhub's "today", and the day the Flex reports are downloaded up to. */
+    /**
+     * The Bank of Israel's dollar rates of the settlement days that have none yet, up to the sync's day
+     * ({@link SettlementDayRatesService}). After the Flex reports: they bring the account's settlement days. A failure
+     * here never fails the sync — it is printed as {@code [exchangerates error]}.
+     */
+    private void downloadMissingDollarRates(PortfolioSnapshot snapshot) {
+        settlementDayRatesService.downloadMissingDollarRates(syncDateOf(snapshot));
+    }
+
+    /**
+     * The sync's day, by the local calendar: Finnhub's "today", and the day the Flex reports and the exchange rates are
+     * downloaded up to.
+     */
     private LocalDate syncDateOf(PortfolioSnapshot snapshot) {
         return LocalDate.ofInstant(snapshot.asOf(), ZoneId.systemDefault());
     }

@@ -1,6 +1,7 @@
 package portfolioboss.api;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
@@ -27,6 +28,7 @@ import portfolioboss.stocks.EarningsDate;
 import portfolioboss.stocks.FinnhubClient;
 import portfolioboss.stocks.Stock;
 import portfolioboss.tax.FlexDownloadService;
+import portfolioboss.tax.SettlementDayRatesService;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -41,6 +43,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -48,8 +51,8 @@ import static org.mockito.Mockito.verify;
 /**
  * The sync of the startup and of the Sync now button against the real PostgreSQL test database, with {@link TwsReader}
  * and {@link FinnhubClient} replaced by stand-ins ({@code @MockitoBean}): no test connects to TWS or asks Finnhub —
- * and {@link FlexDownloadService} too, so none calls IB's Flex Web Service either. TWS reports two made-up holdings, one
- * in dollars and one in Hong Kong dollars.
+ * and {@link FlexDownloadService} and {@link SettlementDayRatesService} too, so none calls IB's Flex Web Service or the
+ * Bank of Israel either. TWS reports two made-up holdings, one in dollars and one in Hong Kong dollars.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -88,6 +91,10 @@ class SyncServiceTest {
     /** Its own tests are {@code tax.FlexDownloadServiceTest}; here only whether, and up to which day, the sync asks. */
     @MockitoBean
     private FlexDownloadService flexDownloadService;
+
+    /** Its own tests are {@code tax.SettlementDayRatesServiceTest}; here only whether, when and up to which day. */
+    @MockitoBean
+    private SettlementDayRatesService settlementDayRatesService;
 
     /** The events published during each test: the alerts are checked on {@link PortfolioSyncedEvent}. */
     @Autowired
@@ -186,6 +193,41 @@ class SyncServiceTest {
         assertThatThrownBy(() -> syncService.syncNow()).isInstanceOf(TwsUnavailableException.class);
 
         verify(flexDownloadService, never()).downloadWhatIsMissing(any());
+    }
+
+    /**
+     * CAPITAL_GAINS_TAX_TODO.md, session 2: the startup's sync and Sync now alike download the dollar rates still
+     * missing, up to the sync's day — after the Flex reports, which bring the account's settlement days.
+     */
+    @Test
+    void aStoredSyncDownloadsTheMissingDollarRatesAfterTheFlexReports() throws InterruptedException {
+        given(twsReader.readPortfolioUnlessBusy(anyBoolean())).willReturn(readingOfTwoHoldings());
+        given(twsReader.readPortfolio(anyBoolean())).willReturn(readingOfTwoHoldings());
+        LocalDate syncDate = LocalDate.ofInstant(SYNCED_AT, ZoneId.systemDefault());
+
+        syncService.syncNow();
+        syncService.syncAtStartup();
+
+        InOrder downloadsInOrder = inOrder(flexDownloadService, settlementDayRatesService);
+        // Sync now's
+        downloadsInOrder.verify(flexDownloadService).downloadWhatIsMissing(syncDate);
+        downloadsInOrder.verify(settlementDayRatesService).downloadMissingDollarRates(syncDate);
+        // the startup's
+        downloadsInOrder.verify(flexDownloadService).downloadWhatIsMissing(syncDate);
+        downloadsInOrder.verify(settlementDayRatesService).downloadMissingDollarRates(syncDate);
+    }
+
+    /** Like the Flex reports (session 1.4): the rates are downloaded only by a sync that reached TWS. */
+    @Test
+    void aSyncThatReadNothingDownloadsNoRate() throws InterruptedException {
+        given(twsReader.readPortfolio(anyBoolean())).willReturn(null);
+        given(twsReader.readPortfolioUnlessBusy(anyBoolean())).willThrow(new TwsUnavailableException(
+                "TWS is not reachable: open TWS and log in, then try again.", "Connection refused"));
+
+        syncService.syncAtStartup();
+        assertThatThrownBy(() -> syncService.syncNow()).isInstanceOf(TwsUnavailableException.class);
+
+        verify(settlementDayRatesService, never()).downloadMissingDollarRates(any());
     }
 
     @Test

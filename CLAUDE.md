@@ -137,8 +137,17 @@ trades the database leaves out on purpose included, with IB's real commissions a
 only the missing days, each period starting and ending on a weekday: the first live runs found that **IB refuses a
 period that starts or ends on a Saturday or a Sunday** (1003 "Statement is not available"; the user confirmed it by hand
 on IB's site). V16 is on the real database since that day's `./run.sh` (after `portfolioboss-2026-11-15.sql.gz`, 16 of
-16 tables equal), and the whole history is stored, 2021-01-01 to 2026-11-13, without a gap or a double. Session 2 (Bank
-of Israel's rates) is next.
+16 tables equal), and the whole history is stored, 2021-01-01 to 2026-11-13, without a gap or a double. Session 2
+(2026-11-15, 591 tests) is built: a package of its own, `exchangerates` (the user's ask), downloads the Bank of Israel's
+dollar rates into V17's `exchange_rate` on every sync — only the days really missing, checked before any call —, and
+`tax.SettlementDayRatesService` gives it the settlement days the tax needs (the Flex trades' and cash transactions', and
+the typed trades' estimated). Checked against the Bank of Israel before building: it has **no Hong Kong dollar rate** in
+any series (a sale in HKD stays "enter by hand", decision 10), and it publishes no rate on Israeli and international
+holidays — about 15 weekdays a year, 7 days at most in a row —, which such a day's "last rate before it" (2.2) covers.
+V17 is on the real database since that day's `./run.sh` (after `portfolioboss-2026-11-15.sql.gz`, 19 of 19 tables
+equal; the morning's backup renamed `…-before-V16`): one request stored the dollar's rates from two weeks before the
+account's earliest settlement day to 2026-11-13, every one equal to the Bank of Israel's series, and every settlement day
+in dollars up to that day inside them; the next sync asked nothing. Session 3 (the calculation) is next.
 
 ## Hard invariant: read-only
 
@@ -175,7 +184,11 @@ token, the query's number and the two dates of a period, nothing about the portf
 `api.SyncService` after every sync that reached TWS, and only for the days not stored yet (none after a day's first sync).
 IB takes the token only in the address (`t=`), so no error of the client may print the address (`FlexClient` turns each
 failure into a message of its own; `FlexClientTest` checks the token is in none). The account number in IB's reports is
-never stored. Two endpoints read TWS, both read-only and free, through the same `ib.TwsReader` as `./run.sh`:
+never stored. `exchangerates.BankOfIsraelClient` (CAPITAL_GAINS_TAX_TODO.md, session 2) downloads the Bank of Israel's
+representative rates from its public SDMX service (`edge.boi.gov.il`), over HTTPS, without a key, and sends it only the
+series' name — the currency's code, `RER_USD_ILS` — and the two dates of a period, nothing about the portfolio;
+**without a button press**, from `api.SyncService` (through `tax.SettlementDayRatesService`) after every sync that reached
+TWS, and only when a settlement day's rate is really missing (none on most syncs). Two endpoints read TWS, both read-only and free, through the same `ib.TwsReader` as `./run.sh`:
 `ScanController` (`POST /api/scans`, the Scan again button: a scan) and `SyncController` (`POST /api/syncs`, Sync now:
 the startup's whole reading). The alerts send nothing out of the machine (their channel is a plan for later).
 `PortfolioController` and `RecommendationsController` stay GET-only, and `GET /api/alerts` is `AlertController`'s one
@@ -187,8 +200,8 @@ only as text or a form (415 here), while JSON, PUT and DELETE need a CORS prefli
 other site can start a paid run, and `POST /api/scans`, `POST /api/syncs` and `POST /api/alerts/seen` take `{}`
 (`ScanRequest`, `SyncRequest`, `AlertsSeenRequest`, records with nothing in them) for the same reason. Don't add CORS
 configuration, don't add an endpoint that writes anything other than PortfolioBoss's own data (what the user enters, the
-analyses, the recommendations, the scans, a sync — the Flex reports it downloads too —, and the alerts with their
-settings), and don't expose the API beyond localhost (the connection to TWS and the API are both
+analyses, the recommendations, the scans, a sync — the Flex reports and the exchange rates it downloads too —, and the
+alerts with their settings), and don't expose the API beyond localhost (the connection to TWS and the API are both
 unencrypted, which is fine only while local).
 
 ## Build & run
@@ -208,7 +221,10 @@ day: only when the market has closed since the last scan, `calculation.ScanSched
 …`), reads the holdings' contract details (their sector and industry) and Dow Jones targets, asks Finnhub about the
 holdings in USD once TWS is disconnected, syncs it all into PostgreSQL, checks the alerts (`[alerts] checked: 2 new
 (ABCD, WXYZ), 1 no longer true`), downloads the days of IB's Flex reports not stored yet (`[tax] Flex: 41 trades, 6 cash
-transactions (2026-11-03 – 2026-11-13)`, or `[tax] Flex skipped: already read up to 13.11`), and then keeps running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
+transactions (2026-11-03 – 2026-11-13)`, or `[tax] Flex skipped: already read up to 13.11`), then the Bank of Israel's
+dollar rates of the settlement days that have none yet (`[exchangerates] Bank of Israel: stored 3 USD rates (2026-11-12 –
+2026-11-16)`, or `[exchangerates] Bank of Israel skipped: every settlement day up to 16.11 has its USD rate`), and then
+keeps running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
 and opens `http://localhost:5174` in the browser (stop everything with Ctrl+C). If TWS could not be
 read this run, it serves whatever the previous sync stored instead (see "Running requires TWS" below).
 The UI is a separate Vite app (Node 20.19+ — which is why react-router stays on 7.x: 8.x needs Node 22) whose
@@ -339,7 +355,23 @@ logged, the same days again add no row, a changed row replaced, a row sent twice
 stored date) and `FlexDownloadServiceTest` (`@DataJpaTest`, `FlexClient` a `@MockitoBean`: no keys nothing asked, the
 history oldest first, a failed period stopping the rest without an exception, an update, nothing once up to date);
 `SyncServiceTest` has `FlexDownloadService` as a `@MockitoBean` (a stored
-sync downloads up to its day, one that read nothing doesn't). After a
+sync downloads up to its day, one that read nothing doesn't). The exchange rates (package `exchangerates`; **no test
+calls the Bank of Israel**): `BankOfIsraelRatesReaderTest` (the real answer's shape — public rates around Yom Kippur 2025
+—, the columns found by their names in another order, a header alone, a line with more fields than the header, a rate or
+a day that can't be read and the column missing — each naming the line —, an empty answer), `BankOfIsraelClientTest` (a
+fake server: the address in full, a weekend's 404 no rate, 15 days of 404 an error naming the series, an HTTP 500 without
+the page, no answer), `ExchangeRatesTest` (the day's own rate, Yom Kippur and a Sunday the last before, after the last
+stored and before the first none, nothing stored), `ExchangeRateDownloadScheduleTest` (nothing stored: two weeks before the
+earliest day to today; every day known nothing; a holiday inside the stored stretch never asked again; a day after it from
+the day after the last stored rate, one before it up to the day before the first, both two requests; a settlement day
+after today not asked) and `ExchangeRateDownloadServiceTest` (`@DataJpaTest`, `BankOfIsraelClient` a `@MockitoBean`: the
+first download stored, only the days after the stored ones asked, nothing asked when every day is known, a rate not
+published yet asked again on the next sync, a failure printed and nothing stored); in `tax`, `UsSettlementDayEstimateTest`
+(two weekdays before 28.05.2024, one from that day, a Friday's on Monday) and `SettlementDayRatesServiceTest`
+(`@DataJpaTest`, `ExchangeRateDownloadService` a `@MockitoBean`: the Flex trades' and cash transactions' own settlement days
+in dollars, the typed trades' estimated ones — a holding's and a manual position's —, HKD left out); `SyncServiceTest` has
+`SettlementDayRatesService` as a `@MockitoBean` too (after the Flex reports, up to the sync's day; not when TWS wasn't
+read). After a
 change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
 would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
 `target/surefire-reports/` keeps the reports of tests that have since been deleted.
@@ -365,6 +397,7 @@ stay). Its free plan allows 60 calls a minute; a stock is 2, so a portfolio of 1
 Flex Web Service, valid up to a year, can be locked to the home IP address) and `FLEX_QUERY_ID` (the number of the
 Activity Flex Query — XML, Trades as executions and Cash Transactions, its fields in session 1.1 of the plan) in the same
 file; without either the app prints `[tax] Flex off: FLEX_TOKEN is not set (config/local.env)` and downloads no report.
+The Bank of Israel's rates (session 2) need no key.
 
 **External dependency not in the repo:** the TWS API jar at `~/DevTools/twsapi/TwsApi.jar` (shared
 with IBBot). It is not on Maven Central, so `run.sh` registers it once in the local Maven repository
@@ -420,6 +453,10 @@ Main (Spring Boot: brings the web server up, then Spring runs the runner)
         ├──then──> tax.FlexDownloadService ──> FlexClient ──HTTPS──> IB's Flex Web Service (the days not stored yet)
         │                                  └──> FlexReportStorageService ──writes──> Postgres (flex_trade ·
         │                                                                   flex_cash_transaction · flex_report)
+        ├──then──> tax.SettlementDayRatesService (the settlement days in USD: Flex's, and the typed trades' estimated)
+        │            └──> exchangerates.ExchangeRateDownloadService ──asks ExchangeRateDownloadSchedule which days are
+        │                   missing, then──> BankOfIsraelClient ──HTTPS──> the Bank of Israel (only those days)
+        │                   └──writes──> Postgres (exchange_rate)
         └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser (the runner, after the sync)
 
 SyncController ──> SyncService.syncNow() ──> TwsReader.readPortfolioUnlessBusy() — the same sync as above, then the
@@ -688,7 +725,11 @@ equal) added IB's Flex reports, stored as IB wrote them, signs included: `flex_t
 `transaction_time`, `settle_date`, `description`) and `flex_report` (the downloads' log: `from_date` / `to_date` as IB wrote
 them, `downloaded_at`, the two counts). Amounts are `NUMERIC` without a limit on their digits — the tax is computed from
 them to the agora, and no value of IB's may be rounded or refused —, IB's text is `TEXT`; no account number. Their
-entities and repositories live in the `tax` package (below).
+entities and repositories live in the `tax` package (below). `V17__exchange_rates.sql` (CAPITAL_GAINS_TAX_TODO.md session
+2, 2026-11-15) added `exchange_rate` (`currency` `VARCHAR(3)`, `rate_date`, `rate` `NUMERIC(12,6)` — shekels for one unit,
+the Bank of Israel's up to 3 decimals —, `UNIQUE (currency, rate_date)` with a generated `id`, like `daily_close`): the
+Bank of Israel's representative rates, one unbroken stretch per currency, a row never replaced. Its entity and repository
+live in the `exchangerates` package (below).
 `HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
@@ -711,7 +752,7 @@ analysis or a pick of an earlier scan was of), `InvestmentRecommendationReposito
 `deleteForContracts`) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V17__….sql`.
+  checksum): a schema change is a new `V18__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -732,12 +773,13 @@ Things that are easy to break:
 - Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
   `ManualPositionWriteServiceTest`, `InvestorWriteServiceTest`, `StockAnalysisRepositoryTest`, `AnalysisServiceTest`,
   `RecommendationsReadServiceTest`, `RecommendationAnalysisServiceTest`, `ScanServiceTest`, `SyncServiceTest`,
-  `alerts.AlertServiceTest`, `tax.FlexReportStorageServiceTest`, `tax.FlexDownloadServiceTest`) are `@DataJpaTest`s
+  `alerts.AlertServiceTest`, `tax.FlexReportStorageServiceTest`, `tax.FlexDownloadServiceTest`,
+  `tax.SettlementDayRatesServiceTest`, `exchangerates.ExchangeRateDownloadServiceTest`) are `@DataJpaTest`s
   against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
   database and compared table by table first). One that only adds a table or a column (V5, V6, V7, V9, V10, V11, V12,
-  V13, V14, V15, V16) or
+  V13, V14, V15, V16, V17) or
   a constraint (V8, after counting the rows it would refuse: none; V10's, which every stored row met) still gets the
   backup first, checked for the same row counts as the database (V12's: each table's `COPY` rows in the dump against a
   `count(*)`, 12 of 12 equal, 2026-10-29). `backup-db.sh` names a backup by the day, so a second backup
@@ -1241,6 +1283,58 @@ Things that are easy to break:
 - To download the history again (a field added to the query): delete the `flex_report` rows; the stored rows are then
   replaced by IB's id, not doubled.
 
+Session 2 (2026-11-15) adds to `tax` only which days the tax needs a rate of — the rates themselves are the
+`exchangerates` package's (below):
+- `SettlementDayRatesService.downloadMissingDollarRates(today)` (not transactional), called by
+  `api.SyncService.downloadMissingDollarRates` right after the Flex reports — they bring the account's settlement days —
+  of every sync that reached TWS: the settlement days in dollars of the Flex trades (buys too: a lot's cost in shekels is
+  at its buy's rate, decision 11) and cash transactions (`FlexTradeRepository` / `FlexCashTransactionRepository
+  .findSettleDatesInCurrency`; a fee is a tax shield), and of the typed trades (`db.TradeRepository
+  .findTradeDatesInCurrency`, a holding's or a manual position's), handed to `exchangerates.ExchangeRateDownloadService`.
+  Only the dollar: the Bank of Israel has no Hong Kong dollar rate in any series (checked 2026-11-15).
+- `UsSettlementDayEstimate(tradeDate).estimatedSettlementDay()`: a typed trade has no settlement day, so it is estimated —
+  one business day after the trade since 28.05.2024, two before, weekends skipped, US holidays unknown (it can be a day
+  early). Session 3 takes the real day from the trade's twin in Flex (same contract, same day) and this estimate only for
+  a typed trade Flex doesn't have; the download covers both, since a Flex day is already among the Flex trades'.
+
+The exchange rates are a package of their own, `portfolioboss.exchangerates` (console `[exchangerates]` /
+`[exchangerates error]`; the user's ask, 2026-11-15): a source of data, like `stocks` — it downloads, stores and answers
+"which rate does this day take", and knows nothing of trades or the tax. The pieces:
+- `BankOfIsraelClient` (a `@Component`, `RestClient`, no key): `exchangeRates(currency, period)` — the SDMX service's
+  `EXR` series `RER_{currency}_ILS`, `startperiod` / `endperiod`, `format=csv` —, read by `BankOfIsraelRatesReader` into
+  `BankOfIsraelRate(rateDate, rate)`s. A failure is an `exceptions.ExchangeRatesUnavailableException` with a short message
+  (never the HTML page the Bank of Israel answers an error with).
+- `BankOfIsraelRatesReader`: the columns found by their names (`TIME_PERIOD`, `OBS_VALUE`), not their places; a line
+  with another number of fields than the header, an unreadable day or rate, a missing column or an empty answer fails the
+  whole answer, naming the line.
+- `ExchangeRates(currency, ratesByDate)` — a currency's stored rates in a `TreeMap` — and its rule (decision 1, 2.2):
+  `rateForSettlementDay(day)` is the day's own rate, or the last one before it (`floorEntry`) when the day is inside the
+  stored stretch; empty after the last stored rate (not published yet, or a holiday not yet told apart) and before the
+  first. `knowsRateForSettlementDay(day)`. Session 3 converts with it. Built by `ExchangeRateRepository.storedRatesOf
+  (currency)`, one query.
+- `ExchangeRateDownloadSchedule(storedRates, settlementDaysNeedingARate, today).periodsToDownload()`: only the days
+  really missing, checked before any call (the user's rule) — a settlement day up to today the stored rates don't know;
+  a later one can't be published yet. Nothing missing: no call. Nothing stored: from two weeks before the earliest
+  missing day to today. Before the first stored rate: from two weeks before it to the day before the first stored rate.
+  After the last: from the day after it to today. Both: two calls, oldest first. Each call starts or ends next to the
+  stored stretch, so it stays unbroken and no stored day is asked again; the two weeks bring the earliest day's "last rate
+  before it".
+- `ExchangeRateDownloadService.downloadMissingRates(currency, settlementDaysNeedingARate, today)` (not transactional, a
+  `ReentrantLock` like Flex's): the schedule, the client, `saveAll` of what came; a failure is printed and stops the rest,
+  never the sync — the next sync asks again for what is still missing.
+Things that are easy to break:
+- The Bank of Israel answers a period without any rate — a weekend, a holiday, today's rate before it is out (it
+  publishes in the afternoon) — with **HTTP 404 and an HTML page**, not an empty CSV, and the same for a series that
+  doesn't exist. So a 404 is "no rate" unless the period is longer than 14 days (`MAX_DAYS_WITHOUT_ANY_RATE`): then the
+  series is gone, and it is an error naming it.
+- The Bank of Israel publishes Monday to Friday, except on Israeli and international holidays (1.1, Good Friday, 25–26.12,
+  …): 93 weekdays without a rate in 2020–2026, at most 7 days between two rates (`BankOfIsraelRate
+  .LONGEST_GAP_BETWEEN_RATES_IN_DAYS`; Pesach 2023 and 2026). Both two-week numbers are twice it. Some of the account's
+  settlement days fall on such a day: the "last rate before it" is an assumption seen in one case only (December 2025)
+  — the ✓ of session 4 will check it.
+- Only the edges of the stored stretch are ever extended. A gap inside it would read as a holiday and give a wrong rate —
+  never store rates of a period that isn't next to the stretch.
+
 The Overview's weight graphs and the holding drawer's Weight tab (2026-10-13) are worked out in the UI from what
 `/api/portfolio` already sends — no endpoint, nothing stored. Both show a row of tabs (`graphs/WeightsTabs.tsx`, hidden
 with a single investor): **Portfolio**, then each investor, the account owner first. A tab is an `InvestmentsAndCash`
@@ -1518,24 +1612,32 @@ Things that are easy to break:
   at startup without a key; on a sync `[tax] Flex: asking IB for 2026-11-03 – 2026-11-13`, then `[tax] Flex: 41 trades, 6
   cash transactions (2026-11-03 – 2026-11-13)` per period; `[tax] Flex skipped: already read up to 13.11`
   (or `another download is running`), and `[tax error] Flex: IB refused the request: 1012 Token has expired.` when it fails (the
-  sync stays stored).
+  sync stays stored). The exchange rates print, on a sync that misses some, `[exchangerates] Bank of Israel: asking for
+  the USD rates of 2026-11-14 – 2026-11-16`, then `[exchangerates] Bank of Israel: stored 3 USD rates (2026-11-12 –
+  2026-11-16)` or `[exchangerates] Bank of Israel: no USD rate published in 2026-11-14 – 2026-11-16`; `[exchangerates]
+  Bank of Israel skipped: every settlement day up to 16.11 has its USD rate` (or `another download is running`); and
+  `[exchangerates error] no answer from the Bank of Israel (Read timed out)` when it fails (the sync stays stored).
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
   `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`, `stocks` / `[stocks]`, `alerts` /
-  `[alerts]`, `tax` / `[tax]`. `calculation`, `model`, `utils` and `exceptions` print nothing.
+  `[alerts]`, `tax` / `[tax]`, `exchangerates` / `[exchangerates]`. `calculation`, `model`, `utils` and `exceptions`
+  print nothing.
 - A feature of several files gets a package of its own, named after it, holding all of it — data, rules, entities,
   service, controller, `request/`, `response/` — rather than a file in each layer's package (`alerts`, 2026-11-11, the
   user's call: "the files spread over the packages is really bad"); only what is general (`PortfolioWeightsCalculator`,
   `DailyClosesWithSpy`) goes to `calculation`.
 - Package dependencies point one way, with no cycle: `utils ← ai ← model ← calculation ← db ← api`, and `ib` — which
   uses none of them — is used by `calculation`, `db` and `api`. `exceptions` (2026-10-26, the user's request: the app's
-  own exceptions in one package — `TwsUnavailableException`, `TwsBusyException`) uses nothing and is used by `ib` and
-  `api`. `stocks` (2026-10-27: Finnhub's client and what it reads) uses only `utils`; like `ib` it is a source of data,
+  own exceptions in one package — `TwsUnavailableException`, `TwsBusyException`) uses nothing and is used by `ib`,
+  `api`, `tax` and `exchangerates`. `stocks` (2026-10-27: Finnhub's client and what it reads) uses only `utils`; like `ib` it is a source of data,
   used by `calculation`, `db` and `api` (since session 3). `alerts` (2026-11-11) sits on top of them all: it uses `api`
   (only `RecommendationsReadService`, for the short list), `db`, `calculation`, `ib`, `stocks` and `model`, and no package
   uses it — `api.SyncService` announces a sync with `PortfolioSyncedEvent` instead of calling it. `tax` (2026-11-15, the
   capital gains tax) is the other way round, **under** `api`: `api.SyncService` calls `tax.FlexDownloadService` directly,
   and later sessions will have `api` use it for the investors' cash, so it must never use `api` (a cycle); it uses `db`
-  (`TradeRepository`), `exceptions` (`FlexReportUnavailableException`) and `utils`. `TwsPortfolioRunner`
+  (`TradeRepository`), `exchangerates`, `exceptions` (`FlexReportUnavailableException`) and `utils`. `exchangerates`
+  (2026-11-15, the Bank of Israel's rates) is **under** `tax`: a source of data like `stocks`, it uses only `exceptions`
+  (`ExchangeRatesUnavailableException`), is told which days need a rate (`tax.SettlementDayRatesService`), and must never
+  use `tax` or `api` (a cycle: `tax` converts with its `ExchangeRates`). `TwsPortfolioRunner`
   (the root package) uses `api.SyncService`. `calculation` holds only what computes; the
   data it computes on lives where it comes from — IB's readings in `ib`, Claude's answer in `ai`, Finnhub's in `stocks` —
   or, when the whole app shares
@@ -1620,7 +1722,7 @@ Things that are easy to break:
   browser-checked — his first look moved the bell to the left of the name), with no daily run (decision 14)
   and the alerts' channel left for later; session 4 (holdings that move together, a market drop of 20%) waits.
   CAPITAL_GAINS_TAX_TODO.md is the current plan (TODO.md's "nice-to-have" tax, brought in by the user): session 1, IB's
-  Flex reports downloaded and stored on every sync (`tax`, V16), is built; the rates (2), the calculation (3), the ✓
-  (4) and the Taxes page (5) follow. HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
+  Flex reports downloaded and stored on every sync (`tax`, V16), and session 2, the Bank of Israel's dollar rates of the
+  settlement days (`exchangerates`, V17), are built; the calculation (3), the ✓ (4) and the Taxes page (5) follow. HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. There is **no written thesis per holding** (decided 2026-10-06: data, not text): the product is the data on
   each holding that helps decide whether to stay in it — not the IB reader.
