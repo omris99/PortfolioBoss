@@ -13,6 +13,7 @@ import portfolioboss.ib.TwsReader;
 import portfolioboss.ib.TwsReading;
 import portfolioboss.stocks.FinnhubClient;
 import portfolioboss.stocks.Stock;
+import portfolioboss.tax.FlexDownloadService;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -30,10 +31,11 @@ import java.util.concurrent.Future;
  * (MY_HOLDINGS_TODO.md, session 5א): whether a scan is due, then the reading from TWS through {@link TwsReader} — the
  * portfolio, the scan when due, the holdings' contract details and Dow Jones targets, the daily closes —, then what
  * Finnhub knows about the holdings in dollars, then all of it stored in one transaction
- * ({@link PortfolioSyncService}), then a {@link PortfolioSyncedEvent} for whoever reacts to a sync — the alerts.
+ * ({@link PortfolioSyncService}), then a {@link PortfolioSyncedEvent} for whoever reacts to a sync — the alerts —, and
+ * last the days of IB's Flex reports not stored yet ({@link FlexDownloadService}, CAPITAL_GAINS_TAX_TODO.md, session 1).
  *
- * <p>Not {@code @Transactional}: reading TWS and asking Finnhub take seconds, and no database connection should wait on
- * them. The store at the end is a transaction of its own.
+ * <p>Not {@code @Transactional}: reading TWS, asking Finnhub and waiting for IB to prepare a Flex report take seconds,
+ * and no database connection should wait on them. Each store is a transaction of its own.
  */
 @Service
 public class SyncService {
@@ -51,13 +53,15 @@ public class SyncService {
     private final PortfolioSyncService portfolioSyncService;
     private final FinnhubClient finnhubClient;
     private final ApplicationEventPublisher eventPublisher;
+    private final FlexDownloadService flexDownloadService;
 
     public SyncService(TwsReader twsReader, PortfolioSyncService portfolioSyncService, FinnhubClient finnhubClient,
-                       ApplicationEventPublisher eventPublisher) {
+                       ApplicationEventPublisher eventPublisher, FlexDownloadService flexDownloadService) {
         this.twsReader = twsReader;
         this.portfolioSyncService = portfolioSyncService;
         this.finnhubClient = finnhubClient;
         this.eventPublisher = eventPublisher;
+        this.flexDownloadService = flexDownloadService;
     }
 
     /**
@@ -72,6 +76,7 @@ public class SyncService {
             return;
         }
         storeWithFinnhubData(reading);
+        downloadMissingFlexReports(reading.snapshot());
     }
 
     /**
@@ -83,6 +88,7 @@ public class SyncService {
     public SyncRunResponse syncNow() throws InterruptedException {
         TwsReading reading = twsReader.readPortfolioUnlessBusy(isScanDue());
         storeWithFinnhubData(reading);
+        downloadMissingFlexReports(reading.snapshot());
         PortfolioSnapshot snapshot = reading.snapshot();
         return new SyncRunResponse(snapshot.asOf(), snapshot.holdings().size());
     }
@@ -110,6 +116,20 @@ public class SyncService {
     }
 
     /**
+     * The days of IB's Flex reports not stored yet, up to the sync's day ({@link FlexDownloadService}). After the store
+     * and the alerts: a day's first sync waits for IB to prepare a report, and nothing before it needs one. A failure
+     * here never fails the sync — {@code FlexDownloadService} prints it.
+     */
+    private void downloadMissingFlexReports(PortfolioSnapshot snapshot) throws InterruptedException {
+        flexDownloadService.downloadWhatIsMissing(syncDateOf(snapshot));
+    }
+
+    /** The sync's day, by the local calendar: Finnhub's "today", and the day the Flex reports are downloaded up to. */
+    private LocalDate syncDateOf(PortfolioSnapshot snapshot) {
+        return LocalDate.ofInstant(snapshot.asOf(), ZoneId.systemDefault());
+    }
+
+    /**
      * What Finnhub knows about each holding in dollars — its next report and four of the company's figures
      * (MY_HOLDINGS_TODO.md, decision 10) —, every holding at once. Only the symbol leaves the app. Empty without the
      * key; a holding whose call failed is left out, and keeps what was stored before.
@@ -118,7 +138,7 @@ public class SyncService {
         if (!finnhubClient.hasApiKey()) {
             return Map.of();
         }
-        LocalDate today = LocalDate.ofInstant(snapshot.asOf(), ZoneId.systemDefault());
+        LocalDate today = syncDateOf(snapshot);
         List<Holding> holdingsInDollars = snapshot.holdings().stream()
                 .filter(holding -> US_DOLLAR.equals(holding.currency()))
                 .toList();

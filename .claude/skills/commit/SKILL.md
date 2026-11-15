@@ -49,8 +49,9 @@ analysis of the short list with Finnhub's earnings date and company figures, the
 score, and the code's pick, stored for the measurement; on the page, the recommendation card with Analyze & recommend,
 an Analyze per stock, a detail line under each analyzed Hot row, and the drawer's Analysts & news, Company and If I buy
 tabs — and the analysts' target: Dow Jones's headlines read with every scan, the median of the firms' targets, and the
-short list of the hot stocks with enough upside — Sync now, the startup's reading on demand (`POST /api/syncs`) — and the
-alerts: checked on every sync, a bell in the top bar and a settings drawer behind its ⚙):*
+short list of the hot stocks with enough upside — Sync now, the startup's reading on demand (`POST /api/syncs`) — the
+alerts: checked on every sync, a bell in the top bar and a settings drawer behind its ⚙ — and the capital gains tax's
+first part: IB's Flex reports, downloaded on every sync and stored):*
 
 | Scope | Covers |
 |---|---|
@@ -58,12 +59,13 @@ alerts: checked on every sync, a bell in the top bar and a settings drawer behin
 | `report` | the console snapshot report and its formatting |
 | `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`, which the service puts together), `HoldingWriteController` + `HoldingWriteService` (trade writes; the sector is IB's since 2026-11-05), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `AnalysisController` + `AnalysisService` (`POST /api/analysis`: runs the holdings' analysis and stores it), `RecommendationsController` + `RecommendationsReadService` (`GET /api/recommendations`), `RecommendationAnalysisController` + `RecommendationAnalysisService` (`POST /api/recommendations/analysis`: the short list's analysis, Finnhub, the pick), `CandidateWithItsList`, `ShortList`, `ScanController` + `ScanService` (`POST /api/scans`: a new scan through `TwsReader`), `SyncController` + `SyncService` (since 2026-11-11: the sync from TWS, the startup's and Sync now's `POST /api/syncs`; it publishes `PortfolioSyncedEvent`), `ApiErrorHandler` (also TWS's 409 / 503), and the `api/request/` and `api/response/` records |
 | `alerts` | `portfolioboss.alerts` (since 2026-11-11) — the whole feature in one package: `AlertType`, `ThresholdUnit`, `AlertKey`, `AlertCondition`, `AlertSetting(s)`, the rules (`HoldingAlertsCalculator`, `AlertChangesCalculator`), the `alert` and `alert_setting` tables (`AlertEntity`, `AlertSettingEntity` + repositories), `AlertService`, `AlertsAfterSync` (checks after every sync), `AlertController` (`GET /api/alerts`, `POST /api/alerts/seen`, `PUT /api/alerts/settings`), and its `request/` and `response/` records |
+| `tax` | `portfolioboss.tax` (since 2026-11-15, CAPITAL_GAINS_TAX_TODO.md) — the capital gains tax in one package, under `api`: so far IB's Flex reports — `FlexClient` (IB's Flex Web Service, `FLEX_TOKEN` / `FLEX_QUERY_ID` from `config/local.env`), `FlexReportReader` and the records of a report (`FlexReport`, `FlexReportPeriod`, `FlexReportTrade`, `FlexReportCashTransaction`, `FlexReportRequestStatus`), `FlexDownloadSchedule` (which periods are due, weekdays only), the `flex_trade`, `flex_cash_transaction` and `flex_report` tables (`FlexTradeEntity`, `FlexCashTransactionEntity`, `FlexReportEntity` + repositories), `FlexReportStorageService` and `FlexDownloadService` (called by `api.SyncService` on every sync) |
 | `ai` | `portfolioboss.ai` — `AiKeys` (the two API keys from `config/local.env`), `TavilyClient` + `SearchResult` / `SearchResults` / `StockSearches` (the four searches, the symbol filter, and what is kept with an analysis), `StockAnalyzer` + `StockToAnalyze` / `ClaudeReply` (the call to Claude), `StockAnalysisPipeline` + `StockAnalysisOutcome` / `StockAnalysisRun` (the searches then Claude, every stock at once — shared by both Analyze runs), and the shape of Claude's answer (`StockAnalysisResult`, `SourceConsensus`, `RatingCounts`, `AnalystAction`, `Headline`, `MoveReason`, `NewsEvent`, `AnalystRating`, `AnalystActionType`, `Sentiment`, `NewsEventType`, `EventMagnitude`), which is also its JSON schema |
 | `stocks` | `portfolioboss.stocks` (since 2026-10-27) — `FinnhubClient` (Finnhub's two calls, with its own `FINNHUB_API_KEY` from `config/local.env`; called on Analyze and, for the holdings in USD, on every `./run.sh`) and what Finnhub reports about a stock (`Stock`, `EarningsDate`, `CompanyFacts`) |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection, `JsonColumnMapper` for the `JSONB` column), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
 | `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`, `NotPickableReason`), `AnalystConsensus`, and the news score's parts with their points (`WeighedNewsEvent`, `WeighedAnalystMove`) |
 | `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `AnalystTargetCalculator`, `RecommendationCandidate`, `RecommendationCalculator`, `NewsScoreCalculator`, `RiskSignsCalculator`, `OrderCommission`, `DailyClosesWithSpy`, `PortfolioWeightsCalculator` (both 2026-11-11): derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score and the year's figures, the analysts' consensus and trend and the dot, the hot-stock rule and the page's order, the correlations, when a scan is due, the analysts' target from Dow Jones, the risk signs and the timing note (a scanned stock's and a holding's), the news score and the pick, the default commission, a stock's momentum against SPY from the stored closes, a holding's share of the whole account — no Spring, no database |
-| `exceptions` | `portfolioboss.exceptions` (since 2026-10-26) — the app's own exceptions (`TwsUnavailableException`, `TwsBusyException`) |
+| `exceptions` | `portfolioboss.exceptions` (since 2026-10-26) — the app's own exceptions (`TwsUnavailableException`, `TwsBusyException`, `FlexReportUnavailableException`) |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) — its pages, the Recommendations page's pieces in `components/recommendations/`, the Averaging calculator's in `components/averagingCalculator/`, the alerts bell and settings drawer in `components/alerts/`, and what a holding and a scanned stock both show in `components/companyInfo/` and `components/AnalystTarget.tsx` — and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 
@@ -93,12 +95,14 @@ Tests (`src/test/`) take the scope of the code they cover.
 - The body should explain *what* and *why*, not restate the diff line by line
 - This project is **read-only toward IB by design** — a commit that adds `placeOrder`, `cancelOrder`, any
   order-related callback, an API endpoint that writes anything other than PortfolioBoss's own data (the hand-entered
-  trades, manual positions, investors and their deposits, the stock analyses, the scans, the recommendations, a sync,
-  and the alerts with their settings),
+  trades, manual positions, investors and their deposits, the stock analyses, the scans, the recommendations, a sync —
+  with the Flex reports it downloads —, and the alerts with their settings),
   CORS configuration, a
   write endpoint that accepts something other than JSON, binding beyond localhost, a second place that connects to TWS
   besides `ib.TwsReader`, or sending a quantity, a cost, an investor or the account number to Tavily or Claude — or
-  anything but a symbol to Finnhub — is a signal something is wrong; flag it instead of committing
+  anything but a symbol to Finnhub, or anything but the token, the query's number and two dates to IB's Flex Web
+  Service, or printing an address `FlexClient` called (the token is in it) — is a signal something is wrong; flag it
+  instead of committing
 - If `$ARGUMENTS` is provided, use it as the commit message (skip analysis)
 
 ## Arguments

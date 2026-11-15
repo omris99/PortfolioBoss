@@ -26,9 +26,11 @@ import portfolioboss.stocks.CompanyFacts;
 import portfolioboss.stocks.EarningsDate;
 import portfolioboss.stocks.FinnhubClient;
 import portfolioboss.stocks.Stock;
+import portfolioboss.tax.FlexDownloadService;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -40,12 +42,14 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
  * The sync of the startup and of the Sync now button against the real PostgreSQL test database, with {@link TwsReader}
- * and {@link FinnhubClient} replaced by stand-ins ({@code @MockitoBean}): no test connects to TWS or asks Finnhub. TWS
- * reports two made-up holdings, one in dollars and one in Hong Kong dollars.
+ * and {@link FinnhubClient} replaced by stand-ins ({@code @MockitoBean}): no test connects to TWS or asks Finnhub —
+ * and {@link FlexDownloadService} too, so none calls IB's Flex Web Service either. TWS reports two made-up holdings, one
+ * in dollars and one in Hong Kong dollars.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -80,6 +84,10 @@ class SyncServiceTest {
 
     @MockitoBean
     private FinnhubClient finnhubClient;
+
+    /** Its own tests are {@code tax.FlexDownloadServiceTest}; here only whether, and up to which day, the sync asks. */
+    @MockitoBean
+    private FlexDownloadService flexDownloadService;
 
     /** The events published during each test: the alerts are checked on {@link PortfolioSyncedEvent}. */
     @Autowired
@@ -152,6 +160,32 @@ class SyncServiceTest {
         syncService.syncAtStartup();
 
         assertThat(applicationEvents.stream(PortfolioSyncedEvent.class)).hasSize(2);
+    }
+
+    /** The startup's sync and Sync now alike download the Flex reports not stored yet, up to the sync's day. */
+    @Test
+    void aStoredSyncDownloadsTheMissingFlexReportsUpToItsDay() throws InterruptedException {
+        given(twsReader.readPortfolioUnlessBusy(anyBoolean())).willReturn(readingOfTwoHoldings());
+        given(twsReader.readPortfolio(anyBoolean())).willReturn(readingOfTwoHoldings());
+
+        syncService.syncNow();
+        syncService.syncAtStartup();
+
+        verify(flexDownloadService, times(2))
+                .downloadWhatIsMissing(LocalDate.ofInstant(SYNCED_AT, ZoneId.systemDefault()));
+    }
+
+    /** CAPITAL_GAINS_TAX_TODO.md, session 1.4: the reports are downloaded only by a sync that reached TWS. */
+    @Test
+    void aSyncThatReadNothingDownloadsNoFlexReport() throws InterruptedException {
+        given(twsReader.readPortfolio(anyBoolean())).willReturn(null);
+        given(twsReader.readPortfolioUnlessBusy(anyBoolean())).willThrow(new TwsUnavailableException(
+                "TWS is not reachable: open TWS and log in, then try again.", "Connection refused"));
+
+        syncService.syncAtStartup();
+        assertThatThrownBy(() -> syncService.syncNow()).isInstanceOf(TwsUnavailableException.class);
+
+        verify(flexDownloadService, never()).downloadWhatIsMissing(any());
     }
 
     @Test

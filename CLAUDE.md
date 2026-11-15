@@ -122,9 +122,23 @@ button in the top bar that reads TWS as the startup does (`POST /api/syncs`), br
 and **the alerts** (5ב) are checked on every sync, against the alerts still open: nine kinds (decisions 6 and 16), a
 **bell** at the top bar's left with the number not yet seen (decision 15, the accent blue), and a settings drawer behind
 its ⚙ (decision 17: each kind on or off, four numbers), all in a package of its own, `alerts` (his ask). 5ב is built (505
-tests, V15 on the real database after a backup, 14 of 14 tables equal) and his first browser look moved the bell to the
-left of the name; the rest of its check is open. The alerts' channel (session 6, Telegram) is a plan for later. Session 4
-(holdings that move together, a market drop of 20%) is next.
+tests, V15 on the real database after a backup, 14 of 14 tables equal) and browser-checked by him (2026-11-13); his
+first look moved the bell to the left of the name. The alerts' channel (session 6, Telegram) is a plan for later. Session 4
+(holdings that move together, a market drop of 20%) waits.
+
+[CAPITAL_GAINS_TAX_TODO.md](CAPITAL_GAINS_TAX_TODO.md) (2026-11-13/14) is the current plan: the capital gains tax of every
+sale in the account, in shekels and exactly as Phoenix — the Israeli broker the account is opened through, which withholds
+the tax — computes it (the settlement day's Bank of Israel rate, FIFO lot by lot, a yearly balance settled at each month's
+end), each investor's part, and a ✓ against what Phoenix actually withheld, on a seventh page, Taxes, designed in Claude
+Design first. Its source for the account is **IB's Flex Web Service** (decision 13): the account's every trade, the day
+trades the database leaves out on purpose included, with IB's real commissions and settlement days. Session 1 (2026-11-15,
+551 tests) is built: a new package, `tax`, that downloads IB's Flex reports on every sync and stores them in V16's
+`flex_trade`, `flex_cash_transaction` and `flex_report` — the history from the year of the earliest trade typed in, then
+only the missing days, each period starting and ending on a weekday: the first live runs found that **IB refuses a
+period that starts or ends on a Saturday or a Sunday** (1003 "Statement is not available"; the user confirmed it by hand
+on IB's site). V16 is on the real database since that day's `./run.sh` (after `portfolioboss-2026-11-15.sql.gz`, 16 of
+16 tables equal), and the whole history is stored, 2021-01-01 to 2026-11-13, without a gap or a double. Session 2 (Bank
+of Israel's rates) is next.
 
 ## Hard invariant: read-only
 
@@ -155,7 +169,13 @@ investor or the account number (AI_ANALYSIS_TODO.md, decision 8), and nothing ab
 sends Finnhub only a symbol (RECOMMENDATIONS_TODO.md, decision 8), from two callers: the second endpoint, on its button,
 and `api.SyncService`, for each open holding in USD (MY_HOLDINGS_TODO.md, decision 10: on a foreign exchange IB's symbol
 is not Finnhub's and may be another company's) — **without a button press** on every `./run.sh` that reached TWS, and
-on Sync now. Two endpoints read TWS, both read-only and free, through the same `ib.TwsReader` as `./run.sh`:
+on Sync now. `tax.FlexClient` (CAPITAL_GAINS_TAX_TODO.md, session 1) downloads reports from IB's Flex Web Service, over
+HTTPS — read only: the service gives reports and nothing else, no way to trade or move money — and sends it only the
+token, the query's number and the two dates of a period, nothing about the portfolio; **without a button press**, from
+`api.SyncService` after every sync that reached TWS, and only for the days not stored yet (none after a day's first sync).
+IB takes the token only in the address (`t=`), so no error of the client may print the address (`FlexClient` turns each
+failure into a message of its own; `FlexClientTest` checks the token is in none). The account number in IB's reports is
+never stored. Two endpoints read TWS, both read-only and free, through the same `ib.TwsReader` as `./run.sh`:
 `ScanController` (`POST /api/scans`, the Scan again button: a scan) and `SyncController` (`POST /api/syncs`, Sync now:
 the startup's whole reading). The alerts send nothing out of the machine (their channel is a plan for later).
 `PortfolioController` and `RecommendationsController` stay GET-only, and `GET /api/alerts` is `AlertController`'s one
@@ -167,7 +187,8 @@ only as text or a form (415 here), while JSON, PUT and DELETE need a CORS prefli
 other site can start a paid run, and `POST /api/scans`, `POST /api/syncs` and `POST /api/alerts/seen` take `{}`
 (`ScanRequest`, `SyncRequest`, `AlertsSeenRequest`, records with nothing in them) for the same reason. Don't add CORS
 configuration, don't add an endpoint that writes anything other than PortfolioBoss's own data (what the user enters, the
-analyses, the recommendations, the scans, a sync, and the alerts with their settings), and don't expose the API beyond localhost (the connection to TWS and the API are both
+analyses, the recommendations, the scans, a sync — the Flex reports it downloads too —, and the alerts with their
+settings), and don't expose the API beyond localhost (the connection to TWS and the API are both
 unencrypted, which is fine only while local).
 
 ## Build & run
@@ -186,7 +207,8 @@ Boot 4's name, not `-web`), JUnit 5. [run.sh](run.sh) is a thin wrapper around `
 day: only when the market has closed since the last scan, `calculation.ScanSchedule` — otherwise `[ib] scan skipped:
 …`), reads the holdings' contract details (their sector and industry) and Dow Jones targets, asks Finnhub about the
 holdings in USD once TWS is disconnected, syncs it all into PostgreSQL, checks the alerts (`[alerts] checked: 2 new
-(ABCD, WXYZ), 1 no longer true`), and then keeps running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
+(ABCD, WXYZ), 1 no longer true`), downloads the days of IB's Flex reports not stored yet (`[tax] Flex: 41 trades, 6 cash
+transactions (2026-11-03 – 2026-11-13)`, or `[tax] Flex skipped: already read up to 13.11`), and then keeps running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
 and opens `http://localhost:5174` in the browser (stop everything with Ctrl+C). If TWS could not be
 read this run, it serves whatever the previous sync stored instead (see "Running requires TWS" below).
 The UI is a separate Vite app (Node 20.19+ — which is why react-router stays on 7.x: 8.x needs Node 22) whose
@@ -302,7 +324,22 @@ alert left open, saving the settings checks again, the newest first with each ho
 alert) and `AlertControllerTest` (the JSON and `no-store`, 204, a number out of range or for a type without one, days not
 whole, a type missing — 400 naming the line —, 415, 405); `FinnhubClientTest` Finnhub's two calls against a fake Finnhub (`MockRestServiceServer`,
 shortened copies of its real answers): the earliest report of a calendar out of order, an hour not known yet, a missing
-figure, an unknown symbol, a refused call, a key of spaces. After a
+figure, an unknown symbol, a refused call, a key of spaces. The Flex reports (package `tax`; **no test calls IB**):
+`FlexReportReaderTest` (a report of the real query's shape, made-up values, no account: a sale and a buy with IB's signs, a
+conversion to HKD with its commission in dollars, a dividend and its tax, a fee with no stock and its cancellation, the
+period IB wrote, empty sections, the three request statuses, a missing field and an unreadable one named, a `DOCTYPE`
+refused, an answer that isn't XML), `FlexClientTest` (a fake service, `MockRestServiceServer`: fetched once prepared, 1018
+tried again, a refused request or report not tried again, 12 tries and still not ready, no answer and an HTTP error —
+neither message holding the token —, the keys), `FlexDownloadScheduleTest` (the first download from the earliest typed
+trade's year in periods of 365 days — 2024, a leap year, ends on 30 December —, a first of January on a Saturday moved
+to the Monday, every period starting and ending on a weekday, the last 365 days without a trade, an update a week back,
+an update on a Sunday ending on the Friday — the period IB refused in the live run —, nothing once the last weekday is
+stored, a gap of more than a year, the first of January), `FlexReportStorageServiceTest` (`@DataJpaTest`: stored and
+logged, the same days again add no row, a changed row replaced, a row sent twice in one report stored once, the last
+stored date) and `FlexDownloadServiceTest` (`@DataJpaTest`, `FlexClient` a `@MockitoBean`: no keys nothing asked, the
+history oldest first, a failed period stopping the rest without an exception, an update, nothing once up to date);
+`SyncServiceTest` has `FlexDownloadService` as a `@MockitoBean` (a stored
+sync downloads up to its day, one that read nothing doesn't). After a
 change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
 would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
 `target/surefire-reports/` keeps the reports of tests that have since been deleted.
@@ -324,6 +361,10 @@ every day would pass the free plan and a few a week would not. **Finnhub's key**
 file and is optional too: without it the app prints `[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)`
 and only Finnhub's part is off — a scanned stock's on Analyze, and a holding's on every `./run.sh` (their stored answers
 stay). Its free plan allows 60 calls a minute; a stock is 2, so a portfolio of 10 holdings is 20 calls a run.
+**IB's Flex Web Service** (CAPITAL_GAINS_TAX_TODO.md, session 1) needs `FLEX_TOKEN` (made in IB's Client Portal under
+Flex Web Service, valid up to a year, can be locked to the home IP address) and `FLEX_QUERY_ID` (the number of the
+Activity Flex Query — XML, Trades as executions and Cash Transactions, its fields in session 1.1 of the plan) in the same
+file; without either the app prints `[tax] Flex off: FLEX_TOKEN is not set (config/local.env)` and downloads no report.
 
 **External dependency not in the repo:** the TWS API jar at `~/DevTools/twsapi/TwsApi.jar` (shared
 with IBBot). It is not on Maven Central, so `run.sh` registers it once in the local Maven repository
@@ -376,6 +417,9 @@ Main (Spring Boot: brings the web server up, then Spring runs the runner)
         ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state · daily_close · scan ·
         │                                                      analyst_price_target · stock)
         ├──publishes PortfolioSyncedEvent──> alerts.AlertsAfterSync ──> AlertService.checkAlerts() (alert rows)
+        ├──then──> tax.FlexDownloadService ──> FlexClient ──HTTPS──> IB's Flex Web Service (the days not stored yet)
+        │                                  └──> FlexReportStorageService ──writes──> Postgres (flex_trade ·
+        │                                                                   flex_cash_transaction · flex_report)
         └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser (the runner, after the sync)
 
 SyncController ──> SyncService.syncNow() ──> TwsReader.readPortfolioUnlessBusy() — the same sync as above, then the
@@ -633,7 +677,18 @@ since that day, after `portfolioboss-2026-11-11.sql.gz`, 14 of 14 tables equal) 
 index, `alert_one_open_per_condition` on `(alert_type, con_id, subject) NULLS NOT DISTINCT WHERE ended_at IS NULL` (one open
 alert per condition even with a bug, and the index that finds the open ones), and `alert_setting` (`alert_type` the key,
 `enabled`, `threshold` `NUMERIC(5,2)`, `NULL` for a type without a number; a row only for a type saved). Their entities and
-repositories live in the `alerts` package (below), not in `db`.
+repositories live in the `alerts` package (below), not in `db`. `V16__flex_reports.sql` (CAPITAL_GAINS_TAX_TODO.md
+session 1, 2026-11-15; on the real database since that day, after `portfolioboss-2026-11-15.sql.gz`, 16 of 16 tables
+equal) added IB's Flex reports, stored as IB wrote them, signs included: `flex_trade` (one row per execution:
+`ib_trade_id` `UNIQUE`, `ib_order_id`, `con_id`, `symbol`, `asset_category` — `STK`, or `CASH` for a conversion —,
+`currency`, `trade_date`, `trade_time` — New York's time as IB writes it, `TIMESTAMP` without a zone —, `settle_date` — IB's
+`SettleDateTarget` —, `buy_sell`, `quantity`, `trade_price`, `ib_commission`, `ib_commission_currency`, `net_cash`,
+`transaction_type`), `flex_cash_transaction` (dividends, tax withheld, Other Fees and their cancellations:
+`ib_transaction_id` `UNIQUE`, `transaction_type`, `con_id` and `symbol` — `NULL` for a fee —, `currency`, `amount`,
+`transaction_time`, `settle_date`, `description`) and `flex_report` (the downloads' log: `from_date` / `to_date` as IB wrote
+them, `downloaded_at`, the two counts). Amounts are `NUMERIC` without a limit on their digits — the tax is computed from
+them to the agora, and no value of IB's may be rounded or refused —, IB's text is `TEXT`; no account number. Their
+entities and repositories live in the `tax` package (below).
 `HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
@@ -656,7 +711,7 @@ analysis or a pick of an earlier scan was of), `InvestmentRecommendationReposito
 `deleteForContracts`) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V16__….sql`.
+  checksum): a schema change is a new `V17__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -677,11 +732,12 @@ Things that are easy to break:
 - Database tests (`PortfolioSyncServiceTest`, `PortfolioReadServiceTest`, `HoldingWriteServiceTest`,
   `ManualPositionWriteServiceTest`, `InvestorWriteServiceTest`, `StockAnalysisRepositoryTest`, `AnalysisServiceTest`,
   `RecommendationsReadServiceTest`, `RecommendationAnalysisServiceTest`, `ScanServiceTest`, `SyncServiceTest`,
-  `alerts.AlertServiceTest`) are `@DataJpaTest`s against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
+  `alerts.AlertServiceTest`, `tax.FlexReportStorageServiceTest`, `tax.FlexDownloadServiceTest`) are `@DataJpaTest`s
+  against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
   database and compared table by table first). One that only adds a table or a column (V5, V6, V7, V9, V10, V11, V12,
-  V13, V14, V15) or
+  V13, V14, V15, V16) or
   a constraint (V8, after counting the rows it would refuse: none; V10's, which every stored row met) still gets the
   backup first, checked for the same row counts as the database (V12's: each table's `COPY` rows in the dump against a
   `count(*)`, 12 of 12 equal, 2026-10-29). `backup-db.sh` names a backup by the day, so a second backup
@@ -1136,6 +1192,55 @@ unseen rows); `PUT /api/alerts/settings` (204, `@Valid AlertSettingsRequest` —
   it in a check, since a check changes only `ended_at` and adds rows.
 - `ui/src/components/alerts/alertTexts.ts` copies `ThresholdUnit`'s ranges by hand: change both together.
 
+The capital gains tax (CAPITAL_GAINS_TAX_TODO.md) is a package of its own, `portfolioboss.tax` (console `[tax]` /
+`[tax error]`), under `api` (see Conventions). Session 1 (2026-11-15) downloads **IB's Flex reports** and stores them —
+the account's every execution and cash transaction as IB reported it, for the tax the later sessions compute; nothing
+reads them yet, and nothing here touches `trade` or `holding`. The query is the user's, on IB's site (the plan's 1.1):
+XML, Trades as executions (with `IBOrderID` and `Date/Time`), Cash Transactions, no Statement of Funds (the Cash
+Transfers to and from Phoenix appear only there, decision 8, and the tax doesn't need them). The pieces:
+- `FlexClient` (a `@Component`, `RestClient` like `FinnhubClient`, both keys — `hasKeys()`, the startup's `[tax] Flex off`
+  line): `downloadReport(requestedPeriod)` is `SendRequest` (`t`, `q`, `fd` / `td` — the period in place of the query's
+  own, at most 365 days both ends included —, `v=3`) for a reference code, then `GetStatement` by it after a 10-second
+  wait, again while IB answers "Please try again shortly" (`FlexReportRequestStatus.saysTryAgainShortly()`: 1001,
+  1004–1009, 1018, 1019, 1021), 12 tries at most; any other status fails at once with IB's code and words. Every failure is
+  a `exceptions.FlexReportUnavailableException` whose message never holds the address (`callFlexWebService`,
+  `reasonWithoutTheAddress`).
+- `FlexReportReader` (Java's own DOM reader — no Jackson XML, which would have Spring read and write XML on every endpoint
+  —, a `DOCTYPE` refused): `isReport` (`<FlexQueryResponse>`, against `<FlexStatementResponse>`, the service's status),
+  `readReport` → `FlexReport(period, trades, cashTransactions)` of `FlexReportPeriod`, `FlexReportTrade` and
+  `FlexReportCashTransaction` — IB's fields under readable names, IB's signs —, `readRequestStatus` →
+  `FlexReportRequestStatus(status, referenceCode, errorCode, errorMessage)`. A field the tax needs that is missing or
+  unreadable fails the whole report naming the field and the row (`<Trade tradeID="…"> has no dateTime: is it ticked in
+  the Flex query?`); an empty attribute (`conid=""` on a fee) is `null`.
+- `FlexDownloadSchedule(lastStoredDate, earliestTypedTradeDate, today).periodsDue()`: up to the last weekday before today
+  (`lastDayToRead`; IB prepares a report once a day), in periods of at most 365 days, oldest first, each starting and
+  ending on a weekday (`firstWeekdayOnOrAfter`, `latestWeekdayOnOrBefore`) — never stored: from the first of January of
+  the earliest typed trade's year (`db.TradeRepository.findEarliestTradeDate()`, the user's choice: automatic, no
+  button); without a typed trade, the last 365 days; stored: from a week before the last stored day; stored up to the
+  last weekday: nothing.
+- `FlexReportStorageService` (`@Transactional`: `storeReport(report, downloadedAt)`, `lastStoredDate()`) and
+  `FlexDownloadService.downloadWhatIsMissing(today)` (not transactional; a `ReentrantLock` lets one download through,
+  the other prints `skipped`; the periods one after another, a failure stopping the rest), called by
+  `api.SyncService.downloadMissingFlexReports` after the store and the alerts of every sync that reached TWS — not at a
+  startup with TWS off (the user's OK).
+Things that are easy to break:
+- **IB refuses a period that starts or ends on a Saturday or a Sunday** with 1003 "Statement is not available" — IB
+  documents none of it. Found in the first live runs (2026-11-15: the four periods ending on a Saturday were refused, the
+  five ending on a Friday went through) and confirmed by the user by hand on IB's site. Two wrong readings came first and
+  were dropped: a pause between requests (60 s didn't help) and one report per sync (a period ending on a Saturday was
+  refused as a sync's first request too). The market's holidays are not known: a period starting or ending on one may be
+  refused as well — a 1003 with a weekday date would say so. Elsewhere 1003 is said to mean a period before the account
+  opened.
+- The token is in the address, and Spring's exceptions print the address: never let one of them reach a message or the
+  console from `FlexClient` (`FlexClientTest` checks both failure kinds).
+- A field unticked in the query fails every download from then on, with its name: tick it again, or make it optional in
+  `FlexReportReader` — after deciding the tax can do without it.
+- A period counts both its ends: 365 days is `fromDate.plusDays(364)`. A calendar leap year is 366, over IB's limit.
+- A row IB sends twice in one report is stored once (two new rows with one IB id would break the `UNIQUE`); a trade IB
+  cancels after it was stored stays stored — Flex doesn't mark a row as deleted (rare; the ✓ of session 4 would show it).
+- To download the history again (a field added to the query): delete the `flex_report` rows; the stored rows are then
+  replaced by IB's id, not doubled.
+
 The Overview's weight graphs and the holding drawer's Weight tab (2026-10-13) are worked out in the UI from what
 `/api/portfolio` already sends — no endpoint, nothing stored. Both show a row of tabs (`graphs/WeightsTabs.tsx`, hidden
 with a single investor): **Portfolio**, then each investor, the account owner first. A tab is an `InvestmentsAndCash`
@@ -1409,10 +1514,14 @@ Things that are easy to break:
   when its key is missing, and nothing when it is set; `[stocks error] SYMBOL: why` when a call fails during a run.
   The alerts print `[alerts] checked: 2 new (ABCD, WXYZ), 1 no longer true` (or `checked: nothing new, 0 no longer true`)
   after every sync and every save of the settings, and `[alerts error] could not check the alerts: …` when a check after a
-  sync fails (the sync stays stored).
+  sync fails (the sync stays stored). The Flex reports print `[tax] Flex off: FLEX_TOKEN is not set (config/local.env)`
+  at startup without a key; on a sync `[tax] Flex: asking IB for 2026-11-03 – 2026-11-13`, then `[tax] Flex: 41 trades, 6
+  cash transactions (2026-11-03 – 2026-11-13)` per period; `[tax] Flex skipped: already read up to 13.11`
+  (or `another download is running`), and `[tax error] Flex: IB refused the request: 1012 Token has expired.` when it fails (the
+  sync stays stored).
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
   `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`, `stocks` / `[stocks]`, `alerts` /
-  `[alerts]`. `calculation`, `model`, `utils` and `exceptions` print nothing.
+  `[alerts]`, `tax` / `[tax]`. `calculation`, `model`, `utils` and `exceptions` print nothing.
 - A feature of several files gets a package of its own, named after it, holding all of it — data, rules, entities,
   service, controller, `request/`, `response/` — rather than a file in each layer's package (`alerts`, 2026-11-11, the
   user's call: "the files spread over the packages is really bad"); only what is general (`PortfolioWeightsCalculator`,
@@ -1423,7 +1532,10 @@ Things that are easy to break:
   `api`. `stocks` (2026-10-27: Finnhub's client and what it reads) uses only `utils`; like `ib` it is a source of data,
   used by `calculation`, `db` and `api` (since session 3). `alerts` (2026-11-11) sits on top of them all: it uses `api`
   (only `RecommendationsReadService`, for the short list), `db`, `calculation`, `ib`, `stocks` and `model`, and no package
-  uses it — `api.SyncService` announces a sync with `PortfolioSyncedEvent` instead of calling it. `TwsPortfolioRunner`
+  uses it — `api.SyncService` announces a sync with `PortfolioSyncedEvent` instead of calling it. `tax` (2026-11-15, the
+  capital gains tax) is the other way round, **under** `api`: `api.SyncService` calls `tax.FlexDownloadService` directly,
+  and later sessions will have `api` use it for the investors' cash, so it must never use `api` (a cycle); it uses `db`
+  (`TradeRepository`), `exceptions` (`FlexReportUnavailableException`) and `utils`. `TwsPortfolioRunner`
   (the root package) uses `api.SyncService`. `calculation` holds only what computes; the
   data it computes on lives where it comes from — IB's readings in `ib`, Claude's answer in `ai`, Finnhub's in `stocks` —
   or, when the whole app shares
@@ -1505,8 +1617,10 @@ Things that are easy to break:
   sector and industry from IB — V13, V14 —, checked live 2026-11-05) and 3 (their UI, with `companyInfo` shared by a
   holding and a scanned stock) are in, and so is session 3ב (the Averaging calculator, a sixth page, UI only); session 5
   came before 4 (2026-11-11): Sync now (5א, browser-checked) and the alerts with their bell and settings drawer (5ב, V15,
-  built; its browser check under way — the bell already moved to the left of the name), with no daily run (decision 14)
-  and the alerts' channel left for later; session 4 (holdings that move together, a market drop of 20%) is next.
-  HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
+  browser-checked — his first look moved the bell to the left of the name), with no daily run (decision 14)
+  and the alerts' channel left for later; session 4 (holdings that move together, a market drop of 20%) waits.
+  CAPITAL_GAINS_TAX_TODO.md is the current plan (TODO.md's "nice-to-have" tax, brought in by the user): session 1, IB's
+  Flex reports downloaded and stored on every sync (`tax`, V16), is built; the rates (2), the calculation (3), the ✓
+  (4) and the Taxes page (5) follow. HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. There is **no written thesis per holding** (decided 2026-10-06: data, not text): the product is the data on
   each holding that helps decide whether to stay in it — not the IB reader.

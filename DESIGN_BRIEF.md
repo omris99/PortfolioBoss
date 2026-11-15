@@ -19,7 +19,7 @@ is one labeled line rather than the design's row of slots under a second header.
 (2026-11-07): a new page, the Averaging calculator, designed before it is built, then built the same day from
 arrangement A. Four details follow the rest of the app instead of the design: the highlighter on "in 5 days" rather than
 on the date, the cash's hint as the browser's tooltip, the Weight tab's own sentences under "Not on this page", and 32px
-fields.
+fields. **Section 10 is the fifth round** (2026-11-14): a new page, Taxes, designed before it is built.
 
 ---
 
@@ -1038,3 +1038,188 @@ section holds the two. Cash 7,065.00.
     worked out: the whole account is unknown (IB reported no cash) or not above zero."
   - cash below zero: every purchase is short
   - a long sector name, and 15 holdings or more
+
+---
+
+## 10. Fifth round: the Taxes page
+
+A new, seventh page: **Overview · Positions · Averaging calculator · Closed · Investors · Recommendations · Taxes**, at
+`/taxes`. The account is opened through an Israeli broker that withholds Israeli capital gains tax on every sale made in
+it — called **the broker** below and on the page. The page works out that tax **exactly the way the broker does**, sale
+by sale, so that each entry on the broker's monthly statement can be checked off against it, and shows how much of the
+tax belongs to each investor. It is designed before it is built.
+
+Section 2's rules hold, with one change: this page shows new data (IB's full record of the account's trades, and Bank of
+Israel's exchange rates). The rest stands:
+- **Nothing is paid and nothing is sent:** the broker withholds the tax by itself. The page only works out and compares.
+- **The one thing saved is what the user confirms:** for a day, the amount the broker recorded, when, and a note.
+
+### 10.1 What the page is built on
+
+- **Every sale in the account,** from IB's own record of the trades — including **short trades** that PortfolioBoss
+  does not track as holdings (bought and sold within days). The broker taxes them too, so they count here, and only
+  here: they are marked "short trade" and appear nowhere else in the app.
+- **Shekels, at the rate of the settlement day.** Every amount is turned into shekels at Bank of Israel's representative
+  rate of the day the trade **settles** (the day the money and shares change hands, a trading day after the trade). The
+  page shows the settlement day, with the trade day under it.
+- **First in, first out.** A sale takes the shares bought first. Each block of shares bought together is a **lot**; a
+  sale may take from several lots. (The Closed page keeps the average cost: two different questions, and the page says
+  so where they differ.)
+- **The taxable gain of each lot is worked out two ways**, and the one **closest to zero** counts:
+  - **in dollars:** the gain in dollars × the sale's rate
+  - **in shekels:** what the sale brought in shekels − what the lot cost in shekels at its own rate
+  - both gains → the smaller gain · both losses → the smaller loss · a gain one way and a loss the other → **0**
+  - the sale's taxable gain is the sum of its lots'
+- **Tax is 25%.** A loss gives a **shield**: 25% of it, which takes tax off later gains.
+- **The broker records one entry per settlement day:** all the sales that settle that day together, as one "tax"
+  (a gain) or one "shield" (a loss). IB's fees (market data, a few dollars a month) are entries too: a cost gives a
+  small shield.
+- **A balance per year, settled at the end of each month.** The entries add up through the year. At the end of each
+  month:
+  - **tax owed → paid** (the broker takes it)
+  - **a shield, after tax was paid this year → refunded** (the broker gives it back, up to what was paid)
+  - **a shield, nothing paid yet this year → carried** to the next month
+  - **December 31:** what is left is refunded up to the tax paid that year; beyond that, it does not carry into the new
+    year.
+  - So the tax of the year so far is always 25% of the year's net taxable gain, never below zero.
+- **Checking off:** for each settlement day the user confirms that the broker recorded it, and corrects the amount when
+  it differs. Each month's settlement is shown for comparing with the broker's "tax paid" / "tax refunded" line.
+- **The tabs are the weights' (7.2):** Portfolio, then each investor, the account owner first; no row with one investor.
+  - **Portfolio** is the whole account: what the broker withholds, and where the checking off happens.
+  - **An investor's tab** works the same rules out on the trades entered for that investor (the broker doesn't know
+    who owns which share). It is read only. The other investors' tax is taken off their cash on the Investors page.
+  - **The account owner's tab** is the rest: the account's tax less the other investors'. It includes the short trades
+    and the fees, which are the owner's.
+
+### 10.2 The page, from the top (`/taxes`)
+
+1. **The title** "Taxes", with a quiet line under it: "Israeli capital gains tax on every sale in the account, worked out
+   the way the broker withholds it. Check each day off against its monthly statement."
+2. **The year:** a small select, "2026 ▾", defaulting to the year of the last sync.
+3. **The tab row** (7.2), only with several investors.
+4. **The year card:**
+   - **Tax this year so far:** "₪517.75", with "25% of a net taxable gain of ₪2,070.99" under it.
+   - **Settled:** "Paid ₪1,332.15 · Refunded ₪849.38".
+   - **Not settled yet:** "₪34.98 of tax this month" (the month isn't over) or "Shield carried ₪120.00".
+   - **Checking off:** "3 of 5 days confirmed · 1 differs".
+   - **The shield at year end,** only when there is a shield the broker won't refund (nothing, or not enough, was paid this
+     year): "₪310.00 of shield won't carry into 2027. Selling a stock in profit before Dec 31 would use it · 47 days
+     left." It is information for a decision (principle 2), not a warning.
+5. **The months, newest first.** A month is a section with a heading line, then one row per settlement day:
+   - **The month's heading line:** the month, its net entry and its settlement — "October 2026 · tax ₪34.98 · month not
+     over", "September 2026 · shield ₪849.38 → refunded", "June 2026 · tax ₪1,277.13 → paid", "April 2026 · tax ₪55.02 →
+     paid". With days still to confirm, a **Confirm the whole month** button.
+   - **A settlement day's row:**
+
+     | Column | Shows |
+     |---|---|
+     | Settles | "2026-06-19", the trade day under it ("traded 2026-06-18") |
+     | Sales | "TSLA · 20 shares" / "2 short trades" / "Fees · market data" |
+     | Taxable gain | "+₪5,108.50", in the profit/loss tone; "₪0.00" for a 0 |
+     | Entry | "Tax ₪1,277.13" or "Shield ₪849.38" |
+     | The broker recorded | empty until confirmed; then the amount ("₪1,279.40") |
+     | Status | to confirm · matches · differs · not computed yet · not computed |
+     | | **Confirm** (takes the entry as recorded), and a pencil to type the amount the broker recorded, with a note |
+
+   - **A day opens** (click or chevron) into its sales; **a sale opens** into its lots:
+
+     | | Lot bought | Shares | Cost | Sold for | In dollars | In shekels | Counts |
+     |---|---|---|---|---|---|---|---|
+     | TSLA | 2024-11-04, settled 11-06 · rate 3.750 | 20 | $4,205.00 = ₪15,768.75 | $6,845.00 = ₪20,877.25 (rate 3.050) | +$2,640.00 × 3.050 = +₪8,052.00 | +₪5,108.50 | the smaller gain: **+₪5,108.50** |
+
+     - Under a sale whose first-in-first-out cost differs from the average cost the Closed page uses, a quiet line: "For
+       tax: first in, first out, as the broker counts. The Closed page uses the average cost."
+     - A short trade has the grey tag "short trade · not tracked in PortfolioBoss".
+   - **Investors' tabs** show the same months and days, read only (no Confirm, no "The broker recorded" column), and
+     their year card ends with "Taken off Dana's cash: ≈ $11.39" (Dana's tab) or "The account's tax less Dana's" (the
+     owner's tab).
+6. **The footer line:** "Rates: Bank of Israel's representative rate of each settlement day. Trades: IB's report of
+   2026-10-10. Nothing is paid or sent: the broker withholds the tax itself."
+
+### 10.3 The states
+
+- **A day:**
+  - **to confirm:** nothing recorded yet
+  - **matches:** the broker recorded the amount worked out (within a shekel)
+  - **differs:** both amounts, "Worked out ₪1,277.13 · recorded ₪1,279.40"; it stays visible, it isn't hidden
+  - **not computed yet:** "Settles 2026-10-12: Bank of Israel's rate for that day isn't out yet." It counts in nothing.
+  - **not computed:** "In HKD: no rate for it yet — type the amount the broker recorded." The pencil is the way in.
+  - **not computed:** "Sold 30 shares but only 20 were bought before: check its trades." (an over-sell, §5.5)
+  - **a 0:** "Gain in dollars, loss in shekels: no tax and no shield." There is nothing for the broker to record, so
+    nothing to confirm.
+- **A month:** paid · refunded · shield carried · month not over · and, with days to confirm, the button.
+- **The page:**
+  - **IB's report not connected:** one card, "To work out the tax, PortfolioBoss needs IB's Flex report: add
+    FLEX_TOKEN and FLEX_QUERY_ID to config/local.env." Nothing else on the page.
+  - **The trade history not downloaded yet:** the same card with a **Download IB's history** button and its running
+    state ("Downloading 2024…"), then the page.
+  - **Bank of Israel not reachable:** the days without a rate are "not computed yet"; one quiet line above the months
+    says so.
+  - **A year with no sales:** "No sales in 2025."
+
+### 10.4 Colors and words
+
+- **The taxable gain** is profit or loss: the profit/loss tone (§4). **"Tax" and "Shield" are not:** plain text. A
+  refund is not green.
+- **Differs:** the **real** warning (solid orange triangle, orange text), like a holding's trades that don't match IB.
+- **Matches:** a quiet check, not green — green stays profit and the signal's "good".
+- **Not computed / not computed yet:** grey, with its reason.
+- **The shield at year end:** information, the accent or plain text; never a warning color.
+- **A short trade's tag:** grey.
+- **Money:** this is the first page with two currencies side by side, so **every amount carries its sign**: "₪1,277.13",
+  "$2,640.00". A rate has 3 decimals: "3.050".
+- **Wording:** "taxable gain", "tax", "shield", "paid", "refunded", "carried", "settles", "lot", "in dollars", "in
+  shekels", "the broker recorded", "confirm", "short trade". The page's name is "Taxes".
+
+### 10.5 Sample data (made up, the same account as §6, 2026; every rate is made up)
+
+Synced 2026-10-10 16:05. The sales of 2026, oldest first (the page shows them newest first):
+
+| Settles (traded) | Who | Sales | In dollars | In shekels | Taxable gain | Entry | The broker recorded |
+|---|---|---|---|---|---|---|---|
+| 04-15 (04-14) | Me | 2 short trades: PRVX +$180.00, TELQ −$95.00 · rate 3.010 | +₪255.85 | +₪255.85 | +₪255.85 | Tax ₪63.96 | ₪63.96 · matches |
+| 04-30 | Me | Fees · market data $12.00 · rate 2.980 | | | −₪35.76 | Shield ₪8.94 | ₪8.94 · matches |
+| 06-19 (06-18) | Me | TSLA 20 shares (the lot in 10.2) | +₪8,052.00 | +₪5,108.50 | +₪5,108.50 | Tax ₪1,277.13 | ₪1,279.40 · **differs** |
+| 08-17 (08-14) | Me | AMZN 10 shares: lot 2025-06-02, rate 3.550 → sold, rate 2.990 | +$242.89 × 2.990 = +₪726.24 | −₪282.94 | ₪0.00 (gain one way, loss the other) | — | nothing to record |
+| 09-03 (09-02) | Me | NKE 50 shares: lot 2025-02-10, rate 3.580 → sold, rate 3.020 | −$1,125.00 × 3.020 = −₪3,397.50 | −₪6,155.50 | −₪3,397.50 (the smaller loss) | Shield ₪849.38 | to confirm |
+| 10-07 (10-06) | Dana | MSFT 5 shares: lot 2025-03-14, rate 3.400 → sold, rate 3.070 | +$268.75 × 3.070 = +₪825.06 | +₪139.90 | +₪139.90 (the smaller gain) | Tax ₪34.98 | to confirm |
+| 10-12 (10-09) | Me | V 5 shares | | | not computed yet | | |
+
+**The months (Portfolio):**
+- **April:** tax ₪63.96, shield ₪8.94 → **paid ₪55.02**
+- **June:** tax ₪1,277.13 → **paid ₪1,277.13**
+- **August:** nothing
+- **September:** shield ₪849.38, after ₪1,332.15 paid this year → **refunded ₪849.38**
+- **October:** tax ₪34.98 so far · month not over
+
+**The year card (Portfolio):** tax this year so far **₪517.75** (25% of ₪2,070.99) · paid ₪1,332.15 · refunded ₪849.38 ·
+₪34.98 of October not settled yet · 3 of 5 days confirmed · 1 differs. No shield at year end.
+
+**The tabs:**
+- **Dana:** one sale (MSFT, the 10-07 row) · tax so far ₪34.98 · "Taken off Dana's cash: ≈ $11.39".
+- **Me:** the account's tax less Dana's: ₪517.75 − ₪34.98 = **₪482.77** — TSLA, AMZN and NKE, plus the short trades and
+  the fees.
+
+**2025, for the year select:** the 9988 sale of 2025-12-01 is in HKD: "not computed — type the amount the broker
+recorded"; and the December line ends "Dec 31: shield ₪62.50 → refunded".
+
+### 10.6 What to design
+
+- **The pieces, with their states:** the year card (with and without the year-end shield line) · a month's heading
+  line in each settlement · a settlement day's row in every state of 10.3 · a day opened into its sales, a sale opened
+  into its lots · Confirm, the pencil and its small form (amount, note), Confirm the whole month · the investors' tabs ·
+  the "not connected" and "history not downloaded" cards.
+- **What is open:** the designer may propose a better arrangement — for example one long table grouped by month instead
+  of a section per month, oldest first instead of newest, how to show the two ways of a lot compactly, or where the
+  year-end shield line belongs. Also open: a small link on the Closed page, "Tax on these sales → Taxes", or a "Tax"
+  column there (it would show first-in-first-out tax beside the average-cost P&L). The rules stay: nothing paid or
+  sent, and only the confirmations saved.
+- **Edge cases:**
+  - one investor (no tabs) and several
+  - a day with six short trades ("6 short trades"), and a year of about 35 settlement days
+  - a sale from two lots, one at a gain and one at a loss, each with its own two ways
+  - a sale taking from a lot bought years ago (a different rate), and one bought the same week
+  - every state of 10.3, including the over-sell and the HKD sale
+  - a month with only fees, and a month with nothing
+  - a year with no sales, and the first year (no history before it)
+  - a long note on a confirmation

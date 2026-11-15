@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.32.0";
+    public static final String VERSION = "0.33.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,18 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.33.0: [IB's Flex reports for the capital gains tax]
+ * tax package added: the capital gains tax's own package, under api; its first part stores every trade and cash transaction of the account from IB's Flex reports, day trades included.
+ * FlexClient added: IB's Flex Web Service — SendRequest for a period, then GetStatement until the report is ready —, with FLEX_TOKEN and FLEX_QUERY_ID from config/local.env; read only.
+ * FlexClient: no error prints the address it called, which holds the token; a refusal fails at once with IB's code and words, "please try again shortly" is tried again for two minutes.
+ * FlexReportReader added: the report's XML into FlexReport, FlexReportTrade and FlexReportCashTransaction with IB's signs; a missing field fails the report by name, a DOCTYPE is refused.
+ * V16 flex_trade, flex_cash_transaction and flex_report: each execution and cash transaction as IB wrote it, replaced by IB's id so a second download adds nothing, and a log of the downloads.
+ * FlexDownloadSchedule added: the days not stored yet, in periods of at most 365 days — first from January 1 of the earliest typed trade's year, then from a week before the last day stored.
+ * FlexDownloadSchedule: a period starts and ends on a weekday, since IB refuses one that starts or ends on a Saturday or a Sunday with 1003 "Statement is not available".
+ * SyncService: after the store and the alerts, every sync that reached TWS downloads the Flex reports not stored yet; a failure prints [tax error] and never fails the sync.
+ * TradeRepository.findEarliestTradeDate added: where the first download of the Flex reports starts.
+ * Console: [tax] Flex off when a key is missing, then [tax] Flex: asking IB for …, [tax] Flex: N trades, M cash transactions (…) and [tax] Flex skipped: already read up to 13.11.
+ *
  * VERSION 0.32.0: [Sync now and the alerts]
  * Sync now added: a button in the top bar that reads TWS as the startup does — the portfolio, a scan when due, the holdings' details and targets, Finnhub — through POST /api/syncs, then reloads the page.
  * Sync now: while another reading runs, or when TWS can't be read, a banner gives the server's words over the last sync's figures, with Try again.
