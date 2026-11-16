@@ -39,6 +39,8 @@ public class FlexTradeEntity {
     private String ibCommissionCurrency;
     private BigDecimal netCash;
     private String transactionType;
+    /** {@code null} for a row stored before the field was in the query (V18), until a download of its days replaces it. */
+    private BigDecimal fifoPnlRealized;
 
     /** Required by JPA, which creates entities by reflection. */
     protected FlexTradeEntity() {
@@ -66,9 +68,17 @@ public class FlexTradeEntity {
         this.ibCommissionCurrency = trade.ibCommissionCurrency();
         this.netCash = trade.netCash();
         this.transactionType = trade.transactionType();
+        this.fifoPnlRealized = trade.fifoPnlRealized();
     }
 
     protected String ibTradeId() {
         return ibTradeId;
+    }
+
+    /** The trade as IB reported it, for the calculation, which works on IB's records rather than on entities. */
+    protected FlexReportTrade toFlexReportTrade() {
+        return new FlexReportTrade(ibTradeId, ibOrderId, conId, symbol, assetCategory, currency, tradeDate, tradeTime,
+                settleDate, buySell, quantity, tradePrice, ibCommission, ibCommissionCurrency, netCash, transactionType,
+                fifoPnlRealized);
     }
 }

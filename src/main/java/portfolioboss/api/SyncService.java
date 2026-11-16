@@ -13,6 +13,7 @@ import portfolioboss.ib.TwsReader;
 import portfolioboss.ib.TwsReading;
 import portfolioboss.stocks.FinnhubClient;
 import portfolioboss.stocks.Stock;
+import portfolioboss.tax.CapitalGainsTaxService;
 import portfolioboss.tax.FlexDownloadService;
 import portfolioboss.tax.SettlementDayRatesService;
 
@@ -33,9 +34,9 @@ import java.util.concurrent.Future;
  * portfolio, the scan when due, the holdings' contract details and Dow Jones targets, the daily closes —, then what
  * Finnhub knows about the holdings in dollars, then all of it stored in one transaction
  * ({@link PortfolioSyncService}), then a {@link PortfolioSyncedEvent} for whoever reacts to a sync — the alerts —, then
- * the days of IB's Flex reports not stored yet ({@link FlexDownloadService}, CAPITAL_GAINS_TAX_TODO.md, session 1), and
- * last the Bank of Israel's dollar rates of the settlement days that have none yet ({@link SettlementDayRatesService},
- * session 2).
+ * the days of IB's Flex reports not stored yet ({@link FlexDownloadService}, CAPITAL_GAINS_TAX_TODO.md, session 1), then
+ * the Bank of Israel's dollar rates of the settlement days that have none yet ({@link SettlementDayRatesService},
+ * session 2), and last the capital gains tax they make, printed ({@link CapitalGainsTaxService}, session 3).
  *
  * <p>Not {@code @Transactional}: reading TWS, asking Finnhub, waiting for IB to prepare a Flex report and asking the Bank
  * of Israel take seconds, and no database connection should wait on them. Each store is a transaction of its own.
@@ -58,16 +59,19 @@ public class SyncService {
     private final ApplicationEventPublisher eventPublisher;
     private final FlexDownloadService flexDownloadService;
     private final SettlementDayRatesService settlementDayRatesService;
+    private final CapitalGainsTaxService capitalGainsTaxService;
 
     public SyncService(TwsReader twsReader, PortfolioSyncService portfolioSyncService, FinnhubClient finnhubClient,
                        ApplicationEventPublisher eventPublisher, FlexDownloadService flexDownloadService,
-                       SettlementDayRatesService settlementDayRatesService) {
+                       SettlementDayRatesService settlementDayRatesService,
+                       CapitalGainsTaxService capitalGainsTaxService) {
         this.twsReader = twsReader;
         this.portfolioSyncService = portfolioSyncService;
         this.finnhubClient = finnhubClient;
         this.eventPublisher = eventPublisher;
         this.flexDownloadService = flexDownloadService;
         this.settlementDayRatesService = settlementDayRatesService;
+        this.capitalGainsTaxService = capitalGainsTaxService;
     }
 
     /**
@@ -84,6 +88,7 @@ public class SyncService {
         storeWithFinnhubData(reading);
         downloadMissingFlexReports(reading.snapshot());
         downloadMissingDollarRates(reading.snapshot());
+        printCapitalGainsTax();
     }
 
     /**
@@ -97,6 +102,7 @@ public class SyncService {
         storeWithFinnhubData(reading);
         downloadMissingFlexReports(reading.snapshot());
         downloadMissingDollarRates(reading.snapshot());
+        printCapitalGainsTax();
         PortfolioSnapshot snapshot = reading.snapshot();
         return new SyncRunResponse(snapshot.asOf(), snapshot.holdings().size());
     }
@@ -139,6 +145,19 @@ public class SyncService {
      */
     private void downloadMissingDollarRates(PortfolioSnapshot snapshot) {
         settlementDayRatesService.downloadMissingDollarRates(syncDateOf(snapshot));
+    }
+
+    /**
+     * The capital gains tax of every year, and our FIFO against IB's, in the console ({@link CapitalGainsTaxService}) —
+     * after the Flex reports and the rates it is computed from. Like the alerts, a failure is printed and the sync, already
+     * stored, goes on.
+     */
+    private void printCapitalGainsTax() {
+        try {
+            capitalGainsTaxService.printCapitalGainsTax();
+        } catch (RuntimeException e) {
+            System.err.println("[tax error] could not compute the capital gains tax: " + e.getMessage());
+        }
     }
 
     /**

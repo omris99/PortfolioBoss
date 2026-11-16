@@ -78,7 +78,7 @@ class SettlementDayRatesServiceTest {
                         flexTradeOf("1002", DOLLAR_STOCK_CON_ID, "USD", settlementDayOfTheSale),
                         flexTradeOf("1003", DOLLAR_STOCK_CON_ID, "USD", settlementDayOfTheSale),
                         flexTradeOf("1004", HONG_KONG_STOCK_CON_ID, "HKD", LocalDate.of(2026, 4, 8))),
-                List.of(dollarFeeOf("2001", settlementDayOfTheFee))), Instant.now());
+                List.of(dollarFeeOf("2001", settlementDayOfTheFee)), List.of()), Instant.now());
 
         settlementDayRatesService.downloadMissingDollarRates(TODAY);
 
@@ -108,7 +108,7 @@ class SettlementDayRatesServiceTest {
         LocalDate tradeDate = settleDate.minusDays(1);
         return new FlexReportTrade(ibTradeId, "9" + ibTradeId, conId, "ABCD", "STK", currency, tradeDate,
                 tradeDate.atTime(10, 30), settleDate, "BUY", BigDecimal.TEN, new BigDecimal("100"),
-                new BigDecimal("-1"), currency, new BigDecimal("-1001"), "ExchTrade");
+                new BigDecimal("-1"), currency, new BigDecimal("-1001"), "ExchTrade", BigDecimal.ZERO);
     }
 
     /** IB's market data fee: no stock, a negative amount. */

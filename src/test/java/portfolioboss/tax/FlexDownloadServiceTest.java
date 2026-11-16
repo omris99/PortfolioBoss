@@ -140,7 +140,7 @@ class FlexDownloadServiceTest {
     }
 
     private FlexReport emptyReportOf(FlexReportPeriod period) {
-        return new FlexReport(period, List.of(), List.of());
+        return new FlexReport(period, List.of(), List.of(), List.of());
     }
 
     /** A holding synced from IB, and a buy of it typed in by hand on that day. */

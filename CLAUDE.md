@@ -147,7 +147,29 @@ holidays — about 15 weekdays a year, 7 days at most in a row —, which such a
 V17 is on the real database since that day's `./run.sh` (after `portfolioboss-2026-11-15.sql.gz`, 19 of 19 tables
 equal; the morning's backup renamed `…-before-V16`): one request stored the dollar's rates from two weeks before the
 account's earliest settlement day to 2026-11-13, every one equal to the Bank of Israel's series, and every settlement day
-in dollars up to that day inside them; the next sync asked nothing. Session 3 (the calculation) is next.
+in dollars up to that day inside them; the next sync asked nothing. Session 3 (2026-11-15, 648 tests) is built and
+checked live: the tax itself, worked out on every call from what is stored and printed after every sync — FIFO over each
+stock's trades, the taxable gain per buy a sale took from (decision 11), an entry per settlement day, each year's balance
+with its monthly settlements —, for the account from Flex and for each other investor from their typed trades, **in
+shekels** (decision 6, changed at the user's ask: an investor's tax isn't converted to dollars and doesn't touch their
+cash). Its planning found that **Flex's Trades section shows no corporate action**: a reverse split had moved a stock to
+a new contract, its buys under the old one and its sale under the new. The user added the query's Corporate Actions
+section and IB's own `fifoPnlRealized`, stored by V18 (decision 15), and the trades before a split are restated in the
+shares of after it, in memory. On the real data (V18 since that day, after `portfolioboss-2026-11-15.sql.gz`, 20 of 20
+tables equal; the history downloaded again): our FIFO equals IB's to the cent on every sale but one in HKD (IB lowered
+its cost by a return of capital, which Phoenix taxed as income — no change); the 867 of 2024 has the same taxable gain to
+the shekel, its tax a few tens of shekels lower (Phoenix's own fees, the user's OK); 2025 differs by the HKD sale, which
+isn't computed. Session 4 (2026-11-16, 692 tests) is built and checked live: the **confirmations** — what Phoenix recorded
+for a settlement day of the account, as the user confirms it on the Taxes page (V19's `tax_confirmation`) — and the
+page's endpoints, `GET /api/taxes` and `POST` / `PUT` / `DELETE /api/taxes/confirmations` (`tax.TaxController`). The
+user's rules: **a confirmed amount is final** — it counts in the year's tax and the monthly settlements in place of the
+calculated one, even if the calculation changes later —, a day is only waiting or confirmed (**no "matches" / "differs"**:
+"a number I typed is the right one"), and only a day the calculation has an entry for can be confirmed (Phoenix's own fee,
+about 20 ₪ a month, isn't worth a day of its own). V19 is on the real database since that day (after
+`portfolioboss-2026-11-16.sql.gz`, 21 of 21 tables equal; applied by `./run.sh 7599`), and `GET /api/taxes` agreed with
+itself on every year of the real data. Next, before the page (session 5): a session to plan from the user's idea — when
+Flex is read, offer the trades not typed in (day trades too) and split a trade between investors, so that each one, the
+account owner too, pays by their own trades.
 
 ## Hard invariant: read-only
 
@@ -169,8 +191,9 @@ through `ManualPositionWriteController`, the investors with their deposits and w
 `InvestorWriteController`, the stock analyses (`stock_analysis` rows), through `AnalysisController` and
 `RecommendationAnalysisController` — the second also the recommendations (`investment_recommendation` rows) —, and a new
 scan (`scan` / `scan_candidate` rows and its stocks' daily closes), through `ScanController`, a sync (what the startup
-writes), through `SyncController`, and the alerts' "seen" and their settings (`alert`, `alert_setting`), through
-`alerts.AlertController` — and never creates or deletes a holding (only the sync does). `AnalysisController` and `RecommendationAnalysisController` are the two
+writes), through `SyncController`, the alerts' "seen" and their settings (`alert`, `alert_setting`), through
+`alerts.AlertController`, and the confirmations of the capital gains tax (`tax_confirmation`), through
+`tax.TaxController` — and never creates or deletes a holding (only the sync does). `AnalysisController` and `RecommendationAnalysisController` are the two
 endpoints that reach outside the machine: they send each stock's symbol to Tavily, and the symbol, currency, the price
 (IB's, or a scanned stock's last close), today's date and the search results to Claude — **never** a quantity, a cost, an
 investor or the account number (AI_ANALYSIS_TODO.md, decision 8), and nothing about the portfolio
@@ -192,7 +215,7 @@ TWS, and only when a settlement day's rate is really missing (none on most syncs
 `ScanController` (`POST /api/scans`, the Scan again button: a scan) and `SyncController` (`POST /api/syncs`, Sync now:
 the startup's whole reading). The alerts send nothing out of the machine (their channel is a plan for later).
 `PortfolioController` and `RecommendationsController` stay GET-only, and `GET /api/alerts` is `AlertController`'s one
-read (Spring answers 405 to every other method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
+read, as `GET /api/taxes` is `TaxController`'s (Spring answers 405 to every other method). The server binds to the loopback interface only (`server.address=127.0.0.1` in
 `application.properties`), there is **no CORS configuration**, and every write endpoint with a body accepts
 JSON only: a page on another site can make the browser send a request to localhost without asking first
 only as text or a form (415 here), while JSON, PUT and DELETE need a CORS preflight that nothing grants —
@@ -221,10 +244,12 @@ day: only when the market has closed since the last scan, `calculation.ScanSched
 …`), reads the holdings' contract details (their sector and industry) and Dow Jones targets, asks Finnhub about the
 holdings in USD once TWS is disconnected, syncs it all into PostgreSQL, checks the alerts (`[alerts] checked: 2 new
 (ABCD, WXYZ), 1 no longer true`), downloads the days of IB's Flex reports not stored yet (`[tax] Flex: 41 trades, 6 cash
-transactions (2026-11-03 – 2026-11-13)`, or `[tax] Flex skipped: already read up to 13.11`), then the Bank of Israel's
-dollar rates of the settlement days that have none yet (`[exchangerates] Bank of Israel: stored 3 USD rates (2026-11-12 –
-2026-11-16)`, or `[exchangerates] Bank of Israel skipped: every settlement day up to 16.11 has its USD rate`), and then
-keeps running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
+transactions, 0 corporate actions (2026-11-03 – 2026-11-13)`, or `[tax] Flex skipped: already read up to 13.11`), then
+the Bank of Israel's dollar rates of the settlement days that have none yet (`[exchangerates] Bank of Israel: stored 3 USD
+rates (2026-11-12 – 2026-11-16)`, or `[exchangerates] Bank of Israel skipped: every settlement day up to 16.11 has its USD
+rate`), prints the capital gains tax of every year and our FIFO against IB's (`[tax] capital gains tax 2026: 1,234.56 ILS
+on a taxable gain of 4,938.24 ILS (12 sales)`, `[tax] our FIFO against IB's: 75 of 75 sales match`), and then keeps
+running: it serves the database at `http://localhost:8080/api/portfolio`, starts the UI's dev server,
 and opens `http://localhost:5174` in the browser (stop everything with Ctrl+C). If TWS could not be
 read this run, it serves whatever the previous sync stored instead (see "Running requires TWS" below).
 The UI is a separate Vite app (Node 20.19+ — which is why react-router stays on 7.x: 8.x needs Node 22) whose
@@ -344,7 +369,8 @@ figure, an unknown symbol, a refused call, a key of spaces. The Flex reports (pa
 `FlexReportReaderTest` (a report of the real query's shape, made-up values, no account: a sale and a buy with IB's signs, a
 conversion to HKD with its commission in dollars, a dividend and its tax, a fee with no stock and its cancellation, the
 period IB wrote, empty sections, the three request statuses, a missing field and an unreadable one named, a `DOCTYPE`
-refused, an answer that isn't XML), `FlexClientTest` (a fake service, `MockRestServiceServer`: fetched once prepared, 1018
+refused, an answer that isn't XML; since session 3 IB's `fifoPnlRealized` and a trade without it, and a reverse split's
+two detail rows read and a summary row skipped), `FlexClientTest` (a fake service, `MockRestServiceServer`: fetched once prepared, 1018
 tried again, a refused request or report not tried again, 12 tries and still not ready, no answer and an HTTP error —
 neither message holding the token —, the keys), `FlexDownloadScheduleTest` (the first download from the earliest typed
 trade's year in periods of 365 days — 2024, a leap year, ends on 30 December —, a first of January on a Saturday moved
@@ -352,7 +378,7 @@ to the Monday, every period starting and ending on a weekday, the last 365 days 
 an update on a Sunday ending on the Friday — the period IB refused in the live run —, nothing once the last weekday is
 stored, a gap of more than a year, the first of January), `FlexReportStorageServiceTest` (`@DataJpaTest`: stored and
 logged, the same days again add no row, a changed row replaced, a row sent twice in one report stored once, the last
-stored date) and `FlexDownloadServiceTest` (`@DataJpaTest`, `FlexClient` a `@MockitoBean`: no keys nothing asked, the
+stored date, IB's FIFO gain stored, a corporate action's rows stored and counted once) and `FlexDownloadServiceTest` (`@DataJpaTest`, `FlexClient` a `@MockitoBean`: no keys nothing asked, the
 history oldest first, a failed period stopping the rest without an exception, an update, nothing once up to date);
 `SyncServiceTest` has `FlexDownloadService` as a `@MockitoBean` (a stored
 sync downloads up to its day, one that read nothing doesn't). The exchange rates (package `exchangerates`; **no test
@@ -371,7 +397,40 @@ published yet asked again on the next sync, a failure printed and nothing stored
 (`@DataJpaTest`, `ExchangeRateDownloadService` a `@MockitoBean`: the Flex trades' and cash transactions' own settlement days
 in dollars, the typed trades' estimated ones — a holding's and a manual position's —, HKD left out); `SyncServiceTest` has
 `SettlementDayRatesService` as a `@MockitoBean` too (after the Flex reports, up to the sync's day; not when TWS wasn't
-read). After a
+read). The tax itself (package `tax`, session 3; made-up trades, most at a rate of 1 through the helper `TaxTestData`):
+`TaxableGainOfSharesFromOneBuyTest` (the four rows of decision 11's table), `FifoSalesCalculatorTest` (decision 3's
+example — 150, not average cost's 100 —, a sale from two buys, a buy shared by two sales, the commissions spread by
+quantity, a sale of more than was bought), `SaleTaxableGainTest` (per buy, not over the whole sale; a buy settled on a day
+without a rate takes the one before; HKD, a rate not published yet and an over-sale not computed; a reason of the whole
+stock first), `SettlementDayEntryTest` (six sales of a day one entry, a fee at its rate and its cancellation, a fee
+without its rate left out, a sale not computed left out, agorot rounded half up), `TaxYearBalanceTest` (the plan's
+example 2 month by month, the year's tax never below 0, a shield beyond what was paid, two days of a month settled
+together, the month of the last sync not settled), `TaxYearCalculatorTest` (the balance from each entry's tax amount, the
+year's taxable gain, its sales in order),
+`CapitalGainsTaxCalculatorTest` (the plan's example 1: the account 2,000, the investor 2,500; the account's FIFO over every
+investor's trades; a partial sale in 2025 and the rest in 2026 two years; a sale of 31 December settled in January the
+new year's; a fee on a day without a sale), `SplitAdjustedFlexTradesTest` (a reverse split into a new contract restating
+the earlier trades, IB's signs turned into the calculation's, a trade after it untouched, two splits in a row, an action
+with money or with other shares than the trades add up to not followed, conversions left out, executions of one second in
+the order of IB's ids as numbers, a commission in another currency), `OurFifoAgainstIbsFifoTest` (within a cent, more
+than a cent, no gain of IB's, only sales), `CapitalGainsTaxConsoleLinesTest` (the lines of the account's years, an
+investor's and the comparison, a sale that differs) and `CapitalGainsTaxServiceTest` (`@DataJpaTest`: nothing before the
+first sync, the account's tax with a fee, another investor's at their Flex twins' settlement days, a typed trade without
+a twin estimated, a stored reverse split followed); `SyncServiceTest` has `CapitalGainsTaxService` as a `@MockitoBean`
+(printed after the rates, a failure not failing the sync, none when TWS wasn't read). The confirmations (session 4):
+`SettlementDayWithItsConfirmationTest` (waiting counts its calculated amount, confirmed its confirmed one — another
+amount, a shield), `TaxYearWithItsConfirmationsTest` (each day with its confirmation, example 2 with April confirmed as
+−300 — the recorded balance moves, the calculated doesn't —, a confirmation whose day is no longer calculated kept as a
+day of 0), `AccountTaxWithItsConfirmationsTest` (each confirmation in its settlement day's year, a year with only a
+confirmation), `TaxConfirmationServiceTest` (`@DataJpaTest`: a day confirmed with its note trimmed, several days in one
+request, a day confirmed already 409 with nothing of the request stored, a day without a calculated entry 400, none before
+the first sync, a correction, a cancel, 404), `TaxesReadServiceTest` (`@DataJpaTest`: nothing before the first sync, the
+days waiting with their calculated amounts, the months and a fee's rate, a sale's buys with both ways of its gain, a
+confirmed amount counting in the year, a confirmed day keeping its amount when IB's report changes the calculation, an
+investor's years never confirmed) and `TaxControllerTest` (`@WebMvcTest`: the JSON — `month` as `"2026-06"`, a sale not
+computed without its shekels — and `no-store`, 503, 201, each 400 message, the service's 409 passed on, 204, 404, 415,
+405). The three tax tests on the database share `TaxTestDataInTheDatabase` (an `@Import`ed helper: the synced holding,
+IB's Flex rows, the rates and an investor's typed trades — one made-up year whose figures its comment works out). After a
 change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
 would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
 `target/surefire-reports/` keeps the reports of tests that have since been deleted.
@@ -395,7 +454,8 @@ and only Finnhub's part is off — a scanned stock's on Analyze, and a holding's
 stay). Its free plan allows 60 calls a minute; a stock is 2, so a portfolio of 10 holdings is 20 calls a run.
 **IB's Flex Web Service** (CAPITAL_GAINS_TAX_TODO.md, session 1) needs `FLEX_TOKEN` (made in IB's Client Portal under
 Flex Web Service, valid up to a year, can be locked to the home IP address) and `FLEX_QUERY_ID` (the number of the
-Activity Flex Query — XML, Trades as executions and Cash Transactions, its fields in session 1.1 of the plan) in the same
+Activity Flex Query — XML, Trades as executions with `fifoPnlRealized`, Cash Transactions and Corporate Actions, its
+fields in sessions 1.1 and 3.0 of the plan) in the same
 file; without either the app prints `[tax] Flex off: FLEX_TOKEN is not set (config/local.env)` and downloads no report.
 The Bank of Israel's rates (session 2) need no key.
 
@@ -452,11 +512,13 @@ Main (Spring Boot: brings the web server up, then Spring runs the runner)
         ├──publishes PortfolioSyncedEvent──> alerts.AlertsAfterSync ──> AlertService.checkAlerts() (alert rows)
         ├──then──> tax.FlexDownloadService ──> FlexClient ──HTTPS──> IB's Flex Web Service (the days not stored yet)
         │                                  └──> FlexReportStorageService ──writes──> Postgres (flex_trade ·
-        │                                                                   flex_cash_transaction · flex_report)
+        │                                                 flex_cash_transaction · flex_corporate_action · flex_report)
         ├──then──> tax.SettlementDayRatesService (the settlement days in USD: Flex's, and the typed trades' estimated)
         │            └──> exchangerates.ExchangeRateDownloadService ──asks ExchangeRateDownloadSchedule which days are
         │                   missing, then──> BankOfIsraelClient ──HTTPS──> the Bank of Israel (only those days)
         │                   └──writes──> Postgres (exchange_rate)
+        ├──then──> tax.CapitalGainsTaxService ──reads── Postgres (flex_* · exchange_rate · holding · trade · investor)
+        │            (SplitAdjustedFlexTrades, CapitalGainsTaxCalculator, OurFifoAgainstIbsFifo) ──prints── [tax] lines
         └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser (the runner, after the sync)
 
 SyncController ──> SyncService.syncNow() ──> TwsReader.readPortfolioUnlessBusy() — the same sync as above, then the
@@ -467,6 +529,12 @@ AlertController ──> AlertService ──reads── Postgres (the holdings, c
         ▲           (alerts/: HoldingAlertsCalculator,    through RecommendationsReadService) ──writes── alert,
         │            AlertChangesCalculator)               alert_setting
         └──JSON── GET /api/alerts, POST /api/alerts/seen, PUT /api/alerts/settings — ui/'s bell and its settings drawer
+
+tax.TaxController ──> TaxesReadService ──> CapitalGainsTaxService (the tax, as above) + tax_confirmation
+        ▲             (tax/: AccountTaxWithItsConfirmations, TaxYearWithItsConfirmations, TaxYearBalance)
+        │         └─> TaxConfirmationService ──writes── tax_confirmation (only a day the calculation has an entry for)
+        └──JSON── GET /api/taxes, POST /api/taxes/confirmations, PUT / DELETE /api/taxes/confirmations/{id} — the
+                  Taxes page (session 5; no UI yet)
 
 PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
         │                     (builds api/response/*Response              driven by HTTP requests, not by TWS)
@@ -729,7 +797,19 @@ entities and repositories live in the `tax` package (below). `V17__exchange_rate
 2, 2026-11-15) added `exchange_rate` (`currency` `VARCHAR(3)`, `rate_date`, `rate` `NUMERIC(12,6)` — shekels for one unit,
 the Bank of Israel's up to 3 decimals —, `UNIQUE (currency, rate_date)` with a generated `id`, like `daily_close`): the
 Bank of Israel's representative rates, one unbroken stretch per currency, a row never replaced. Its entity and repository
-live in the `exchangerates` package (below).
+live in the `exchangerates` package (below). `V18__flex_corporate_actions_and_ib_fifo_pnl.sql` (CAPITAL_GAINS_TAX_TODO.md
+session 3.0, decision 15, 2026-11-15; on the real database since that day, after `portfolioboss-2026-11-15.sql.gz`, 20 of
+20 tables equal) added `flex_corporate_action` (one row per row of an action, as IB wrote it: `ib_transaction_id`
+`UNIQUE`, `ib_action_id` — the rows of one action share it —, `action_type` — `RS`, `FS`, … —, `con_id`, `symbol`,
+`asset_category`, `action_time`, `quantity` with IB's sign, `proceeds`, `amount`, `description`), `flex_report
+.corporate_action_count` (`DEFAULT 0` for the logs before it) and `flex_trade.fifo_pnl_realized` (IB's own FIFO gain of
+the execution, `NULL` for a row stored before the field was in the query, until a download of its days replaces it). Its
+entity and repository live in the `tax` package too. `V19__tax_confirmation.sql` (CAPITAL_GAINS_TAX_TODO.md session 4,
+decision 7, 2026-11-16; on the real database since that day, after `portfolioboss-2026-11-16.sql.gz`, 21 of 21 tables
+equal) added `tax_confirmation` (`settlement_day` `DATE` `UNIQUE` — one confirmation for a day, as Phoenix nets a day into
+one entry —, `tax_amount` `NUMERIC(20,2)` — shekels to the agora, positive tax to pay, negative a shield —, `confirmed_at` —
+when confirmed or last corrected —, `note` `VARCHAR(500)`): only what the user entered; the calculated amount is never
+stored. Its entity and repository live in the `tax` package too.
 `HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
@@ -752,7 +832,7 @@ analysis or a pick of an earlier scan was of), `InvestmentRecommendationReposito
 `deleteForContracts`) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V18__….sql`.
+  checksum): a schema change is a new `V20__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -774,12 +854,13 @@ Things that are easy to break:
   `ManualPositionWriteServiceTest`, `InvestorWriteServiceTest`, `StockAnalysisRepositoryTest`, `AnalysisServiceTest`,
   `RecommendationsReadServiceTest`, `RecommendationAnalysisServiceTest`, `ScanServiceTest`, `SyncServiceTest`,
   `alerts.AlertServiceTest`, `tax.FlexReportStorageServiceTest`, `tax.FlexDownloadServiceTest`,
-  `tax.SettlementDayRatesServiceTest`, `exchangerates.ExchangeRateDownloadServiceTest`) are `@DataJpaTest`s
+  `tax.SettlementDayRatesServiceTest`, `tax.CapitalGainsTaxServiceTest`, `tax.TaxConfirmationServiceTest`,
+  `tax.TaxesReadServiceTest`, `exchangerates.ExchangeRateDownloadServiceTest`) are `@DataJpaTest`s
   against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
   database and compared table by table first). One that only adds a table or a column (V5, V6, V7, V9, V10, V11, V12,
-  V13, V14, V15, V16, V17) or
+  V13, V14, V15, V16, V17, V18, V19) or
   a constraint (V8, after counting the rows it would refuse: none; V10's, which every stored row met) still gets the
   backup first, checked for the same row counts as the database (V12's: each table's `COPY` rows in the dump against a
   `count(*)`, 12 of 12 equal, 2026-10-29). `backup-db.sh` names a backup by the day, so a second backup
@@ -1249,11 +1330,13 @@ Transfers to and from Phoenix appear only there, decision 8, and the tax doesn't
   `reasonWithoutTheAddress`).
 - `FlexReportReader` (Java's own DOM reader — no Jackson XML, which would have Spring read and write XML on every endpoint
   —, a `DOCTYPE` refused): `isReport` (`<FlexQueryResponse>`, against `<FlexStatementResponse>`, the service's status),
-  `readReport` → `FlexReport(period, trades, cashTransactions)` of `FlexReportPeriod`, `FlexReportTrade` and
-  `FlexReportCashTransaction` — IB's fields under readable names, IB's signs —, `readRequestStatus` →
+  `readReport` → `FlexReport(period, trades, cashTransactions, corporateActions)` of `FlexReportPeriod`,
+  `FlexReportTrade`, `FlexReportCashTransaction` and (session 3.0) `FlexReportCorporateAction` — IB's fields under readable
+  names, IB's signs; of the corporate actions only the `levelOfDetail="DETAIL"` rows —, `readRequestStatus` →
   `FlexReportRequestStatus(status, referenceCode, errorCode, errorMessage)`. A field the tax needs that is missing or
   unreadable fails the whole report naming the field and the row (`<Trade tradeID="…"> has no dateTime: is it ticked in
-  the Flex query?`); an empty attribute (`conid=""` on a fee) is `null`.
+  the Flex query?`); an empty attribute (`conid=""` on a fee) is `null`. A trade's `fifoPnlRealized` is optional: only
+  the check against IB's FIFO needs it.
 - `FlexDownloadSchedule(lastStoredDate, earliestTypedTradeDate, today).periodsDue()`: up to the last weekday before today
   (`lastDayToRead`; IB prepares a report once a day), in periods of at most 365 days, oldest first, each starting and
   ending on a weekday (`firstWeekdayOnOrAfter`, `latestWeekdayOnOrBefore`) — never stored: from the first of January of
@@ -1279,7 +1362,8 @@ Things that are easy to break:
   `FlexReportReader` — after deciding the tax can do without it.
 - A period counts both its ends: 365 days is `fromDate.plusDays(364)`. A calendar leap year is 366, over IB's limit.
 - A row IB sends twice in one report is stored once (two new rows with one IB id would break the `UNIQUE`); a trade IB
-  cancels after it was stored stays stored — Flex doesn't mark a row as deleted (rare; the ✓ of session 4 would show it).
+  cancels after it was stored stays stored — Flex doesn't mark a row as deleted (rare; a confirmed day keeps Phoenix's
+  amount, and the calculated one beside it would show the gap).
 - To download the history again (a field added to the query): delete the `flex_report` rows; the stored rows are then
   replaced by IB's id, not doubled.
 
@@ -1294,8 +1378,110 @@ Session 2 (2026-11-15) adds to `tax` only which days the tax needs a rate of —
   Only the dollar: the Bank of Israel has no Hong Kong dollar rate in any series (checked 2026-11-15).
 - `UsSettlementDayEstimate(tradeDate).estimatedSettlementDay()`: a typed trade has no settlement day, so it is estimated —
   one business day after the trade since 28.05.2024, two before, weekends skipped, US holidays unknown (it can be a day
-  early). Session 3 takes the real day from the trade's twin in Flex (same contract, same day) and this estimate only for
-  a typed trade Flex doesn't have; the download covers both, since a Flex day is already among the Flex trades'.
+  early). Session 3 takes the real day from the trade's twin in Flex (same contract, same day —
+  `TypedTradeSettlementDays`) and this estimate only for a typed trade Flex doesn't have; the download covers both, since
+  a Flex day is already among the Flex trades'.
+
+Session 3 (2026-11-15) is the tax itself, worked out on every call from what is stored — nothing of it is stored —,
+printed after every sync (`api.SyncService.printCapitalGainsTax`, after the rates) and, since session 4, served by
+`GET /api/taxes` (below). Pure records, no Spring and no database, in the order the calculation runs (the
+names are the user's — `TaxCalculationTrade` for `TradeForTax`, `SharesSoldFromOneBuy` for a "lot", which he didn't
+understand; "lot" appears nowhere in the code):
+- `TaxCalculationTrade(tradeId, symbol, currency, tradeDate, settlementDay, side, quantity, price, commission)`: a buy or
+  a sale in one shape for both sources, the quantity and commission positive. `TradesOfOneStock(conId, tradesInOrder,
+  notComputedReasonOfEverySale)`: each source groups and orders its own trades.
+- `SplitAdjustedFlexTrades(flexTrades, corporateActions).tradesOfEveryStock()` (decision 15): the account's stock
+  executions (conversions, `CASH`, left out), by contract, ordered by IB's time and then IB's trade id as a number; an
+  action's rows grouped by `actionID`, and every trade of the old contract made before it restated — the quantity times
+  the ratio (the shares added ÷ the shares taken away), the price divided by it, under the new contract —, in memory
+  only. Followed only in the shape seen: two rows, one negative and one positive, `RS` or `FS`, no `proceeds` or `amount`,
+  and the old contract's trades adding up, just before it, to the shares it takes away; any other action makes every sale
+  of its contracts `CORPORATE_ACTION_NOT_SUPPORTED`. A commission in another currency than the trade's makes the stock's
+  sales `COMMISSION_IN_ANOTHER_CURRENCY`.
+- `TypedTradeSettlementDays(accountStocks)`: a typed trade's settlement day is its Flex twin's — a holding's by contract
+  and day, a manual position's by symbol and day, after the splits —, else `UsSettlementDayEstimate`.
+- `FifoSalesCalculator(tradesInOrder).sales()` (decision 3) → `FifoSale(sale, sharesSoldFromEachBuy,
+  quantitySoldBeyondTheBuys)` of `SharesSoldFromOneBuy(buy, quantity, cost, proceeds)`: each sale takes from the earliest
+  buys still held; a buy's commission goes into its shares' cost and a sale's off their proceeds, by quantity. The closed
+  positions stay at average cost (`calculation.HoldingHistory`, untouched).
+- `TaxableGainOfSharesFromOneBuy(sharesSold, buyRate, saleRate)` (decision 11): `gainInDollarsAtTheSaleRate()`,
+  `gainInShekels()`, and `taxableGain()` — the one closer to zero, 0 when their signs differ. `SaleTaxableGain(fifoSale,
+  notComputedReasonOfEverySaleOfTheStock, exchangeRatesByCurrency)`: the sum over the buys, each buy and the sale at their
+  own settlement day's rate (`ExchangeRates.rateForSettlementDay`), or a `SaleNotComputedReason`, the first that holds:
+  `CORPORATE_ACTION_NOT_SUPPORTED`, `COMMISSION_IN_ANOTHER_CURRENCY`, `SOLD_MORE_THAN_BOUGHT`, `NO_RATE_FOR_THE_CURRENCY`
+  (HKD), `RATE_NOT_PUBLISHED_YET`. A sale not computed is left out of the balance, never guessed.
+- `SettlementDayEntry(settlementDay, sales, expenses, exchangeRatesByCurrency)` (decision 4): the day's computed sales and
+  its `TaxDeductibleExpense`s — IB's Other Fees, with IB's sign, at the day's rate (`rateOf(expense)`,
+  `inShekels(expense)`, empty while the rate isn't known) —; `taxAmount()` is 25% (decision 2) in agorot, half up:
+  positive "tax to pay", negative a "tax shield".
+- `TaxYearCalculator(year, entriesInDateOrder, lastSyncDay)` (decision 5): `taxableGain()`, `sales()` and `balance()` — a
+  `TaxYearBalance(taxAmountBySettlementDay, lastSyncDay)` of each entry's tax amount: `monthlySettlements()` →
+  `MonthlySettlement(month, entriesOfTheMonth, settlementAmount, shieldLeft, settled)` — owed so far is max(0, the year's
+  amounts so far), and the settlement is that less what was paid before (positive paid, negative refunded) —,
+  `taxOfTheYearSoFar()`, `shieldLeft()`. The balance is a record of its own (session 4) so that the same rule runs on the
+  amounts as recorded at Phoenix. The year is the settlement day's (decision 16, `CapitalGainsTaxCalculator.taxYearOf
+  (settlementDay)`).
+- `CapitalGainsTaxCalculator(tradesOfEveryStock, expenses, exchangeRatesByCurrency, lastSyncDay)`: `sales()`,
+  `settlementDayEntries()`, `taxYears()` — the same calculation for the account and for an investor (without expenses).
+- `OurFifoAgainstIbsFifo(accountSales, ibsFifoGainByIbTradeId)`: our FIFO gain of each Flex sale against IB's
+  `fifoPnlRealized`; more than a cent apart is listed (`salesWhoseGainDiffersFromIbs`).
+- `CapitalGainsTaxService` (`@Transactional(readOnly = true)`): `capitalGainsTaxOfTheAccountAndInvestors()` →
+  `CapitalGainsTaxOfTheAccountAndInvestors(accountTax, otherInvestorsTax, ourFifoAgainstIbsFifo)` with an
+  `InvestorCapitalGainsTax(investorId, investorName, tax)` per investor other than the account owner, from their typed
+  trades alone — in shekels, never converted, their cash untouched (decision 6); the owner is the account's residual, not
+  computed alone. "Today" is the last sync's day; only the dollar has rates (`SettlementDayRatesService.US_DOLLAR`).
+  `printCapitalGainsTax()` prints `CapitalGainsTaxConsoleLines`; a failure is `SyncService`'s `[tax error]`, never the
+  sync's.
+Things that are easy to break:
+- **Flex's Trades section shows no corporate action**: a reverse split into a new contract leaves a stock's buys and sales
+  in two contracts, and without the Corporate Actions section its sales are `SOLD_MORE_THAN_BOUGHT` (the first live run,
+  before the history was downloaded again). A query without that section, or with one of its fields unticked, brings that
+  back.
+- IB lowers a stock's cost by a **return of capital**; our FIFO doesn't. That is the one sale of the live check whose gain
+  differs from IB's (in HKD, its tax not computed anyway). Phoenix taxed the return of capital as income, so our cost is
+  Phoenix's — no change; the dividends are session 7.
+- Phoenix's own fees aren't in IB's reports: the tax it withholds can be lower than 25% of the same taxable gain (the 867
+  of 2024) — a known gap; a day whose Phoenix amount differs is confirmed with Phoenix's amount.
+- The half-up rounding of each day's entry and "a refund is never more than what was paid" are assumptions; the days the
+  user confirms with another amount than the calculated one are where they would show.
+
+Session 4 (2026-11-16) is the confirmations of decision 7 and the page's endpoints, in `tax` (the user's rules: a confirmed
+amount is **final**, there is **no "matches" / "differs"**, and only a day with a calculated entry can be confirmed):
+- `TaxConfirmation(id, settlementDay, taxAmount, confirmedAt, note)` — a `tax_confirmation` row (`TaxConfirmationEntity`,
+  `TaxConfirmationRepository`) as the calculation reads it; public, so that `TaxConfirmationResponse` copies it.
+- `SettlementDayWithItsConfirmation(entry, confirmation)`: `isConfirmed()` and `recordedTaxAmount()` — the confirmed
+  amount, else the calculated one. `TaxYearWithItsConfirmations(taxYear, confirmationsOfTheYear)`: `settlementDays()` —
+  every calculated day with its confirmation, and a confirmation whose day the calculation no longer has (IB changed a
+  settlement day in a report downloaded again) as a day of an empty entry, so it never disappears without a word —, and
+  `recordedBalance()`, the `TaxYearBalance` of the recorded amounts. `AccountTaxWithItsConfirmations(accountTax,
+  confirmations).taxYears()`: each confirmation in its settlement day's year, a year with only a confirmation included.
+- `TaxesReadService.taxes()` (`@Transactional(readOnly = true)`, empty before the first sync): `CapitalGainsTaxService`'s
+  result and the stored confirmations in one transaction, built into `tax/response/` records in private methods (the tax's
+  records are internal to the package): `TaxesResponse(lastSyncDay, accountTaxYears, otherInvestorsTax)` of
+  `TaxYearResponse(year, taxableGain, taxOfTheYearSoFar, shieldLeft, settlementDays, monthlySettlements)` — the account's
+  tax, shield and months as recorded, an investor's (`InvestorTaxResponse`) as calculated —, `SettlementDayResponse
+  (settlementDay, sales, expenses, taxableGainOfTheDay, computedTaxAmount, confirmation)` — `confirmation` `null` while
+  the day waits and always on an investor's day —, `SaleResponse` (`notComputedReason`, `SaleNotComputedReason` as it is,
+  public since), `SharesSoldFromOneBuyResponse` (both ways of decision 11 per buy; the rates and shekels `null` on a sale
+  not computed, its buys still listed), `TaxDeductibleExpenseResponse` (the rate and the shekels, `null` while unknown),
+  `MonthlySettlementResponse` (`month` a `YearMonth`, `"2026-06"` in the JSON) and `TaxConfirmationResponse`.
+- `TaxConfirmationService` (`@Transactional`): `confirm(TaxConfirmationsRequest)` — every line together or none: 400 when
+  a day has no calculated entry (it asks `CapitalGainsTaxService` for the account's days), 409 when one is confirmed
+  already —, `correct(id, TaxConfirmationCorrectionRequest)` (the amount and the note; `confirmed_at` becomes now) and
+  `cancel(id)` (the day waits again); 404 for an unknown id; a note trimmed, blank `null`.
+- `TaxController`: `GET /api/taxes` (`no-store`, 503 before the first sync), `POST /api/taxes/confirmations` (201 with
+  each new confirmation), `PUT` and `DELETE /api/taxes/confirmations/{confirmationId}` (204), JSON only. The bodies:
+  `TaxConfirmationsRequest(confirmations)` — `@NotEmpty`, every day once (`isEveryDayGivenOnce`, `@AssertTrue`) — of
+  `TaxConfirmationRequest(settlementDay, taxAmount, note)` — `@PastOrPresent`, `@Digits(integer = 18, fraction = 2)` with
+  its own message, a note of 500 at most — and `TaxConfirmationCorrectionRequest(taxAmount, note)`. No UI reads them yet
+  (session 5): `ui/src/types` has no mirror of them so far.
+Things that are easy to break:
+- The console lines stay the calculation's own (`TaxYearCalculator.balance()`), confirmations not counted: they are the
+  check of the rules, and the page is where the recorded amounts are.
+- A confirmed day's amount wins over a calculation that changed after it — on purpose (the user's rule). A code fix that
+  changes old days' amounts doesn't touch the confirmed ones.
+- Two confirmations of one day at the same moment would pass the 409 check and break the `UNIQUE` (a 500): one user, so
+  not guarded further.
 
 The exchange rates are a package of their own, `portfolioboss.exchangerates` (console `[exchangerates]` /
 `[exchangerates error]`; the user's ask, 2026-11-15): a source of data, like `stocks` — it downloads, stores and answers
@@ -1610,9 +1796,14 @@ Things that are easy to break:
   after every sync and every save of the settings, and `[alerts error] could not check the alerts: …` when a check after a
   sync fails (the sync stays stored). The Flex reports print `[tax] Flex off: FLEX_TOKEN is not set (config/local.env)`
   at startup without a key; on a sync `[tax] Flex: asking IB for 2026-11-03 – 2026-11-13`, then `[tax] Flex: 41 trades, 6
-  cash transactions (2026-11-03 – 2026-11-13)` per period; `[tax] Flex skipped: already read up to 13.11`
-  (or `another download is running`), and `[tax error] Flex: IB refused the request: 1012 Token has expired.` when it fails (the
-  sync stays stored). The exchange rates print, on a sync that misses some, `[exchangerates] Bank of Israel: asking for
+  cash transactions, 0 corporate actions (2026-11-03 – 2026-11-13)` per period; `[tax] Flex skipped: already read up to
+  13.11` (or `another download is running`), and `[tax error] Flex: IB refused the request: 1012 Token has expired.` when it
+  fails (the sync stays stored). The tax prints, after the rates of every sync that reached TWS, a line per tax year of the
+  account — `[tax] capital gains tax 2025: 1,234.56 ILS on a taxable gain of 4,938.24 ILS (12 sales; not computed: 1 in a
+  currency without exchange rates)`, with `, a shield of 300.00 ILS left` when there is one — and per year of each other
+  investor (`[tax] capital gains tax of Avi 2026: …`), then `[tax] our FIFO against IB's: 75 of 76 sales match` and each
+  sale that doesn't (`… ABCD sold on 2026-03-02 (IB trade 1000000001): ours 50.00 USD, IB's 47.50 USD`, the first
+  ten); `[tax error] could not compute the capital gains tax: …` when it fails (the sync stays stored). The exchange rates print, on a sync that misses some, `[exchangerates] Bank of Israel: asking for
   the USD rates of 2026-11-14 – 2026-11-16`, then `[exchangerates] Bank of Israel: stored 3 USD rates (2026-11-12 –
   2026-11-16)` or `[exchangerates] Bank of Israel: no USD rate published in 2026-11-14 – 2026-11-16`; `[exchangerates]
   Bank of Israel skipped: every settlement day up to 16.11 has its USD rate` (or `another download is running`); and
@@ -1632,9 +1823,10 @@ Things that are easy to break:
   used by `calculation`, `db` and `api` (since session 3). `alerts` (2026-11-11) sits on top of them all: it uses `api`
   (only `RecommendationsReadService`, for the short list), `db`, `calculation`, `ib`, `stocks` and `model`, and no package
   uses it — `api.SyncService` announces a sync with `PortfolioSyncedEvent` instead of calling it. `tax` (2026-11-15, the
-  capital gains tax) is the other way round, **under** `api`: `api.SyncService` calls `tax.FlexDownloadService` directly,
-  and later sessions will have `api` use it for the investors' cash, so it must never use `api` (a cycle); it uses `db`
-  (`TradeRepository`), `exchangerates`, `exceptions` (`FlexReportUnavailableException`) and `utils`. `exchangerates`
+  capital gains tax) is the other way round, **under** `api`: `api.SyncService` calls `tax.FlexDownloadService` and
+  `tax.CapitalGainsTaxService` directly, so it must never use `api` (a cycle) — which is why its endpoints are its own
+  `tax.TaxController` (session 4), with `tax.request` and `tax.response`, like `alerts`; it uses `db` (`TradeRepository`, and since session 3 the holdings, manual positions, investors and the account
+  state), `model` (`TradeSide`), `exchangerates`, `exceptions` (`FlexReportUnavailableException`) and `utils`. `exchangerates`
   (2026-11-15, the Bank of Israel's rates) is **under** `tax`: a source of data like `stocks`, it uses only `exceptions`
   (`ExchangeRatesUnavailableException`), is told which days need a rate (`tax.SettlementDayRatesService`), and must never
   use `tax` or `api` (a cycle: `tax` converts with its `ExchangeRates`). `TwsPortfolioRunner`
@@ -1665,7 +1857,7 @@ Things that are easy to break:
   one at a time — the startup, Sync now and the Scan again button all read through it. Don't add a second entry point or
   a second place that connects to TWS.
 - API response types go in `portfolioboss.api.response`, request bodies in `portfolioboss.api.request` (a feature
-  package keeps its own: `alerts.request`, `alerts.response`); the
+  package keeps its own: `alerts.request`, `alerts.response`, `tax.request`, `tax.response`); the
   accessors, derived-math and write methods another package needs (`Holding.costBasis()`,
   `HoldingEntity.id()`/`sector()`/`industry()`/`trades()`/`toIbHolding()`, `TradeEntity`'s constructors and
   `changeDetails()`/`changeInvestor()`, `ManualPositionEntity`'s constructor and `changeDetails()`, `InvestorEntity`'s
@@ -1723,6 +1915,9 @@ Things that are easy to break:
   and the alerts' channel left for later; session 4 (holdings that move together, a market drop of 20%) waits.
   CAPITAL_GAINS_TAX_TODO.md is the current plan (TODO.md's "nice-to-have" tax, brought in by the user): session 1, IB's
   Flex reports downloaded and stored on every sync (`tax`, V16), and session 2, the Bank of Israel's dollar rates of the
-  settlement days (`exchangerates`, V17), are built; the calculation (3), the ✓ (4) and the Taxes page (5) follow. HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
+  settlement days (`exchangerates`, V17), are built, and so is session 3, the calculation — FIFO, the taxable gain, the
+  yearly balance, the corporate actions (V18) —, checked live against IB's FIFO and the 867s of 2024 and 2025, and so is
+  session 4, the confirmations and the page's endpoints (V19, `/api/taxes`, checked live); next, a session to plan — the
+  Flex trades not typed in, offered and split between investors (the user's idea) —, then the Taxes page (5). HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. There is **no written thesis per holding** (decided 2026-10-06: data, not text): the product is the data on
   each holding that helps decide whether to stay in it — not the IB reader.

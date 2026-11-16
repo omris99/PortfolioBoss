@@ -12,23 +12,26 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Saves the Flex reports downloaded from IB in the database (CAPITAL_GAINS_TAX_TODO.md, session 1.3) — their trades in
- * {@code flex_trade}, their cash transactions in {@code flex_cash_transaction}, a line per report in the
- * {@code flex_report} log — and says up to which day they are saved. Nothing here touches the trades typed in by hand or
- * the holdings.
+ * Saves the Flex reports downloaded from IB in the database (CAPITAL_GAINS_TAX_TODO.md, sessions 1.3 and 3.0) — their
+ * trades in {@code flex_trade}, their cash transactions in {@code flex_cash_transaction}, their corporate actions in
+ * {@code flex_corporate_action}, a line per report in the {@code flex_report} log — and says up to which day they are
+ * saved. Nothing here touches the trades typed in by hand or the holdings.
  */
 @Service
 public class FlexReportStorageService {
 
     private final FlexTradeRepository flexTradeRepository;
     private final FlexCashTransactionRepository flexCashTransactionRepository;
+    private final FlexCorporateActionRepository flexCorporateActionRepository;
     private final FlexReportRepository flexReportRepository;
 
     public FlexReportStorageService(FlexTradeRepository flexTradeRepository,
                                     FlexCashTransactionRepository flexCashTransactionRepository,
+                                    FlexCorporateActionRepository flexCorporateActionRepository,
                                     FlexReportRepository flexReportRepository) {
         this.flexTradeRepository = flexTradeRepository;
         this.flexCashTransactionRepository = flexCashTransactionRepository;
+        this.flexCorporateActionRepository = flexCorporateActionRepository;
         this.flexReportRepository = flexReportRepository;
     }
 
@@ -39,13 +42,15 @@ public class FlexReportStorageService {
     }
 
     /**
-     * One report into the database, whole or not at all: each trade and cash transaction replaces the stored row with
-     * the same IB id, or is added, and the report's days are logged. Storing the same days again adds nothing.
+     * One report into the database, whole or not at all: each trade, cash transaction and corporate action replaces the
+     * stored row with the same IB id, or is added, and the report's days are logged. Storing the same days again adds
+     * nothing.
      */
     @Transactional
     public void storeReport(FlexReport report, Instant downloadedAt) {
         storeTrades(report.trades());
         storeCashTransactions(report.cashTransactions());
+        storeCorporateActions(report.corporateActions());
         flexReportRepository.save(new FlexReportEntity(report, downloadedAt));
     }
 
@@ -91,5 +96,27 @@ public class FlexReportStorageService {
             }
         });
         flexCashTransactionRepository.saveAll(newCashTransactions);
+    }
+
+    private void storeCorporateActions(List<FlexReportCorporateAction> corporateActions) {
+        // As with the trades: a row IB sent twice in one report is stored once.
+        Map<String, FlexReportCorporateAction> corporateActionsByIbTransactionId = new LinkedHashMap<>();
+        for (FlexReportCorporateAction corporateAction : corporateActions) {
+            corporateActionsByIbTransactionId.put(corporateAction.ibTransactionId(), corporateAction);
+        }
+        Map<String, FlexCorporateActionEntity> storedCorporateActionsByIbTransactionId = flexCorporateActionRepository
+                .storedCorporateActionsByIbTransactionId(corporateActionsByIbTransactionId.keySet());
+
+        List<FlexCorporateActionEntity> newCorporateActions = new ArrayList<>();
+        corporateActionsByIbTransactionId.forEach((ibTransactionId, corporateAction) -> {
+            FlexCorporateActionEntity storedCorporateAction =
+                    storedCorporateActionsByIbTransactionId.get(ibTransactionId);
+            if (storedCorporateAction == null) {
+                newCorporateActions.add(new FlexCorporateActionEntity(corporateAction));
+            } else {
+                storedCorporateAction.refreshFrom(corporateAction);
+            }
+        });
+        flexCorporateActionRepository.saveAll(newCorporateActions);
     }
 }

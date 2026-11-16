@@ -29,6 +29,9 @@ import java.time.LocalDateTime;
  * @param netCash              what the trade brought into the account, or took out of it, after the commission
  * @param transactionType      IB's kind of trade — {@code ExchTrade} for one made on an exchange —; {@code null} when IB
  *                             gives none
+ * @param fifoPnlRealized      IB's own FIFO gain of the execution, in the trade's currency and with the commissions — 0
+ *                             for a buy —; what the tax's FIFO is checked against ({@code OurFifoAgainstIbsFifo}).
+ *                             {@code null} when the query doesn't have the field: the tax doesn't need it
  */
 public record FlexReportTrade(
         String ibTradeId,
@@ -46,5 +49,6 @@ public record FlexReportTrade(
         BigDecimal ibCommission,
         String ibCommissionCurrency,
         BigDecimal netCash,
-        String transactionType) {
+        String transactionType,
+        BigDecimal fifoPnlRealized) {
 }

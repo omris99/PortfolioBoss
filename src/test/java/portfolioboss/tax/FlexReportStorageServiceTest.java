@@ -50,6 +50,23 @@ class FlexReportStorageServiceTest {
                 .isEqualTo(1);
         assertThat(countOf("select count(*) from flex_report where from_date = '2026-11-01' and to_date = '2026-11-13'"
                 + " and trade_count = 1 and cash_transaction_count = 1")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select fifo_pnl_realized from flex_trade where ib_trade_id = '1000000001'",
+                BigDecimal.class)).isEqualByComparingTo("245.5");
+    }
+
+    /** Each row of an action is a row of its own; storing the same days again replaces them by IB's id. */
+    @Test
+    void theRowsOfACorporateActionAreStoredAndCountedOnce() {
+        FlexReport report = new FlexReport(NOVEMBER_PERIOD, List.of(), List.of(), reverseSplitRows());
+
+        flexReportStorageService.storeReport(report, DOWNLOADED_AT);
+        flexReportStorageService.storeReport(report, DOWNLOADED_AT.plusSeconds(86_400));
+
+        assertThat(countOf("select count(*) from flex_corporate_action where ib_action_id = '6000000001'"))
+                .isEqualTo(2);
+        assertThat(countOf("select count(*) from flex_report where corporate_action_count = 2")).isEqualTo(2);
+        assertThat(jdbc.queryForObject("select quantity from flex_corporate_action where con_id = 1111",
+                BigDecimal.class)).isEqualByComparingTo("-500");
     }
 
     /** Each download is logged, but a row already stored is not stored twice. */
@@ -82,7 +99,8 @@ class FlexReportStorageServiceTest {
     @Test
     void aRowIbSentTwiceInOneReportIsStoredOnceAsItCameTheSecondTime() {
         FlexReport report = new FlexReport(NOVEMBER_PERIOD,
-                List.of(saleWithCommission("1000000001", "-5"), saleWithCommission("1000000001", "-2")), List.of());
+                List.of(saleWithCommission("1000000001", "-5"), saleWithCommission("1000000001", "-2")), List.of(),
+                List.of());
 
         flexReportStorageService.storeReport(report, DOWNLOADED_AT);
 
@@ -104,13 +122,24 @@ class FlexReportStorageServiceTest {
     }
 
     private FlexReport reportOf(FlexReportPeriod period, FlexReportTrade... trades) {
-        return new FlexReport(period, List.of(trades), List.of(marketDataFee()));
+        return new FlexReport(period, List.of(trades), List.of(marketDataFee()), List.of());
     }
 
     private FlexReportTrade saleWithCommission(String ibTradeId, String ibCommission) {
         return new FlexReportTrade(ibTradeId, "2000000001", 1111, "ABCD", "STK", "USD", LocalDate.of(2026, 11, 12),
                 LocalDateTime.of(2026, 11, 12, 10, 30, 0), LocalDate.of(2026, 11, 13), "SELL", new BigDecimal("-10"),
-                new BigDecimal("100"), new BigDecimal(ibCommission), "USD", new BigDecimal("995"), "ExchTrade");
+                new BigDecimal("100"), new BigDecimal(ibCommission), "USD", new BigDecimal("995"), "ExchTrade",
+                new BigDecimal("245.5"));
+    }
+
+    /** Two rows of one reverse split of 1 for 5: the old contract's 500 shares leave, the new contract's 100 come in. */
+    private List<FlexReportCorporateAction> reverseSplitRows() {
+        LocalDateTime actionTime = LocalDateTime.of(2026, 11, 10, 20, 25, 0);
+        return List.of(
+                new FlexReportCorporateAction("5000000001", "6000000001", "RS", 2222, "WXYZ", "STK", actionTime,
+                        new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO, "WXYZ SPLIT 1 FOR 5"),
+                new FlexReportCorporateAction("5000000002", "6000000001", "RS", 1111, "WXYZ.OLD", "STK", actionTime,
+                        new BigDecimal("-500"), BigDecimal.ZERO, BigDecimal.ZERO, "WXYZ SPLIT 1 FOR 5"));
     }
 
     private FlexReportCashTransaction marketDataFee() {

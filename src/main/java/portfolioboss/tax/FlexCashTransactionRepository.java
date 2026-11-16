@@ -15,6 +15,9 @@ public interface FlexCashTransactionRepository extends JpaRepository<FlexCashTra
 
     List<FlexCashTransactionEntity> findByIbTransactionIdIn(Collection<String> ibTransactionIds);
 
+    /** The rows of one of IB's types — {@code Other Fees}, the expenses that lower the account's taxable gain. */
+    List<FlexCashTransactionEntity> findByTransactionType(String transactionType);
+
     /**
      * The settlement days of the stored cash transactions in this currency, each once: a fee is a tax shield, converted
      * at its day's rate, and so will a dividend be (session 7).

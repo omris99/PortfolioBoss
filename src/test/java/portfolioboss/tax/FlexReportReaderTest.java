@@ -13,10 +13,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * IB's Flex answers read into records. The report has the shape of the real one — the query of
- * CAPITAL_GAINS_TAX_TODO.md, session 1.1, run on 2026-11-14 — with made-up values (symbols, ids, quantities, prices,
- * amounts) and without the account, which is neither read nor ever written into the repo (decision 9). It keeps fields the reader skips ({@code description},
- * {@code tradeMoney}, {@code proceeds}, {@code period}), to show they are skipped. The request statuses have the shapes
- * of IB's documentation.
+ * CAPITAL_GAINS_TAX_TODO.md, session 1.1, run on 2026-11-14, with the Corporate Actions section and {@code fifoPnlRealized}
+ * of session 3.0, run on 2026-11-15 — with made-up values (symbols, ids, quantities, prices, amounts) and without the
+ * account, which is neither read nor ever written into the repo (decision 9). It keeps fields the reader skips
+ * ({@code description}, {@code tradeMoney}, {@code proceeds}, {@code period}), to show they are skipped. The request
+ * statuses have the shapes of IB's documentation.
  */
 class FlexReportReaderTest {
 
@@ -28,16 +29,31 @@ class FlexReportReaderTest {
             <Trade tradeDate="20261012" symbol="ABCD" description="ABCD &amp; SONS INC" assetCategory="STK" currency="USD" \
             quantity="-20" tradePrice="150.5" tradeMoney="-3010" proceeds="3010" ibCommission="-5" \
             ibCommissionCurrency="USD" netCash="3005" settleDateTarget="20261013" buySell="SELL" \
-            transactionType="ExchTrade" tradeID="1000000001" conid="1111" ibOrderID="2000000001" dateTime="20261012;143015" />
+            transactionType="ExchTrade" tradeID="1000000001" conid="1111" ibOrderID="2000000001" dateTime="20261012;143015" \
+            fifoPnlRealized="245.512345" />
             <Trade tradeDate="20260601" symbol="WXYZ" description="WXYZ CORP" assetCategory="STK" currency="USD" \
             quantity="100" tradePrice="42.25" tradeMoney="4225" proceeds="-4225" ibCommission="-5" \
             ibCommissionCurrency="USD" netCash="-4230" settleDateTarget="20260602" buySell="BUY" \
-            transactionType="ExchTrade" tradeID="1000000002" conid="2222" ibOrderID="2000000002" dateTime="20260601;101500" />
+            transactionType="ExchTrade" tradeID="1000000002" conid="2222" ibOrderID="2000000002" dateTime="20260601;101500" \
+            fifoPnlRealized="0" />
             <Trade tradeDate="20251117" symbol="USD.HKD" description="USD.HKD" assetCategory="CASH" currency="HKD" \
             quantity="5000" tradePrice="7.8" tradeMoney="39000" proceeds="-39000" \
             ibCommission="-2.5" ibCommissionCurrency="USD" netCash="0" settleDateTarget="20251119" buySell="BUY" \
             transactionType="ExchTrade" tradeID="1000000003" conid="3333" ibOrderID="2000000003" dateTime="20251117;101500" />
             </Trades>
+            <CorporateActions>
+            <CorporateAction assetCategory="STK" symbol="WXYZ" \
+            description="WXYZ(US0000000001) SPLIT 1 FOR 5 (WXYZ, WXYZ CORP, US0000000002)" conid="2222" \
+            dateTime="20260318;202500" amount="0" proceeds="0" quantity="100" type="RS" transactionID="4000000001" \
+            actionID="5000000001" levelOfDetail="DETAIL" />
+            <CorporateAction assetCategory="STK" symbol="WXYZ.OLD" \
+            description="WXYZ(US0000000001) SPLIT 1 FOR 5 (WXYZ.OLD, WXYZ CORP, US0000000001)" conid="4444" \
+            dateTime="20260318;202500" amount="0" proceeds="0" quantity="-500" type="RS" transactionID="4000000002" \
+            actionID="5000000001" levelOfDetail="DETAIL" />
+            <CorporateAction assetCategory="STK" symbol="WXYZ" description="WXYZ SPLIT 1 FOR 5" conid="2222" \
+            dateTime="20260318;202500" amount="0" proceeds="0" quantity="100" type="RS" transactionID="4000000003" \
+            actionID="5000000001" levelOfDetail="SUMMARY" />
+            </CorporateActions>
             <CashTransactions>
             <CashTransaction dateTime="20260915;202000" type="Dividends" \
             description="WXYZ(US0000000000) CASH DIVIDEND USD 0.12 PER SHARE (Ordinary Dividend)" symbol="WXYZ" \
@@ -65,7 +81,28 @@ class FlexReportReaderTest {
         assertThat(sale).isEqualTo(new FlexReportTrade("1000000001", "2000000001", 1111, "ABCD", "STK", "USD",
                 LocalDate.of(2026, 10, 12), LocalDateTime.of(2026, 10, 12, 14, 30, 15), LocalDate.of(2026, 10, 13),
                 "SELL", new BigDecimal("-20"), new BigDecimal("150.5"), new BigDecimal("-5"), "USD",
-                new BigDecimal("3005"), "ExchTrade"));
+                new BigDecimal("3005"), "ExchTrade", new BigDecimal("245.512345")));
+    }
+
+    /** IB's FIFO gain is only for the check against our FIFO: a report without it is still read. */
+    @Test
+    void aTradeWithoutIbsFifoGainIsStillRead() {
+        FlexReportTrade conversion = flexReportReader.readReport(bytesOf(REPORT)).trades().get(2);
+
+        assertThat(conversion.fifoPnlRealized()).isNull();
+    }
+
+    /** IB writes an action as rows sharing its actionID; should summary rows come too, only the detail rows count. */
+    @Test
+    void theDetailRowsOfACorporateActionAreRead() {
+        FlexReport report = flexReportReader.readReport(bytesOf(REPORT));
+
+        assertThat(report.corporateActions()).extracting(FlexReportCorporateAction::ibTransactionId)
+                .containsExactly("4000000001", "4000000002");
+        assertThat(report.corporateActions().get(1)).isEqualTo(new FlexReportCorporateAction("4000000002",
+                "5000000001", "RS", 4444, "WXYZ.OLD", "STK", LocalDateTime.of(2026, 3, 18, 20, 25, 0),
+                new BigDecimal("-500"), BigDecimal.ZERO, BigDecimal.ZERO,
+                "WXYZ(US0000000001) SPLIT 1 FOR 5 (WXYZ.OLD, WXYZ CORP, US0000000001)"));
     }
 
     @Test
@@ -131,6 +168,7 @@ class FlexReportReaderTest {
 
         assertThat(report.trades()).isEmpty();
         assertThat(report.cashTransactions()).isEmpty();
+        assertThat(report.corporateActions()).isEmpty();
     }
 
     @Test

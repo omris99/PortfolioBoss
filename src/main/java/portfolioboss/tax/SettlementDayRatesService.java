@@ -21,7 +21,11 @@ import java.util.Set;
 @Service
 public class SettlementDayRatesService {
 
-    private static final String US_DOLLAR = "USD";
+    /**
+     * The one currency the account trades in that the Bank of Israel publishes rates for — also the currency whose rates
+     * the tax converts with ({@link CapitalGainsTaxService}).
+     */
+    protected static final String US_DOLLAR = "USD";
 
     private final FlexTradeRepository flexTradeRepository;
     private final FlexCashTransactionRepository flexCashTransactionRepository;

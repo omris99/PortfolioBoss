@@ -22,8 +22,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Reads the XML IB's Flex Web Service answers with: a report — the Trades and Cash Transactions sections of the query
- * (CAPITAL_GAINS_TAX_TODO.md, session 1.1) —, or, when it sends none, its status of the request for one. Java's own XML
+ * Reads the XML IB's Flex Web Service answers with: a report — the Trades, Cash Transactions and Corporate Actions sections
+ * of the query (CAPITAL_GAINS_TAX_TODO.md, sessions 1.1 and 3.0) —, or, when it sends none, its status of the request for
+ * one. Java's own XML
  * reader, so no library is added: Jackson's XML module would also have Spring read and write XML on every endpoint,
  * which weakens CLAUDE.md's JSON-only rule.
  *
@@ -39,6 +40,11 @@ class FlexReportReader {
     /** The outer element of a report, and of the service's status of a request. */
     private static final String REPORT_ROOT_ELEMENT = "FlexQueryResponse";
     private static final String REQUEST_STATUS_ROOT_ELEMENT = "FlexStatementResponse";
+    /**
+     * The level of a corporate action's rows that is read: should IB add summary rows of the same actions, counting them
+     * too would count every action twice.
+     */
+    private static final String DETAIL_ROWS = "DETAIL";
 
     /** {@code true} for a report, {@code false} for the service's status of the request — still being prepared, say. */
     protected boolean isReport(byte[] answerXml) {
@@ -59,7 +65,12 @@ class FlexReportReader {
         List<FlexReportCashTransaction> cashTransactions = rowsNamed(rootElement, "CashTransaction").stream()
                 .map(cashTransactionElement -> cashTransactionOf(new ReportRow(cashTransactionElement, "transactionID")))
                 .toList();
-        return new FlexReport(period, trades, cashTransactions);
+        List<FlexReportCorporateAction> corporateActions = rowsNamed(rootElement, "CorporateAction").stream()
+                .map(corporateActionElement -> new ReportRow(corporateActionElement, "transactionID"))
+                .filter(corporateActionRow -> DETAIL_ROWS.equals(corporateActionRow.requiredText("levelOfDetail")))
+                .map(this::corporateActionOf)
+                .toList();
+        return new FlexReport(period, trades, cashTransactions, corporateActions);
     }
 
     protected FlexReportRequestStatus readRequestStatus(byte[] statusXml) {
@@ -95,7 +106,8 @@ class FlexReportReader {
                 tradeRow.requiredDecimal("ibCommission"),
                 tradeRow.requiredText("ibCommissionCurrency"),
                 tradeRow.requiredDecimal("netCash"),
-                tradeRow.optionalText("transactionType"));
+                tradeRow.optionalText("transactionType"),
+                tradeRow.optionalDecimal("fifoPnlRealized"));
     }
 
     private FlexReportCashTransaction cashTransactionOf(ReportRow cashTransactionRow) {
@@ -109,6 +121,21 @@ class FlexReportReader {
                 cashTransactionRow.requiredDateTime("dateTime"),
                 cashTransactionRow.requiredDate("settleDate"),
                 cashTransactionRow.optionalText("description"));
+    }
+
+    private FlexReportCorporateAction corporateActionOf(ReportRow corporateActionRow) {
+        return new FlexReportCorporateAction(
+                corporateActionRow.requiredText("transactionID"),
+                corporateActionRow.requiredText("actionID"),
+                corporateActionRow.requiredText("type"),
+                corporateActionRow.requiredInteger("conid"),
+                corporateActionRow.requiredText("symbol"),
+                corporateActionRow.requiredText("assetCategory"),
+                corporateActionRow.requiredDateTime("dateTime"),
+                corporateActionRow.requiredDecimal("quantity"),
+                corporateActionRow.requiredDecimal("proceeds"),
+                corporateActionRow.requiredDecimal("amount"),
+                corporateActionRow.optionalText("description"));
     }
 
     private Integer errorCodeOf(Element statusRootElement) {
@@ -205,7 +232,15 @@ class FlexReportReader {
         }
 
         private BigDecimal requiredDecimal(String attributeName) {
-            String text = requiredText(attributeName);
+            return decimalOf(attributeName, requiredText(attributeName));
+        }
+
+        private BigDecimal optionalDecimal(String attributeName) {
+            String text = optionalText(attributeName);
+            return text == null ? null : decimalOf(attributeName, text);
+        }
+
+        private BigDecimal decimalOf(String attributeName, String text) {
             try {
                 return new BigDecimal(text);
             } catch (NumberFormatException e) {

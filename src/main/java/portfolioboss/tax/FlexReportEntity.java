@@ -27,6 +27,7 @@ public class FlexReportEntity {
     private Instant downloadedAt;
     private int tradeCount;
     private int cashTransactionCount;
+    private int corporateActionCount;
 
     /** Required by JPA, which creates entities by reflection. */
     protected FlexReportEntity() {
@@ -38,5 +39,6 @@ public class FlexReportEntity {
         this.downloadedAt = downloadedAt;
         this.tradeCount = report.trades().size();
         this.cashTransactionCount = report.cashTransactions().size();
+        this.corporateActionCount = report.corporateActions().size();
     }
 }

@@ -89,8 +89,9 @@ public class FlexDownloadService {
         System.out.println("[tax] Flex: asking IB for " + period);
         FlexReport report = flexClient.downloadReport(period);
         flexReportStorageService.storeReport(report, Instant.now());
-        System.out.printf("[tax] Flex: %d trades, %d cash transactions (%s)%n",
-                report.trades().size(), report.cashTransactions().size(), report.period());
+        System.out.printf("[tax] Flex: %d trades, %d cash transactions, %d corporate actions (%s)%n",
+                report.trades().size(), report.cashTransactions().size(), report.corporateActions().size(),
+                report.period());
     }
 
     /**

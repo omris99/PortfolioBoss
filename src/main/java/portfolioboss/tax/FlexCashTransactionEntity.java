@@ -58,4 +58,10 @@ public class FlexCashTransactionEntity {
     protected String ibTransactionId() {
         return ibTransactionId;
     }
+
+    /** The row as IB reported it, for the calculation, which works on IB's records rather than on entities. */
+    protected FlexReportCashTransaction toFlexReportCashTransaction() {
+        return new FlexReportCashTransaction(ibTransactionId, transactionType, conId, symbol, currency, amount,
+                transactionTime, settleDate, description);
+    }
 }

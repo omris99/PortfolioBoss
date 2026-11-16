@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.34.0";
+    public static final String VERSION = "0.36.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,30 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.36.0: [The tax confirmations, and /api/taxes]
+ * V19 tax_confirmation: what Phoenix recorded for one of the account's settlement days, as the user confirmed it — one per day, in shekels to the agora; the calculated amount is never stored.
+ * TaxYearWithItsConfirmations added: a confirmed amount is final — it counts in the year's tax and monthly settlements in place of the calculated one, even if the calculation changes later.
+ * TaxYearWithItsConfirmations: a day is waiting or confirmed, with no "matches" or "differs" — a number the user typed is the right one.
+ * TaxYearBalance added: the year's tax, shield and monthly settlements taken out of TaxYearCalculator, so that the same rule runs on the calculated amounts and on the recorded ones.
+ * AccountTaxWithItsConfirmations added: each confirmation goes to its settlement day's year; one whose day the calculation no longer has is kept as a day calculated as 0, never dropped.
+ * GET /api/taxes added (TaxesReadService, TaxController): the account's years as recorded, each other investor's as calculated — each day's sales with their buys and both ways of the gain.
+ * POST /api/taxes/confirmations added (TaxConfirmationService): one day or a whole month in one request, stored together or not at all; 409 for a day confirmed already, 400 for a day without a calculated entry.
+ * PUT and DELETE /api/taxes/confirmations/{id} added: a confirmation's amount and note corrected, or the confirmation cancelled so the day waits again; JSON only, like every write.
+ *
+ * VERSION 0.35.0: [The capital gains tax, computed]
+ * CapitalGainsTaxCalculator added: the tax of the account or of one investor — FIFO, each sale's taxable gain, an entry per settlement day, each tax year with its monthly settlements.
+ * FifoSalesCalculator added: each sale takes its shares from the earliest buys still held (SharesSoldFromOneBuy), commissions spread by quantity; the closed positions stay at average cost.
+ * TaxableGainOfSharesFromOneBuy added: the gain in dollars at the sale's rate and in shekels at both rates — the one closer to zero is taxed, 0 when one gains and the other loses.
+ * SaleTaxableGain added: a sale's taxable gain over its buys, each at its settlement day's rate, or why it isn't computed — HKD, a rate not out yet, an over-sale, a corporate action not followed.
+ * SettlementDayEntry and TaxYearCalculator added: a day's sales and IB fees net into 25% to pay or a shield; a month settles as a payment, a refund or a kept shield; the year is the settlement day's.
+ * SplitAdjustedFlexTrades added: Flex's trades show no split, so the trades before a reverse split or a split are restated in the shares of after it, in memory; any other corporate action is not followed.
+ * FlexReportReader and FlexReportStorageService: the Corporate Actions section (its detail rows) and each trade's fifoPnlRealized, IB's own FIFO gain, are read and stored.
+ * V18: flex_corporate_action, flex_report.corporate_action_count and flex_trade.fifo_pnl_realized; deleting the flex_report rows downloads the history again with them.
+ * OurFifoAgainstIbsFifo added: every Flex sale's FIFO gain checked against IB's own, to the cent.
+ * CapitalGainsTaxService added: the account's tax from Flex with IB's fees, each other investor's from their typed trades at their Flex twins' settlement days — in shekels, their cash untouched.
+ * SyncService: after the rates, every sync that reached TWS prints the tax; a failure prints [tax error] and never fails the sync.
+ * Console: [tax] capital gains tax 2025: … ILS on a taxable gain of … ILS (N sales), per investor too, then [tax] our FIFO against IB's: N of N sales match; Flex lines count corporate actions.
+ *
  * VERSION 0.34.0: [The Bank of Israel's exchange rates for the tax]
  * exchangerates package added: the Bank of Israel's representative rates, under tax — a source of data like stocks that downloads, stores and says which rate a day takes, knowing nothing of trades.
  * BankOfIsraelClient added: the Bank of Israel's SDMX service — a currency's rates of a period as CSV, no key (none for the Hong Kong dollar); a 404 is "no rate in these days" unless over 14 days.
