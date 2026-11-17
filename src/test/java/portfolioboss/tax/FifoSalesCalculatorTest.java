@@ -94,6 +94,62 @@ class FifoSalesCalculatorTest {
         assertThat(sharesSoldFromEachBuy.get(1).proceeds()).isEqualByComparingTo("49");
     }
 
+    // ── its cost first in first out against the Closed page's average cost (session 5) ───────────────────────────────
+
+    /** Decision 3's example: $100 first in first out, $150 at the average cost the Closed page uses. */
+    @Test
+    void theCostDiffersFromTheAverageCostWhenTheSharesHeldWereBoughtAtDifferentPrices() {
+        FifoSale fifoSale = new FifoSalesCalculator(List.of(
+                buy("1", "10", "10", FIRST_BUY_DAY),
+                buy("2", "10", "20", SECOND_BUY_DAY),
+                sale("3", "10", "25", SALE_DAY))).sales().get(0);
+
+        assertThat(fifoSale.fifoCost()).isEqualByComparingTo("100");
+        assertThat(fifoSale.costAtTheAverageCost()).isEqualByComparingTo("150");
+        assertThat(fifoSale.fifoCostDiffersFromTheAverageCost()).isTrue();
+    }
+
+    /**
+     * The average carries from one sale to the next, as on the Closed page: after the first sale the 10 shares left cost
+     * $150 there ($15 each) and $200 first in first out, so a second sale of 5 costs $75 against $100.
+     */
+    @Test
+    void theAverageCostCarriesFromOneSaleToTheNext() {
+        FifoSale secondSale = new FifoSalesCalculator(List.of(
+                buy("1", "10", "10", FIRST_BUY_DAY),
+                buy("2", "10", "20", SECOND_BUY_DAY),
+                sale("3", "10", "25", SALE_DAY),
+                sale("4", "5", "25", SALE_DAY))).sales().get(1);
+
+        assertThat(secondSale.fifoCost()).isEqualByComparingTo("100");
+        assertThat(secondSale.costAtTheAverageCost()).isEqualByComparingTo("75");
+        assertThat(secondSale.fifoCostDiffersFromTheAverageCost()).isTrue();
+    }
+
+    /** Every share held sold: both ways take the whole cost, $300. */
+    @Test
+    void aSaleOfEveryShareHeldCostsTheSameBothWays() {
+        FifoSale fifoSale = new FifoSalesCalculator(List.of(
+                buy("1", "10", "10", FIRST_BUY_DAY),
+                buy("2", "10", "20", SECOND_BUY_DAY),
+                sale("3", "20", "25", SALE_DAY))).sales().get(0);
+
+        assertThat(fifoSale.fifoCost()).isEqualByComparingTo("300");
+        assertThat(fifoSale.costAtTheAverageCost()).isEqualByComparingTo("300");
+        assertThat(fifoSale.fifoCostDiffersFromTheAverageCost()).isFalse();
+    }
+
+    /** One buy, its $5 commission spread the same way: 4 of its 10 shares cost $42 both ways. */
+    @Test
+    void sharesOfOneBuyCostTheSameBothWays() {
+        FifoSale fifoSale = new FifoSalesCalculator(List.of(
+                tradeOf("1", TradeSide.BUY, "10", "10", "5", FIRST_BUY_DAY),
+                tradeOf("2", TradeSide.SELL, "4", "15", "2", SALE_DAY))).sales().get(0);
+
+        assertThat(fifoSale.costAtTheAverageCost()).isEqualByComparingTo("42");
+        assertThat(fifoSale.fifoCostDiffersFromTheAverageCost()).isFalse();
+    }
+
     @Test
     void aSaleOfMoreThanWasBoughtKeepsTheSharesWithoutABuy() {
         FifoSale fifoSale = new FifoSalesCalculator(List.of(

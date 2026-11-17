@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static portfolioboss.tax.TaxTestData.entryWithTaxableGainOf;
@@ -24,6 +26,7 @@ class SettlementDayWithItsConfirmationTest {
 
         assertThat(settlementDay.isConfirmed()).isFalse();
         assertThat(settlementDay.recordedTaxAmount()).isEqualByComparingTo("100.00");
+        assertThat(settlementDay.status()).isEqualTo(SettlementDayStatus.CALCULATED);
     }
 
     @Test
@@ -33,6 +36,21 @@ class SettlementDayWithItsConfirmationTest {
 
         assertThat(settlementDay.isConfirmed()).isTrue();
         assertThat(settlementDay.recordedTaxAmount()).isEqualByComparingTo("99.99");
+        assertThat(settlementDay.status()).isEqualTo(SettlementDayStatus.CONFIRMED);
+    }
+
+    /** A day of a sale in Hong Kong dollars, once the user typed what Phoenix recorded: confirmed, nothing left to do. */
+    @Test
+    void aDayThatCannotBeCalculatedIsConfirmedOnceItsAmountIsTypedIn() {
+        SettlementDayEntry saleWithoutRates = new SettlementDayEntry(SETTLEMENT_DAY,
+                List.of(new SaleTaxableGain(CALCULATED_TAX_OF_100.sales().get(0).fifoSale(), null, Map.of())),
+                List.of(), Map.of());
+
+        SettlementDayWithItsConfirmation settlementDay =
+                new SettlementDayWithItsConfirmation(saleWithoutRates, confirmationOf("182.40"));
+
+        assertThat(saleWithoutRates.status()).isEqualTo(SettlementDayStatus.CANNOT_BE_CALCULATED);
+        assertThat(settlementDay.status()).isEqualTo(SettlementDayStatus.CONFIRMED);
     }
 
     /** A shield confirmed on a day calculated as a tax: Phoenix's word is the one that counts. */

@@ -1054,6 +1054,26 @@ Israel's exchange rates). The rest stands:
 - **Nothing is paid and nothing is sent:** the broker withholds the tax by itself. The page only works out and compares.
 - **The one thing saved is what the user confirms:** for a day, the amount the broker recorded, when, and a note.
 
+> **What was built (2026-11-16/17, CAPITAL_GAINS_TAX_TODO.md session 5).** The sections below are the brief as first sent
+> (2026-11-14). A revision round in Claude Design (2026-11-16) changed it, and the page was built from the revised design:
+> - **No "matches" / "differs":** a day is waiting or confirmed, and a confirmed amount is final. The confirmed ✓'s "?"
+>   shows when it was confirmed, the note and — when another amount was confirmed — "PortfolioBoss calculated ₪…",
+>   without a color.
+> - **"Calculated", never "worked out"**, in every text.
+> - **No short trades / day trades and no owner's tab yet:** the tabs are Portfolio and each investor besides the account
+>   owner; both wait for the session that splits IB's trades between the investors.
+> - **Nothing is taken off an investor's cash:** an investor's tax stays in shekels (decision 6).
+> - **No download button and no Bank of Israel line:** the history downloads with every sync; the setup card has two
+>   states, "IB's report is not connected" and "IB's trade history is not downloaded yet" (press Sync now).
+> - **"Lot" → "Bought":** a sale's opened table is Bought · Shares · Cost · Sold for · In dollars · In shekels · Counts; a
+>   sale IB reported in parts says "3 parts", each part in its "?".
+> - **One table for the year**, newest month first, a heading row per month; the row's last column is **Check**
+>   (Portfolio only). Most explanations moved behind a small "?" that opens on hover or keyboard focus.
+> - **The states of a day:** calculated (Confirm and the pencil), confirmed (✓ and the pencil), calculated to 0 (nothing to
+>   confirm), waiting for a rate (a clock), can't be calculated — a currency without rates, a corporate action that isn't
+>   supported, a commission in another currency — (the pencil, outlined: type the broker's amount), sold more than bought
+>   (check its trades).
+
 ### 10.1 What the page is built on
 
 - **Every sale in the account,** from IB's own record of the trades — including **short trades** that PortfolioBoss

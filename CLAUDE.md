@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A read-only decision-support tool for a **long-term** Interactive Brokers portfolio — the calm
 counterpart to the sibling IBBot intraday trading project (`~/DevProjects/IBBot`). It connects to
 TWS, syncs the holdings into a local PostgreSQL database on every connection, and serves that
-database to a React UI (`ui/`) of six pages — the API always reads from the database, never straight from TWS: an
+database to a React UI (`ui/`) of seven pages — the API always reads from the database, never straight from TWS: an
 Overview (the account's figures, what needs a look, how the signals stand, how the money splits by sector and by
 holding), the positions table, in which the user
 enters what IB doesn't know (a holding's buy/sell trades; its sector and industry come from IB since 2026-11-05), the
@@ -15,8 +15,9 @@ Averaging calculator (buying more of several holdings at once, those below their
 worked out in the UI only, nothing saved), the closed positions — derived from those
 trades, plus the manual positions sold before PortfolioBoss saw them —, a card per investor for an account several
 people's money shares (each one's cash, value and profit), all of which the UI writes to the same database through a
-few JSON endpoints, and Recommendations: the US stocks IB's scan finds in a long upward trend, in three lists (hot, too
-hot, correcting). Each holding also gets a momentum score from IB's daily closes and, on the press of a button, an analysis of
+few JSON endpoints, Recommendations: the US stocks IB's scan finds in a long upward trend, in three lists (hot, too
+hot, correcting), and Taxes: the capital gains tax of every sale in the account, as the broker withholds it, to check off
+against its monthly statements. Each holding also gets a momentum score from IB's daily closes and, on the press of a button, an analysis of
 its analyst ratings and news (Tavily searches, Claude extracts, the code decides), stored in the same database. It is a
 Maven / Spring Boot application (Java 21, Spring Boot 4.1.1).
 
@@ -50,8 +51,8 @@ real portfolio) — and built from that design system's tokens and component spe
 and browser-checked (2026-10-11): the light theme, the four pages with their addresses, the Overview, a drawer for a
 holding's details (`/positions/:holdingId`) and for a closed position, a Columns menu, the Signal cell in words, a
 confirm before a paid Analyze run quoting the real average cost, every form and confirm-delete in a modal, and the two
-warning triangles. The Radix primitives (`@radix-ui/react-dialog`, `-popover`, `-dropdown-menu`) bring the focus and
-keyboard handling; the date fields use the browser's own picker behind a calendar button, and the first load is still a
+warning triangles. The Radix primitives (`@radix-ui/react-dialog`, `-popover`, `-dropdown-menu`, and since 2026-11-16
+`-tooltip` for the Taxes page's "?") bring the focus and keyboard handling; the date fields use the browser's own picker behind a calendar button, and the first load is still a
 "Loading…" box rather than the design's skeletons. Since 2026-10-13 the Overview also shows the money by sector (a ring)
 and by holding with the cash (bars), with the stocks against the cash under the account's figures, and a holding's
 drawer has a Weight tab that works out the shares to sell or buy for a target weight — built in the UI from figures
@@ -167,9 +168,16 @@ calculated one, even if the calculation changes later —, a day is only waiting
 "a number I typed is the right one"), and only a day the calculation has an entry for can be confirmed (Phoenix's own fee,
 about 20 ₪ a month, isn't worth a day of its own). V19 is on the real database since that day (after
 `portfolioboss-2026-11-16.sql.gz`, 21 of 21 tables equal; applied by `./run.sh 7599`), and `GET /api/taxes` agreed with
-itself on every year of the real data. Next, before the page (session 5): a session to plan from the user's idea — when
-Flex is read, offer the trades not typed in (day trades too) and split a trade between investors, so that each one, the
-account owner too, pays by their own trades.
+itself on every year of the real data. Session 5 (2026-11-16/17, 707 tests, browser-checked by the user) is the **Taxes
+page** (`/taxes`, the seventh), built from Claude Design's fifth round after a revision round of its own (DESIGN_BRIEF.md
+§10's note: no "matches" / "differs", "calculated" in every text, "Bought" for a lot): a year to choose, tabs for
+Portfolio and each investor besides the account owner, the year's card, and one table of the year's settlement days by
+month — a day opens into its sales, a sale into the buys it took from, both ways —, with Confirm, the pencil for the
+broker's amount and "Confirm the whole month" on Portfolio only. The user's pick (option ב): it came **before** the session
+he planned next — when Flex is read, offer the trades not typed in (day trades too) and split a trade between investors,
+so that each one, the account owner too, pays by their own trades —, so the owner's tab and the "day trade" tag wait for
+it. The API only gained keys for it: each day's status, worked out in Java, a sale's FIFO cost against the average cost,
+and whether IB's report is connected and stored up to which day.
 
 ## Hard invariant: read-only
 
@@ -269,8 +277,9 @@ until the restart).
 The UI shows the portfolio as of the last sync. It reloads `/api/portfolio` after every write (trades,
 manual positions, investors, deposits) and after every analysis run; new figures from IB come with a new `run.sh` or
 the top bar's **Sync now** (since 2026-11-11: the startup's whole reading on demand, `POST /api/syncs`, then a reload —
-the Recommendations page and the alerts bell load again when the portfolio's `asOf` changes). Recommendations' Scan
-again reads only a new scan on demand and reloads `/api/recommendations`. Both need TWS open.
+the Recommendations page, the alerts bell and the Taxes page load again when the portfolio's `asOf` changes).
+Recommendations' Scan again reads only a new scan on demand and reloads `/api/recommendations`. Both need TWS open. The
+Taxes page reloads `/api/taxes` after every confirmation, correction or cancel.
 
 Tests: `mvn -q test` (JUnit 5; no TWS, but the database tests need `portfolioboss_test` running — see
 above). `PortfolioControllerTest` (`@WebMvcTest` + `MockMvc` + `@MockitoBean` on `PortfolioReadService`)
@@ -400,10 +409,13 @@ in dollars, the typed trades' estimated ones — a holding's and a manual positi
 read). The tax itself (package `tax`, session 3; made-up trades, most at a rate of 1 through the helper `TaxTestData`):
 `TaxableGainOfSharesFromOneBuyTest` (the four rows of decision 11's table), `FifoSalesCalculatorTest` (decision 3's
 example — 150, not average cost's 100 —, a sale from two buys, a buy shared by two sales, the commissions spread by
-quantity, a sale of more than was bought), `SaleTaxableGainTest` (per buy, not over the whole sale; a buy settled on a day
+quantity, a sale of more than was bought; since session 5 the average cost beside it — decision 3's example differs, the
+average carried from one sale to the next, a sale of every share and a single buy the same as FIFO), `SaleTaxableGainTest` (per buy, not over the whole sale; a buy settled on a day
 without a rate takes the one before; HKD, a rate not published yet and an over-sale not computed; a reason of the whole
 stock first), `SettlementDayEntryTest` (six sales of a day one entry, a fee at its rate and its cancellation, a fee
-without its rate left out, a sale not computed left out, agorot rounded half up), `TaxYearBalanceTest` (the plan's
+without its rate left out, a sale not computed left out, agorot rounded half up; since session 5 the day's status — a tax
+or a shield calculated, a 0, a sale or a fee waiting for its rate, a currency without rates, "can't be calculated" before
+"waiting", an over-sale first), `TaxYearBalanceTest` (the plan's
 example 2 month by month, the year's tax never below 0, a shield beyond what was paid, two days of a month settled
 together, the month of the last sync not settled), `TaxYearCalculatorTest` (the balance from each entry's tax amount, the
 year's taxable gain, its sales in order),
@@ -419,7 +431,7 @@ first sync, the account's tax with a fee, another investor's at their Flex twins
 a twin estimated, a stored reverse split followed); `SyncServiceTest` has `CapitalGainsTaxService` as a `@MockitoBean`
 (printed after the rates, a failure not failing the sync, none when TWS wasn't read). The confirmations (session 4):
 `SettlementDayWithItsConfirmationTest` (waiting counts its calculated amount, confirmed its confirmed one — another
-amount, a shield), `TaxYearWithItsConfirmationsTest` (each day with its confirmation, example 2 with April confirmed as
+amount, a shield; the status the entry's while waiting, `CONFIRMED` once confirmed — an HKD day too), `TaxYearWithItsConfirmationsTest` (each day with its confirmation, example 2 with April confirmed as
 −300 — the recorded balance moves, the calculated doesn't —, a confirmation whose day is no longer calculated kept as a
 day of 0), `AccountTaxWithItsConfirmationsTest` (each confirmation in its settlement day's year, a year with only a
 confirmation), `TaxConfirmationServiceTest` (`@DataJpaTest`: a day confirmed with its note trimmed, several days in one
@@ -427,9 +439,11 @@ request, a day confirmed already 409 with nothing of the request stored, a day w
 the first sync, a correction, a cancel, 404), `TaxesReadServiceTest` (`@DataJpaTest`: nothing before the first sync, the
 days waiting with their calculated amounts, the months and a fee's rate, a sale's buys with both ways of its gain, a
 confirmed amount counting in the year, a confirmed day keeping its amount when IB's report changes the calculation, an
-investor's years never confirmed) and `TaxControllerTest` (`@WebMvcTest`: the JSON — `month` as `"2026-06"`, a sale not
-computed without its shekels — and `no-store`, 503, 201, each 400 message, the service's 409 passed on, 204, 404, 415,
-405). The three tax tests on the database share `TaxTestDataInTheDatabase` (an `@Import`ed helper: the synced holding,
+investor's years never confirmed; since session 5 each day's status, and IB's report connected and stored up to its last
+day — `FlexClient` a `@MockitoBean` — or not connected) and `TaxControllerTest` (`@WebMvcTest`: the JSON — `month` as
+`"2026-06"`, a sale not computed without its shekels, since session 5 `flexConnected`, `flexReportsStoredUpTo`, the
+statuses and the FIFO-against-average flag — and `no-store`, 503, 201, each 400 message, the service's 409 passed on, 204,
+404, 415, 405). The three tax tests on the database share `TaxTestDataInTheDatabase` (an `@Import`ed helper: the synced holding,
 IB's Flex rows, the rates and an investor's typed trades — one made-up year whose figures its comment works out). After a
 change that tests depend on, prefer `mvn -q clean test`: a plain `mvn test` once skipped recompiling stale tests. There is no whole-app `@SpringBootTest`: it
 would run `TwsPortfolioRunner` and connect to TWS. Trust `mvn`'s exit code, not the log: `-q` is silent on success, and
@@ -531,10 +545,11 @@ AlertController ──> AlertService ──reads── Postgres (the holdings, c
         └──JSON── GET /api/alerts, POST /api/alerts/seen, PUT /api/alerts/settings — ui/'s bell and its settings drawer
 
 tax.TaxController ──> TaxesReadService ──> CapitalGainsTaxService (the tax, as above) + tax_confirmation
-        ▲             (tax/: AccountTaxWithItsConfirmations, TaxYearWithItsConfirmations, TaxYearBalance)
+        ▲             (tax/: AccountTaxWithItsConfirmations, TaxYearWithItsConfirmations, TaxYearBalance;
+        │              FlexClient.hasKeys and FlexReportStorageService.lastStoredDate for the page's setup card)
         │         └─> TaxConfirmationService ──writes── tax_confirmation (only a day the calculation has an entry for)
-        └──JSON── GET /api/taxes, POST /api/taxes/confirmations, PUT / DELETE /api/taxes/confirmations/{id} — the
-                  Taxes page (session 5; no UI yet)
+        └──JSON── GET /api/taxes, POST /api/taxes/confirmations, PUT / DELETE /api/taxes/confirmations/{id} — ui/'s
+                  Taxes page (session 5): Confirm, the pencil and Confirm the whole month, then a reload
 
 PortfolioController ──reads── PortfolioReadService ──reads── Postgres      (independent of the flow above:
         │                     (builds api/response/*Response              driven by HTTP requests, not by TWS)
@@ -1473,8 +1488,8 @@ amount is **final**, there is **no "matches" / "differs"**, and only a day with 
   each new confirmation), `PUT` and `DELETE /api/taxes/confirmations/{confirmationId}` (204), JSON only. The bodies:
   `TaxConfirmationsRequest(confirmations)` — `@NotEmpty`, every day once (`isEveryDayGivenOnce`, `@AssertTrue`) — of
   `TaxConfirmationRequest(settlementDay, taxAmount, note)` — `@PastOrPresent`, `@Digits(integer = 18, fraction = 2)` with
-  its own message, a note of 500 at most — and `TaxConfirmationCorrectionRequest(taxAmount, note)`. No UI reads them yet
-  (session 5): `ui/src/types` has no mirror of them so far.
+  its own message, a note of 500 at most — and `TaxConfirmationCorrectionRequest(taxAmount, note)`. `ui/src/types/taxes.ts`
+  mirrors them since session 5.
 Things that are easy to break:
 - The console lines stay the calculation's own (`TaxYearCalculator.balance()`), confirmations not counted: they are the
   check of the rules, and the page is where the recorded amounts are.
@@ -1482,6 +1497,60 @@ Things that are easy to break:
   changes old days' amounts doesn't touch the confirmed ones.
 - Two confirmations of one day at the same moment would pass the 409 check and break the `UNIQUE` (a 500): one user, so
   not guarded further.
+
+Session 5 (2026-11-16/17, browser-checked by the user) is the Taxes page, with three additions to `/api/taxes` — keys
+only added, so that the page holds no tax rule:
+- `SettlementDayStatus` — each day's state, decided in Java. `SettlementDayEntry.status()` checks in this order:
+  `SOLD_MORE_THAN_BOUGHT` (a sale beyond its buys), `CANNOT_BE_CALCULATED` (a sale in a currency without rates, a
+  corporate action not supported, a commission in another currency — `SALE_REASONS_THAT_CANNOT_BE_CALCULATED`: the
+  broker's amount has to be typed in), `WAITING_FOR_A_RATE` (a sale's or a fee's rate not published yet), then
+  `CALCULATED_TO_ZERO` or `CALCULATED`. `SettlementDayWithItsConfirmation.status()` is `CONFIRMED` once confirmed, whatever
+  the entry; an investor's day takes its entry's. Served as `SettlementDayResponse.status`.
+- `FifoSale.costAtTheAverageCost` — what the shares sold cost at the average cost, as the Closed page counts it:
+  `FifoSalesCalculator`'s private `SharesHeldAtTheAverageCost` walks the same trades beside the FIFO buys, the average
+  carried from one sale to the next and a sale of every share taking all that is left (recomputing it from the buys FIFO
+  still holds was the first plan, and wrong from the second sale on). `fifoCostDiffersFromTheAverageCost()` — more than a
+  cent — is `SaleResponse.fifoCostDiffersFromAverageCost`, the page's "first in, first out" note. The closed positions stay
+  `calculation.HoldingHistory`'s.
+- `TaxesResponse.flexConnected` (`FlexClient.hasKeys()`) and `flexReportsStoredUpTo` (`FlexReportStorageService
+  .lastStoredDate()`, `null` before the first download): which setup card the page shows, if any.
+
+The page (`ui/src/pages/TaxesPage.tsx`, `/taxes`, the seventh navigation item; its pieces in `ui/src/components/taxes/`;
+`ui/src/types/taxes.ts`; `useTaxes(portfolioSyncedAt)` — 503 is "nothing synced yet", and it loads again on a new `asOf`):
+- The year (a `SelectInput`, the last sync's year first) and `InvestorTabs` (`taxYears.tabsOf`: Portfolio, then each
+  investor besides the account owner — the owner's tab waits for the Flex-trades session); a new tab or year closes every
+  opened row. `TaxSetupCard` stands in for everything while IB's report isn't connected or nothing is stored (no button:
+  the history comes with the next sync).
+- `TaxYearCard`: the tax of the year so far, Settled ("Paid … · Refunded …"), Not settled yet (the current month's
+  settlement or the shield carried) and, on Portfolio, Checking off ("3 of 5 days confirmed", "1 to type in"); on the last
+  sync's year, a strip under it for a shield the broker won't refund on 31 December, with the days left — information in
+  the accent, never a warning.
+- `SettlementDaysTable`: one table per year — Settles · Sales · Taxable gain · Entry · Check (Portfolio only) —, the months
+  newest first (`MonthHeadingRow`: "June 2026 · tax ₪1,279.40 → paid", then "2 days to confirm" with
+  `ConfirmWholeMonthButton`, or "Checked off"). A day (`SettlementDayRows`) opens into `DaySales` — a line per stock
+  (`stockSalesOfTheDay`: a sale IB reported in parts is one line, "3 parts"), the FIFO note's "?" when the API flags it, and
+  IB's fees —, a stock's line into `SharesSoldFromEachBuyTable` (Bought · Shares · Cost · Sold for · In dollars · In shekels
+  · Counts). `TaxCheckCell` follows `status`: Confirm and the pencil (`BrokerRecordedAmountForm`: the amount in shekels,
+  Tax / Shield only when a sale wasn't calculated, a note, "Remove the confirmation"), the ✓ with its "?" (when, the note,
+  and "PortfolioBoss calculated ₪…" when another amount was confirmed — the user's pick), the clock, the pencil outlined,
+  or nothing. Confirm and Confirm the whole month send the calculated amounts (`confirmTaxDays`), the pencil
+  `confirmTaxDays` / `correctTaxConfirmation` / `cancelTaxConfirmation`, each then a reload. The words are `taxTexts.ts`'s.
+- `components/HelpOnHover.tsx` is the page's "?" (or a ✓ / clock in its place): a Radix **Tooltip**, open while the
+  pointer or the keyboard is on it, closed by Esc or a click. It was a popover first, and the user's browser check found
+  it reopening by itself: a popover gives the focus back to its button when it closes, and the button opened on focus. A
+  tooltip never moves the focus.
+- `components/InvestorTabs.tsx` replaced `graphs/WeightsTabs.tsx`: one tab row for the weights, the Weight tab, If I buy,
+  the Averaging calculator and Taxes, each naming it (`ariaLabel`). `lib/format.ts` gained `formatShekels`,
+  `formatSignedShekels`, `formatDollars`, `formatAmountInItsCurrency` and `formatExchangeRate` (3 decimals): the first page
+  with two currencies side by side, every amount carries its sign.
+Things that are easy to break:
+- React passes a click inside a portal (a "?"'s bubble, the pencil's popover, a confirm) up to the rows around it in the
+  component tree: `HelpOnHover` and `TaxCheckCell` stop it, or the day's row would open or close (a month's heading row
+  opens nothing, so its button needs no such guard).
+- `BrokerRecordedAmountForm`'s two decimals copy `TaxConfirmationRequest`'s `@Digits(fraction = 2)`, and its 500 the
+  note's limit: change both together.
+- `@radix-ui/react-tooltip` is pinned to 1.2.16, which shares its inner Radix parts with the installed dialog and
+  popover; a newer one brings a second copy of the part that knows which open layer is on top (Esc in a drawer).
 
 The exchange rates are a package of their own, `portfolioboss.exchangerates` (console `[exchangerates]` /
 `[exchangerates error]`; the user's ask, 2026-11-15): a source of data, like `stocks` — it downloads, stores and answers
@@ -1522,9 +1591,10 @@ Things that are easy to break:
   never store rates of a period that isn't next to the stretch.
 
 The Overview's weight graphs and the holding drawer's Weight tab (2026-10-13) are worked out in the UI from what
-`/api/portfolio` already sends — no endpoint, nothing stored. Both show a row of tabs (`graphs/WeightsTabs.tsx`, hidden
-with a single investor): **Portfolio**, then each investor, the account owner first. A tab is an `InvestmentsAndCash`
-(`ui/src/components/graphs/investmentsAndCash.ts`, `weightsTabsOf`): its `Investment`s — a holding as the tab weighs it:
+`/api/portfolio` already sends — no endpoint, nothing stored. Both show a row of tabs (`components/InvestorTabs.tsx` —
+`graphs/WeightsTabs.tsx` until the Taxes page shared it —, hidden with a single investor): **Portfolio**, then each
+investor, the account owner first. A tab is an `InvestmentsAndCash` (`ui/src/components/graphs/investmentsAndCash.ts`,
+`weightsTabsOf`): its `Investment`s — a holding as the tab weighs it:
 all of it on Portfolio (IB's quantity, market value, average cost), one investor's `investorQuantities` part on their
 tab (their quantity, `sharesValue`, `sharesCost` ÷ quantity), only the holdings they hold some of — its cash (IB's
 `totalCashValue`, or the investor's card's `cash`), and its wording ("the whole account" / "all of Shay's money", "the
@@ -1556,7 +1626,8 @@ price is 4.0% above the average"; without an average cost, or on the tab of an i
 average to change and the rows are left out. Since the design's second round (2026-10-25) the two graphs are
 the halves of one "Weights" card (`graphs/WeightGraphs.tsx`) whose header holds the tab row; every row of the legend and
 of the bars can be reached with the keyboard and explains itself in `ui/src/components/Tip.tsx` — the design system's
-bubble, used only here so far (the rest of the app still uses the browser's `title`) —, and the bars are drawn to scale
+bubble, used only here (the Taxes page's "?" is `HelpOnHover`'s tooltip; the rest of the app still uses the browser's
+`title`) —, and the bars are drawn to scale
 by amount.
 Things that are easy to break:
 - `ui/src/lib/orderCommission.ts` copies `calculation.OrderCommission`'s rule (1¢ a share, at least $5) by hand: change
@@ -1572,7 +1643,7 @@ Things that are easy to break:
 The Averaging calculator (`ui/src/pages/AveragingCalculatorPage.tsx`, `/averaging`, the third navigation item;
 MY_HOLDINGS_TODO.md session 3ב, decision 13; built from Claude Design's fourth round, DESIGN_BRIEF.md §9, arrangement A)
 plans buying more of several holdings at once, worked out in the UI from `/api/portfolio` only — no endpoint, nothing
-stored or sent. Its tabs are the weights' (`weightsTabsOf`, `WeightsTabs`), and each tab is a plan of its own: the page's
+stored or sent. Its tabs are the weights' (`weightsTabsOf`, `InvestorTabs`), and each tab is a plan of its own: the page's
 state keeps what is typed by tab and by holding (`TypedTexts`, gone when the page is left), and it opens on Portfolio or
 on the tab a link asked for — `averagingCalculator/AveragingCalculatorLink.tsx`, shown under the drawer's Weight tab
 calculator whatever is typed, carries the investor, and `investorIdToOpenOn(state)` reads it. The arithmetic is
@@ -1917,7 +1988,8 @@ Things that are easy to break:
   Flex reports downloaded and stored on every sync (`tax`, V16), and session 2, the Bank of Israel's dollar rates of the
   settlement days (`exchangerates`, V17), are built, and so is session 3, the calculation — FIFO, the taxable gain, the
   yearly balance, the corporate actions (V18) —, checked live against IB's FIFO and the 867s of 2024 and 2025, and so is
-  session 4, the confirmations and the page's endpoints (V19, `/api/taxes`, checked live); next, a session to plan — the
-  Flex trades not typed in, offered and split between investors (the user's idea) —, then the Taxes page (5). HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
+  session 4, the confirmations and the page's endpoints (V19, `/api/taxes`, checked live), and so is session 5, the Taxes
+  page (browser-checked), built before the session still to plan — the Flex trades not typed in, offered and split between
+  investors (the user's idea), which brings the owner's tab and the "day trade" tag. HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. There is **no written thesis per holding** (decided 2026-10-06: data, not text): the product is the data on
   each holding that helps decide whether to stay in it — not the IB reader.

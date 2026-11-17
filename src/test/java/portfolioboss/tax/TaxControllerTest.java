@@ -92,6 +92,23 @@ class TaxControllerTest {
                 .andExpect(jsonPath("$.otherInvestorsTax[0].taxYears[0].taxOfTheYearSoFar").value(163.23));
     }
 
+    /** What the Taxes page added (session 5): each day's status, the cost check of a sale, and IB's reports. */
+    @Test
+    void answersWhatThePageNeedsBeyondTheTax() throws Exception {
+        given(taxesReadService.taxes()).willReturn(Optional.of(madeUpTaxes()));
+
+        mockMvc.perform(get("/api/taxes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.flexConnected").value(true))
+                .andExpect(jsonPath("$.flexReportsStoredUpTo").value("2026-11-13"))
+                .andExpect(jsonPath("$.accountTaxYears[0].settlementDays[0].status").value("CALCULATED"))
+                .andExpect(jsonPath("$.accountTaxYears[0].settlementDays[1].status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.accountTaxYears[0].settlementDays[1].sales[0].fifoCostDiffersFromAverageCost")
+                        .value(true))
+                .andExpect(jsonPath("$.accountTaxYears[0].settlementDays[1].sales[1].fifoCostDiffersFromAverageCost")
+                        .value(false));
+    }
+
     @Test
     void answers503BeforeTheFirstSync() throws Exception {
         given(taxesReadService.taxes()).willReturn(Optional.empty());
@@ -251,22 +268,22 @@ class TaxControllerTest {
                 new BigDecimal("1642.90"), new BigDecimal("1642.90"));
         SaleResponse saleInDollars = new SaleResponse("1002", "ABCD", "USD", LocalDate.of(2026, 6, 1),
                 SALE_SETTLEMENT_DAY, new BigDecimal("10"), new BigDecimal("150"), BigDecimal.ONE, BigDecimal.ZERO,
-                null, new BigDecimal("1642.90"), List.of(sharesFromTheBuy));
+                null, new BigDecimal("1642.90"), List.of(sharesFromTheBuy), true);
         SharesSoldFromOneBuyResponse sharesWithoutTheirShekels = new SharesSoldFromOneBuyResponse("1000",
                 LocalDate.of(2026, 2, 2), LocalDate.of(2026, 2, 4), new BigDecimal("100"), new BigDecimal("2000"),
                 new BigDecimal("2500"), null, null, null, null, null);
         SaleResponse saleInHongKongDollars = new SaleResponse("1003", "WXYZ", "HKD", LocalDate.of(2026, 6, 1),
                 SALE_SETTLEMENT_DAY, new BigDecimal("100"), new BigDecimal("25"), new BigDecimal("3"), BigDecimal.ZERO,
-                SaleNotComputedReason.NO_RATE_FOR_THE_CURRENCY, null, List.of(sharesWithoutTheirShekels));
+                SaleNotComputedReason.NO_RATE_FOR_THE_CURRENCY, null, List.of(sharesWithoutTheirShekels), false);
         TaxDeductibleExpenseResponse fee = new TaxDeductibleExpenseResponse("3001", "USD", new BigDecimal("-10"),
                 "MARKETDATA FOR APR 2026", new BigDecimal("3.70"), new BigDecimal("-37.00"));
 
         SettlementDayResponse feeDay = new SettlementDayResponse(LocalDate.of(2026, 4, 1), List.of(), List.of(fee),
-                new BigDecimal("-37.00"), new BigDecimal("-9.25"), null);
+                new BigDecimal("-37.00"), new BigDecimal("-9.25"), null, SettlementDayStatus.CALCULATED);
         SettlementDayResponse saleDay = new SettlementDayResponse(SALE_SETTLEMENT_DAY,
                 List.of(saleInDollars, saleInHongKongDollars), List.of(), new BigDecimal("1642.90"),
                 new BigDecimal("410.73"), new TaxConfirmationResponse(7, SALE_SETTLEMENT_DAY, new BigDecimal("400.00"),
-                Instant.parse("2026-07-01T08:00:00Z"), "as in Phoenix's report"));
+                Instant.parse("2026-07-01T08:00:00Z"), "as in Phoenix's report"), SettlementDayStatus.CONFIRMED);
         MonthlySettlementResponse june = new MonthlySettlementResponse(YearMonth.of(2026, 6), new BigDecimal("400.00"),
                 new BigDecimal("390.75"), BigDecimal.ZERO, true);
         TaxYearResponse accountsYear = new TaxYearResponse(2026, new BigDecimal("1605.90"), new BigDecimal("401.48"),
@@ -275,6 +292,6 @@ class TaxControllerTest {
         TaxYearResponse avisYear = new TaxYearResponse(2026, new BigDecimal("652.90"), new BigDecimal("163.23"),
                 BigDecimal.ZERO, List.of(), List.of());
         return new TaxesResponse(LocalDate.of(2026, 11, 13), List.of(accountsYear),
-                List.of(new InvestorTaxResponse(3, "Avi", List.of(avisYear))));
+                List.of(new InvestorTaxResponse(3, "Avi", List.of(avisYear))), true, LocalDate.of(2026, 11, 13));
     }
 }

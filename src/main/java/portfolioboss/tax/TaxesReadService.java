@@ -19,19 +19,25 @@ import java.util.Optional;
 /**
  * Puts {@code GET /api/taxes} together (CAPITAL_GAINS_TAX_TODO.md, session 4): the tax {@link CapitalGainsTaxService}
  * works out, and the confirmations stored — the account's years as recorded ({@link AccountTaxWithItsConfirmations}),
- * every other investor's as calculated. The tax's records are internal to this package, so the response records are built
- * here, in private methods, as {@code PortfolioReadService} builds the portfolio's.
+ * every other investor's as calculated —, and (session 5) whether IB's Flex reports are connected and how far they are
+ * stored. The tax's records are internal to this package, so the response records are built here, in private methods, as
+ * {@code PortfolioReadService} builds the portfolio's.
  */
 @Service
 public class TaxesReadService {
 
     private final CapitalGainsTaxService capitalGainsTaxService;
     private final TaxConfirmationRepository taxConfirmationRepository;
+    private final FlexClient flexClient;
+    private final FlexReportStorageService flexReportStorageService;
 
     public TaxesReadService(CapitalGainsTaxService capitalGainsTaxService,
-                            TaxConfirmationRepository taxConfirmationRepository) {
+                            TaxConfirmationRepository taxConfirmationRepository, FlexClient flexClient,
+                            FlexReportStorageService flexReportStorageService) {
         this.capitalGainsTaxService = capitalGainsTaxService;
         this.taxConfirmationRepository = taxConfirmationRepository;
+        this.flexClient = flexClient;
+        this.flexReportStorageService = flexReportStorageService;
     }
 
     /** Empty before the first sync. The tax and the confirmations are read in one transaction, so they always agree. */
@@ -51,14 +57,16 @@ public class TaxesReadService {
         List<InvestorTaxResponse> otherInvestorsTax = capitalGainsTax.otherInvestorsTax().stream()
                 .map(this::investorTaxResponseOf)
                 .toList();
-        return new TaxesResponse(capitalGainsTax.accountTax().lastSyncDay(), accountTaxYears, otherInvestorsTax);
+        return new TaxesResponse(capitalGainsTax.accountTax().lastSyncDay(), accountTaxYears, otherInvestorsTax,
+                flexClient.hasKeys(), flexReportStorageService.lastStoredDate().orElse(null));
     }
 
     // ── the years: the account's as recorded, an investor's as calculated ────────────────────────────────────────────
 
     private TaxYearResponse accountTaxYearResponseOf(TaxYearWithItsConfirmations taxYear) {
         List<SettlementDayResponse> settlementDays = taxYear.settlementDays().stream()
-                .map(settlementDay -> settlementDayResponseOf(settlementDay.entry(), settlementDay.confirmation()))
+                .map(settlementDay -> settlementDayResponseOf(settlementDay.entry(), settlementDay.confirmation(),
+                        settlementDay.status()))
                 .toList();
         return taxYearResponseOf(taxYear.taxYear(), taxYear.recordedBalance(), settlementDays);
     }
@@ -73,7 +81,7 @@ public class TaxesReadService {
     /** An investor's day has no confirmation: their tax is shown, not confirmed (decision 7). */
     private TaxYearResponse investorTaxYearResponseOf(TaxYearCalculator taxYear) {
         List<SettlementDayResponse> settlementDays = taxYear.entriesInDateOrder().stream()
-                .map(entry -> settlementDayResponseOf(entry, null))
+                .map(entry -> settlementDayResponseOf(entry, null, entry.status()))
                 .toList();
         return taxYearResponseOf(taxYear, taxYear.balance(), settlementDays);
     }
@@ -95,7 +103,8 @@ public class TaxesReadService {
     // ── a settlement day: its sales, its expenses, its amount and its confirmation ─────────────────────────────────────
 
     /** {@code confirmation} is {@code null} while the day waits, and on an investor's day. */
-    private SettlementDayResponse settlementDayResponseOf(SettlementDayEntry entry, TaxConfirmation confirmation) {
+    private SettlementDayResponse settlementDayResponseOf(SettlementDayEntry entry, TaxConfirmation confirmation,
+                                                          SettlementDayStatus status) {
         List<SaleResponse> sales = entry.sales().stream().map(this::saleResponseOf).toList();
         List<TaxDeductibleExpenseResponse> expenses = entry.expenses().stream()
                 .map(expense -> expenseResponseOf(entry, expense))
@@ -103,7 +112,7 @@ public class TaxesReadService {
         TaxConfirmationResponse confirmationResponse =
                 confirmation == null ? null : new TaxConfirmationResponse(confirmation);
         return new SettlementDayResponse(entry.settlementDay(), sales, expenses, entry.taxableGainOfTheDay(),
-                entry.taxAmount(), confirmationResponse);
+                entry.taxAmount(), confirmationResponse, status);
     }
 
     private TaxDeductibleExpenseResponse expenseResponseOf(SettlementDayEntry entry, TaxDeductibleExpense expense) {
@@ -116,7 +125,7 @@ public class TaxesReadService {
         return new SaleResponse(trade.tradeId(), trade.symbol(), trade.currency(), trade.tradeDate(),
                 trade.settlementDay(), trade.quantity(), trade.price(), trade.commission(),
                 sale.fifoSale().quantitySoldBeyondTheBuys(), sale.notComputedReason(), sale.taxableGain(),
-                sharesSoldFromEachBuyResponsesOf(sale));
+                sharesSoldFromEachBuyResponsesOf(sale), sale.fifoSale().fifoCostDiffersFromTheAverageCost());
     }
 
     /** With their taxable gain when the sale is computed; otherwise only what FIFO took, without the shekels. */

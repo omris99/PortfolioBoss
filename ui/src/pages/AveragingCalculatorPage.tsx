@@ -16,7 +16,7 @@ import { AveragingTable, type AveragingTableEntry } from '../components/averagin
 import { NotOnThisPage } from '../components/averagingCalculator/NotOnThisPage';
 import { weightsTabOf, weightsTabsOf, type InvestmentsAndCash } from '../components/graphs/investmentsAndCash';
 import { wholeAccountOf, type WholeAccount } from '../components/graphs/portfolioWeights';
-import { WeightsTabs } from '../components/graphs/WeightsTabs';
+import { InvestorTabs } from '../components/InvestorTabs';
 import { PageHeader } from '../components/PageHeader';
 import { formatDateTime, formatMoney } from '../lib/format';
 import { openHoldingsOf } from '../lib/holdings';
@@ -183,7 +183,12 @@ export function AveragingCalculatorPage({ snapshot }: { snapshot: PortfolioSnaps
       <div className="flex flex-col gap-4">
         {tabs.length > 1 && (
           <div className="flex items-center gap-3 text-caption">
-            <WeightsTabs tabs={tabs} selectedInvestorId={tab.investorId} onSelect={setSelectedInvestorId} />
+            <InvestorTabs
+              tabs={tabs}
+              selectedInvestorId={tab.investorId}
+              onSelect={setSelectedInvestorId}
+              ariaLabel="Whose weights"
+            />
             <span className="text-faint">Weights of {tab.wholeName}. Each tab is a plan of its own.</span>
           </div>
         )}

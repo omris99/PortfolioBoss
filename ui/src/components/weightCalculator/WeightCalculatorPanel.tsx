@@ -16,7 +16,7 @@ import type { Holding } from '../../types/portfolio';
 import { AveragingCalculatorLink } from '../averagingCalculator/AveragingCalculatorLink';
 import { Field, FormError, InfoBand } from '../FormFields';
 import { weightsTabOf, type InvestmentsAndCash } from '../graphs/investmentsAndCash';
-import { WeightsTabs } from '../graphs/WeightsTabs';
+import { InvestorTabs } from '../InvestorTabs';
 import { WarnMark } from '../WarnMark';
 import { amountOf } from './ifIBuy';
 import {
@@ -356,7 +356,12 @@ export function WeightCalculatorPanel({
     <div>
       {tabs.length > 1 && (
         <div className="mb-4">
-          <WeightsTabs tabs={tabs} selectedInvestorId={tab.investorId} onSelect={setSelectedInvestorId} />
+          <InvestorTabs
+            tabs={tabs}
+            selectedInvestorId={tab.investorId}
+            onSelect={setSelectedInvestorId}
+            ariaLabel="Whose weights"
+          />
         </div>
       )}
       {'reason' in holdingInAccount ? (

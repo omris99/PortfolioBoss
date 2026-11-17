@@ -1,6 +1,11 @@
 import { useRef, type KeyboardEvent } from 'react';
-import { TOGGLE_GROUP_CLASS } from '../../lib/styles';
-import type { InvestmentsAndCash } from './investmentsAndCash';
+import { TOGGLE_GROUP_CLASS } from '../lib/styles';
+
+/** One tab of the row: Portfolio (`investorId` `null`), or one investor. */
+export interface InvestorTab {
+  investorId: number | null;
+  name: string;
+}
 
 /**
  * How one tab looks. The names are in sentence case, so they are lighter than the forms' BUY / SELL capitals; the
@@ -26,21 +31,24 @@ function positionOfPreviousTab(positionOfThisTab: number, numberOfTabs: number):
 }
 
 /**
- * Whose weights to show — Portfolio · Omri · Shay — as a segmented control like the forms' BUY or SELL. Shared by the
- * Overview's graphs and the drawer's Weight tab; nothing while Portfolio is the only tab.
+ * Whose figures to show — Portfolio · Omri · Shay — as a segmented control like the forms' BUY or SELL. Shared by the
+ * weights (the Overview's graphs, the drawer's Weight tab and If I buy, the Averaging calculator) and the Taxes page;
+ * nothing while Portfolio is the only tab. `ariaLabel` says what the tabs choose between ("Whose weights").
  *
  * The keyboard works the usual way for tabs: the Tab key reaches only the selected tab, and the → and ← arrow keys
  * select the next or the previous tab and move the keyboard to it.
  */
-export function WeightsTabs({
+export function InvestorTabs({
   tabs,
   selectedInvestorId,
   onSelect,
+  ariaLabel,
 }: {
-  tabs: InvestmentsAndCash[];
+  tabs: InvestorTab[];
   /** `null`: Portfolio. */
   selectedInvestorId: number | null;
   onSelect: (investorId: number | null) => void;
+  ariaLabel: string;
 }) {
   const tabButtonsInOrder = useRef<(HTMLButtonElement | null)[]>([]);
   if (tabs.length === 1) return null;
@@ -65,7 +73,7 @@ export function WeightsTabs({
   };
 
   return (
-    <span role="tablist" aria-label="Whose weights" className={TOGGLE_GROUP_CLASS}>
+    <span role="tablist" aria-label={ariaLabel} className={TOGGLE_GROUP_CLASS}>
       {tabs.map((tab, positionOfThisTab) => {
         const isSelectedTab = tab.investorId === selectedInvestorId;
         return (

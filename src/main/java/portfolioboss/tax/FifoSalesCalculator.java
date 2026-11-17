@@ -32,15 +32,24 @@ record FifoSalesCalculator(List<TaxCalculationTrade> tradesInOrder) {
     /** 16 significant digits, as in {@code calculation.ClosedPosition}: the part of a commission that goes with a part. */
     private static final MathContext DIVISION_PRECISION = MathContext.DECIMAL64;
 
-    /** Every sale of the stock with the buys it took its shares from, in the order of the trades. */
+    /**
+     * Every sale of the stock with the buys it took its shares from, in the order of the trades. Beside the buys still
+     * held, the same shares are followed at average cost, as the Closed page counts them, so that each sale knows its cost
+     * both ways ({@link FifoSale#fifoCostDiffersFromTheAverageCost}).
+     */
     protected List<FifoSale> sales() {
         Deque<BuyStillHeld> buysStillHeldEarliestFirst = new ArrayDeque<>();
+        SharesHeldAtTheAverageCost sharesHeldAtTheAverageCost =
+                new SharesHeldAtTheAverageCost(BigDecimal.ZERO, BigDecimal.ZERO);
         List<FifoSale> sales = new ArrayList<>();
         for (TaxCalculationTrade trade : tradesInOrder) {
             if (trade.isSale()) {
-                sales.add(saleFromTheEarliestBuys(trade, buysStillHeldEarliestFirst));
+                BigDecimal costAtTheAverageCost = sharesHeldAtTheAverageCost.costOfSelling(trade.quantity());
+                sales.add(saleFromTheEarliestBuys(trade, buysStillHeldEarliestFirst, costAtTheAverageCost));
+                sharesHeldAtTheAverageCost = sharesHeldAtTheAverageCost.afterSale(trade.quantity());
             } else {
                 buysStillHeldEarliestFirst.addLast(new BuyStillHeld(trade, trade.quantity()));
+                sharesHeldAtTheAverageCost = sharesHeldAtTheAverageCost.afterBuy(trade);
             }
         }
         return sales;
@@ -50,7 +59,8 @@ record FifoSalesCalculator(List<TaxCalculationTrade> tradesInOrder) {
      * Takes the sale's shares from the earliest buys still held, and puts back what is left of the last buy it took from.
      * What the buys can't cover is kept as {@code quantitySoldBeyondTheBuys}.
      */
-    private FifoSale saleFromTheEarliestBuys(TaxCalculationTrade sale, Deque<BuyStillHeld> buysStillHeldEarliestFirst) {
+    private FifoSale saleFromTheEarliestBuys(TaxCalculationTrade sale, Deque<BuyStillHeld> buysStillHeldEarliestFirst,
+                                             BigDecimal costAtTheAverageCost) {
         List<SharesSoldFromOneBuy> sharesSoldFromEachBuy = new ArrayList<>();
         BigDecimal quantityLeftToSell = sale.quantity();
         while (isMoreThanNothing(quantityLeftToSell) && !buysStillHeldEarliestFirst.isEmpty()) {
@@ -66,7 +76,7 @@ record FifoSalesCalculator(List<TaxCalculationTrade> tradesInOrder) {
         }
         BigDecimal quantitySoldBeyondTheBuys =
                 isMoreThanNothing(quantityLeftToSell) ? quantityLeftToSell : BigDecimal.ZERO;
-        return new FifoSale(sale, sharesSoldFromEachBuy, quantitySoldBeyondTheBuys);
+        return new FifoSale(sale, sharesSoldFromEachBuy, quantitySoldBeyondTheBuys, costAtTheAverageCost);
     }
 
     private SharesSoldFromOneBuy sharesSoldFrom(TaxCalculationTrade buy, BigDecimal quantityTaken,
@@ -97,5 +107,44 @@ record FifoSalesCalculator(List<TaxCalculationTrade> tradesInOrder) {
      * @param sharesNotSoldYet how many of its shares are still held
      */
     private record BuyStillHeld(TaxCalculationTrade buy, BigDecimal sharesNotSoldYet) {
+    }
+
+    /**
+     * The shares held, with their cost counted the way the Closed page counts it ({@code calculation.HoldingHistory}):
+     * every share sold costs the average of the shares held at that moment, and the sale that sells everything takes all
+     * that is left. Only to tell whether a sale's cost differs between the two ways.
+     *
+     * <p>Example: buy 10 at $10, buy 10 at $20, sell 10, sell 5. The second sale costs $75 here (5 × the $15 average that
+     * stays), and $100 first in first out (5 of the $20 buy).
+     *
+     * @param quantity the shares held
+     * @param cost     what they cost, the buys' commissions included
+     */
+    private record SharesHeldAtTheAverageCost(BigDecimal quantity, BigDecimal cost) {
+
+        private SharesHeldAtTheAverageCost afterBuy(TaxCalculationTrade buy) {
+            BigDecimal costOfTheBuy = buy.quantity().multiply(buy.price()).add(buy.commission());
+            return new SharesHeldAtTheAverageCost(quantity.add(buy.quantity()), cost.add(costOfTheBuy));
+        }
+
+        /** Shares sold beyond those held cost nothing, as first in first out. */
+        private BigDecimal costOfSelling(BigDecimal quantitySold) {
+            if (sellsEverything(quantitySold)) {
+                return cost;
+            }
+            return cost.multiply(quantitySold).divide(quantity, DIVISION_PRECISION);
+        }
+
+        private SharesHeldAtTheAverageCost afterSale(BigDecimal quantitySold) {
+            if (sellsEverything(quantitySold)) {
+                return new SharesHeldAtTheAverageCost(BigDecimal.ZERO, BigDecimal.ZERO);
+            }
+            return new SharesHeldAtTheAverageCost(quantity.subtract(quantitySold),
+                    cost.subtract(costOfSelling(quantitySold)));
+        }
+
+        private boolean sellsEverything(BigDecimal quantitySold) {
+            return quantity.subtract(quantitySold).compareTo(QUANTITY_TOLERANCE) <= 0;
+        }
     }
 }

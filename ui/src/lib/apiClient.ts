@@ -8,6 +8,7 @@ import type {
 } from '../types/portfolio';
 import type { AlertSetting } from '../types/alerts';
 import type { RecommendationAnalysisRun, ScanRun } from '../types/recommendations';
+import type { TaxConfirmationCorrectionRequest, TaxConfirmationsRequest } from '../types/taxes';
 
 /**
  * A write the API refused or could not be reached for; `message` is meant to be shown to the user as it is. `status` is
@@ -138,6 +139,28 @@ export async function markAlertsAsSeen(): Promise<void> {
 export async function saveAlertSettings(settings: AlertSetting[]): Promise<void> {
   const lines = settings.map(({ alertType, enabled, threshold }) => ({ alertType, enabled, threshold }));
   await sendJson('PUT', '/api/alerts/settings', { settings: lines });
+}
+
+/**
+ * The Taxes page's Confirm, Confirm the whole month, and an amount typed for a day not confirmed yet: what the broker
+ * recorded for each day, stored together or not at all. 409 when a day is confirmed already, 400 when the calculation
+ * has no entry for one.
+ */
+export function confirmTaxDays(request: TaxConfirmationsRequest): Promise<void> {
+  return sendJson('POST', '/api/taxes/confirmations', request);
+}
+
+/** A confirmed day's amount or note corrected; 404 when the confirmation is gone. */
+export function correctTaxConfirmation(
+  confirmationId: number,
+  correction: TaxConfirmationCorrectionRequest,
+): Promise<void> {
+  return sendJson('PUT', `/api/taxes/confirmations/${confirmationId}`, correction);
+}
+
+/** "Remove the confirmation": the day waits again, with its calculated amount. */
+export function cancelTaxConfirmation(confirmationId: number): Promise<void> {
+  return sendJson('DELETE', `/api/taxes/confirmations/${confirmationId}`);
 }
 
 /** Sends one write whose answer is not needed: after a write the caller reloads the whole portfolio. */

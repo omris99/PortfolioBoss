@@ -26,4 +26,9 @@ record SettlementDayWithItsConfirmation(SettlementDayEntry entry, TaxConfirmatio
     protected BigDecimal recordedTaxAmount() {
         return isConfirmed() ? confirmation.taxAmount() : entry.taxAmount();
     }
+
+    /** Confirmed once the user confirmed it, whatever its calculation; otherwise what its calculation needs. */
+    protected SettlementDayStatus status() {
+        return isConfirmed() ? SettlementDayStatus.CONFIRMED : entry.status();
+    }
 }

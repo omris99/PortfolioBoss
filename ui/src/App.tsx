@@ -14,6 +14,7 @@ import { InvestorsPage } from './pages/InvestorsPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { PositionsPage } from './pages/PositionsPage';
 import { RecommendationsPage } from './pages/RecommendationsPage';
+import { TaxesPage } from './pages/TaxesPage';
 import type { PortfolioSnapshot } from './types/portfolio';
 
 function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStatus {
@@ -24,8 +25,8 @@ function loadStatusOf(errorMessage: string | null, isLoading: boolean): LoadStat
 
 /**
  * Loads the portfolio once for every page, and shows the page of the address: / the Overview, /positions (with
- * /positions/12 opening holding 12's row), /averaging, /closed, /investors and /recommendations (with
- * /recommendations/40 opening a scanned stock's drawer). Any other address goes to the Overview.
+ * /positions/12 opening holding 12's row), /averaging, /closed, /investors, /recommendations (with
+ * /recommendations/40 opening a scanned stock's drawer) and /taxes. Any other address goes to the Overview.
  */
 function App() {
   const { snapshot, errorMessage, isLoading, reload } = usePortfolio();
@@ -83,6 +84,12 @@ function App() {
           <Route
             path="recommendations/:candidateId?"
             element={pageOnceLoaded((loaded) => <RecommendationsPage snapshot={loaded} />)}
+          />
+          {/* After the portfolio too: its sync's time loads the taxes again, since a sync downloads IB's reports and
+              the rates still missing. */}
+          <Route
+            path="taxes"
+            element={pageOnceLoaded((loaded) => <TaxesPage portfolioSyncedAt={loaded.asOf} />)}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

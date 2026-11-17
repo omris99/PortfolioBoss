@@ -5,9 +5,11 @@ import portfolioboss.exchangerates.ExchangeRates;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What one settlement day adds to the year's balance, as Phoenix records it (CAPITAL_GAINS_TAX_TODO.md, decision 4):
@@ -28,6 +30,11 @@ record SettlementDayEntry(LocalDate settlementDay, List<SaleTaxableGain> sales, 
 
     /** Phoenix's entries are in agorot. */
     private static final int AGOROT_DECIMAL_PLACES = 2;
+
+    /** The reasons no later sync will change: the amount Phoenix recorded is typed in instead. */
+    private static final Set<SaleNotComputedReason> SALE_REASONS_THAT_CANNOT_BE_CALCULATED = EnumSet.of(
+            SaleNotComputedReason.CORPORATE_ACTION_NOT_SUPPORTED, SaleNotComputedReason.COMMISSION_IN_ANOTHER_CURRENCY,
+            SaleNotComputedReason.NO_RATE_FOR_THE_CURRENCY);
 
     protected List<SaleTaxableGain> computedSales() {
         return sales.stream().filter(SaleTaxableGain::isComputed).toList();
@@ -80,5 +87,39 @@ record SettlementDayEntry(LocalDate settlementDay, List<SaleTaxableGain> sales, 
     protected BigDecimal taxAmount() {
         return taxableGainOfTheDay().multiply(CAPITAL_GAINS_TAX_RATE)
                 .setScale(AGOROT_DECIMAL_PLACES, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * What the day needs, from its calculation alone — its confirmation is {@link SettlementDayWithItsConfirmation}'s. The
+     * first that holds: a sale sold beyond its buys, a sale that can never be calculated, a sale or a fee waiting for its
+     * rate, a tax amount of 0; otherwise the day is calculated.
+     */
+    protected SettlementDayStatus status() {
+        if (hasASaleNotComputedBecause(SaleNotComputedReason.SOLD_MORE_THAN_BOUGHT)) {
+            return SettlementDayStatus.SOLD_MORE_THAN_BOUGHT;
+        }
+        if (hasASaleThatCannotBeCalculated()) {
+            return SettlementDayStatus.CANNOT_BE_CALCULATED;
+        }
+        if (hasASaleNotComputedBecause(SaleNotComputedReason.RATE_NOT_PUBLISHED_YET) || hasAnExpenseWaitingForItsRate()) {
+            return SettlementDayStatus.WAITING_FOR_A_RATE;
+        }
+        if (taxAmount().signum() == 0) {
+            return SettlementDayStatus.CALCULATED_TO_ZERO;
+        }
+        return SettlementDayStatus.CALCULATED;
+    }
+
+    private boolean hasASaleNotComputedBecause(SaleNotComputedReason reason) {
+        return salesNotComputed().stream().anyMatch(sale -> sale.notComputedReason() == reason);
+    }
+
+    private boolean hasASaleThatCannotBeCalculated() {
+        return salesNotComputed().stream()
+                .anyMatch(sale -> SALE_REASONS_THAT_CANNOT_BE_CALCULATED.contains(sale.notComputedReason()));
+    }
+
+    private boolean hasAnExpenseWaitingForItsRate() {
+        return expensesWithTheirRate().size() < expenses.size();
     }
 }

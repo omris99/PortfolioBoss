@@ -6,6 +6,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import portfolioboss.db.InvestorEntity;
 import portfolioboss.db.PortfolioSyncService;
 import portfolioboss.model.TradeSide;
@@ -22,6 +23,7 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
 import static portfolioboss.tax.TaxTestDataInTheDatabase.BUY_DAY;
 import static portfolioboss.tax.TaxTestDataInTheDatabase.FEE_SETTLEMENT_DAY;
 import static portfolioboss.tax.TaxTestDataInTheDatabase.SALE_DAY;
@@ -31,6 +33,7 @@ import static portfolioboss.tax.TaxTestDataInTheDatabase.SYNCED_AT;
 /**
  * {@code GET /api/taxes} put together from what is stored, against the real PostgreSQL test database: the made-up year
  * of {@link TaxTestDataInTheDatabase} — a fee day calculated as −9.25 and a sale day as 410.73 — and the confirmations.
+ * The Flex client is a stand-in: only whether its keys are set is asked, and no test calls IB.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -41,6 +44,9 @@ class TaxesReadServiceTest {
 
     @Autowired
     private TaxesReadService taxesReadService;
+
+    @MockitoBean
+    private FlexClient flexClient;
 
     @Autowired
     private TaxConfirmationRepository taxConfirmationRepository;
@@ -68,7 +74,34 @@ class TaxesReadServiceTest {
         assertThat(accountsYear.settlementDays()).extracting(SettlementDayResponse::computedTaxAmount)
                 .usingComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                 .containsExactly(new BigDecimal("-9.25"), new BigDecimal("410.73"));
-        assertThat(accountsYear.settlementDays()).allSatisfy(day -> assertThat(day.confirmation()).isNull());
+        assertThat(accountsYear.settlementDays()).allSatisfy(day -> {
+            assertThat(day.confirmation()).isNull();
+            assertThat(day.status()).isEqualTo(SettlementDayStatus.CALCULATED);
+        });
+    }
+
+    /** The keys set and the made-up report stored, which reaches 13 November. */
+    @Test
+    void saysThatIbsReportsAreConnectedAndHowFarTheyAreStored() {
+        given(flexClient.hasKeys()).willReturn(true);
+        storedData.storeTheAccountsYear();
+
+        TaxesResponse taxes = taxesReadService.taxes().orElseThrow();
+
+        assertThat(taxes.flexConnected()).isTrue();
+        assertThat(taxes.flexReportsStoredUpTo()).isEqualTo(LocalDate.of(2026, 11, 13));
+    }
+
+    /** A sync without the keys: nothing of IB's reports is stored, and the page asks for the keys. */
+    @Test
+    void saysThatIbsReportsAreNotConnectedAndNothingIsStored() {
+        given(flexClient.hasKeys()).willReturn(false);
+        storedData.syncTheHolding();
+
+        TaxesResponse taxes = taxesReadService.taxes().orElseThrow();
+
+        assertThat(taxes.flexConnected()).isFalse();
+        assertThat(taxes.flexReportsStoredUpTo()).isNull();
     }
 
     /** April's fee is a shield that stays — nothing paid yet to refund —; June pays the year's 401.48. */
@@ -103,6 +136,7 @@ class TaxesReadServiceTest {
         assertThat(sale.tradeId()).isEqualTo("1002");
         assertThat(sale.notComputedReason()).isNull();
         assertThat(sale.taxableGain()).isEqualByComparingTo("1642.90");
+        assertThat(sale.fifoCostDiffersFromAverageCost()).isFalse();
         assertThat(sale.sharesSoldFromEachBuy()).singleElement().satisfies(sharesSold -> {
             assertThat(sharesSold.buyTradeId()).isEqualTo("1001");
             assertThat(sharesSold.buySettlementDay()).isEqualTo(LocalDate.of(2026, 3, 3));
@@ -128,7 +162,9 @@ class TaxesReadServiceTest {
         assertThat(saleDay.computedTaxAmount()).isEqualByComparingTo("410.73");
         assertThat(saleDay.confirmation().taxAmount()).isEqualByComparingTo("400.00");
         assertThat(saleDay.confirmation().note()).isEqualTo("as in Phoenix's report");
+        assertThat(saleDay.status()).isEqualTo(SettlementDayStatus.CONFIRMED);
         assertThat(accountsYear.settlementDays().get(0).confirmation()).isNull();
+        assertThat(accountsYear.settlementDays().get(0).status()).isEqualTo(SettlementDayStatus.CALCULATED);
         assertThat(accountsYear.taxOfTheYearSoFar()).isEqualByComparingTo("390.75");
         assertThat(accountsYear.monthlySettlements().get(1).settlementAmount()).isEqualByComparingTo("390.75");
     }
@@ -166,8 +202,10 @@ class TaxesReadServiceTest {
             assertThat(aviTax.investorName()).isEqualTo("Avi");
             TaxYearResponse avisYear = aviTax.taxYears().get(0);
             assertThat(avisYear.taxOfTheYearSoFar()).isEqualByComparingTo("163.23");
-            assertThat(avisYear.settlementDays()).singleElement()
-                    .satisfies(day -> assertThat(day.confirmation()).isNull());
+            assertThat(avisYear.settlementDays()).singleElement().satisfies(day -> {
+                assertThat(day.confirmation()).isNull();
+                assertThat(day.status()).isEqualTo(SettlementDayStatus.CALCULATED);
+            });
         });
     }
 

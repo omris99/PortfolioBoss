@@ -5,8 +5,8 @@ import { CARD_CLASS } from '../../lib/styles';
 import { HoldingWeightsCard } from './HoldingWeightsCard';
 import { weightsTabOf, type InvestmentsAndCash } from './investmentsAndCash';
 import { portfolioWeightsOf, type LeftOutHolding, type PortfolioWeights } from './portfolioWeights';
+import { InvestorTabs } from '../InvestorTabs';
 import { SectorWeightsCard } from './SectorWeightsCard';
-import { WeightsTabs } from './WeightsTabs';
 
 /** "Not in the graphs: TCEHY (in HKD)." — nothing while every open holding is weighed. */
 function LeftOutNote({ leftOut }: { leftOut: LeftOutHolding[] }) {
@@ -60,7 +60,12 @@ export function WeightGraphs({ tabs }: { tabs: InvestmentsAndCash[] }) {
     <section aria-label="Weights" className={CARD_CLASS}>
       <div className="flex items-center gap-4 border-b px-5 pb-3 pt-4">
         <h2 className="text-section-title">Weights</h2>
-        <WeightsTabs tabs={tabs} selectedInvestorId={selectedTab.investorId} onSelect={setSelectedInvestorId} />
+        <InvestorTabs
+          tabs={tabs}
+          selectedInvestorId={selectedTab.investorId}
+          onSelect={setSelectedInvestorId}
+          ariaLabel="Whose weights"
+        />
       </div>
       {portfolioWeights.byHolding.length === 0 ? (
         <NothingToWeigh tab={selectedTab} />

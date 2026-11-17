@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.36.0";
+    public static final String VERSION = "0.37.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,21 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.37.0: [The Taxes page]
+ * TaxesPage added (/taxes, the seventh page): each year's capital gains tax in shekels, as the broker withholds it — a tab for Portfolio and for each investor besides the account owner.
+ * TaxYearCard added: the year's tax so far, what the broker paid and refunded at each month's end, what the current month will settle, and how far the checking off has come.
+ * TaxYearCard: a shield the broker won't refund on December 31 is shown with the days left, as information for a decision, never as a warning.
+ * SettlementDaysTable added: one table per year, the newest month first; a day opens into its sales, a stock's line into the buys it took from, with the gain both ways and the one that counts.
+ * TaxCheckCell and BrokerRecordedAmountForm added: Confirm takes the calculated amount as the broker's, the pencil types another with a note, and Confirm the whole month does a month at once.
+ * TaxCheckCell: a confirmed day's ✓ shows when it was confirmed and its note, and the calculated amount too when the broker recorded another; investors' tabs are read only.
+ * TaxSetupCard added: in place of the page while IB's Flex report isn't connected (its two keys missing) or its history isn't downloaded yet (it comes with the next sync).
+ * SettlementDayStatus added: each day's state decided in Java — calculated, confirmed, calculated to 0, waiting for a rate, can't be calculated (type the broker's amount), sold more than bought.
+ * FifoSale.costAtTheAverageCost added: the shares' cost at the Closed page's average cost, carried from sale to sale; a sale whose FIFO cost differs by more than a cent gets the page's note.
+ * TaxesResponse: flexConnected and flexReportsStoredUpTo added — whether IB's Flex keys are set and up to which day its reports are stored, for the page's setup card.
+ * HelpOnHover added: the Taxes page's "?", a Radix tooltip that opens on hover or keyboard focus and never moves the focus, so it can't reopen itself or swallow the next click.
+ * InvestorTabs added in place of WeightsTabs: one tab row shared by the weights, the Weight tab, If I buy, the Averaging calculator and the Taxes page.
+ * format: shekels, dollars and exchange rates (three decimals) added — the first page with two currencies side by side, so every amount carries its currency's sign.
+ *
  * VERSION 0.36.0: [The tax confirmations, and /api/taxes]
  * V19 tax_confirmation: what Phoenix recorded for one of the account's settlement days, as the user confirmed it — one per day, in shekels to the agora; the calculated amount is never stored.
  * TaxYearWithItsConfirmations added: a confirmed amount is final — it counts in the year's tax and monthly settlements in place of the calculated one, even if the calculation changes later.

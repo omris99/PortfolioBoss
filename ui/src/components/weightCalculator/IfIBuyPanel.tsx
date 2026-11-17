@@ -6,7 +6,7 @@ import type { Holding } from '../../types/portfolio';
 import type { HotStock } from '../../types/recommendations';
 import { Field, FormError, InfoBand, SelectInput } from '../FormFields';
 import { weightsTabOf, type InvestmentsAndCash } from '../graphs/investmentsAndCash';
-import { WeightsTabs } from '../graphs/WeightsTabs';
+import { InvestorTabs } from '../InvestorTabs';
 import { sectorText } from '../recommendations/hotStockTexts';
 import { amountOf, matchingSectorOf, purchaseOf, sectorsOfHoldings, type Purchase, type SectorChoice } from './ifIBuy';
 import { CashCoverage, PlanRow, shareCountText } from './WeightCalculatorPanel';
@@ -134,7 +134,12 @@ export function IfIBuyPanel({
     <div>
       {tabs.length > 1 && (
         <div className="mb-4">
-          <WeightsTabs tabs={tabs} selectedInvestorId={tab.investorId} onSelect={setSelectedInvestorId} />
+          <InvestorTabs
+            tabs={tabs}
+            selectedInvestorId={tab.investorId}
+            onSelect={setSelectedInvestorId}
+            ariaLabel="Whose weights"
+          />
         </div>
       )}
       <div className="grid max-w-[480px] grid-cols-[140px_1fr] gap-4">
