@@ -26,6 +26,6 @@ class ScanController {
     /** {@code request} says nothing: it is there so that only a JSON request is accepted (see {@link ScanRequest}). */
     @PostMapping(path = "/api/scans", consumes = MediaType.APPLICATION_JSON_VALUE)
     private ResponseEntity<ScanRunResponse> scanAgain(@RequestBody ScanRequest request) throws InterruptedException {
-        return ResponseEntity.ok(scanService.scanAgain());
+        return ResponseEntity.ok(new ScanRunResponse(scanService.scanAgain()));
     }
 }

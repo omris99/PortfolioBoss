@@ -1,7 +1,6 @@
 package portfolioboss.recommendations;
 
 import org.springframework.stereotype.Service;
-import portfolioboss.api.recommendations.response.ScanRunResponse;
 import portfolioboss.exceptions.TwsBusyException;
 import portfolioboss.exceptions.TwsUnavailableException;
 import portfolioboss.ib.Scan;
@@ -29,13 +28,14 @@ public class ScanService {
     }
 
     /**
-     * @throws TwsBusyException        while another reading from TWS runs — 409 ({@code ApiErrorHandler})
-     * @throws TwsUnavailableException when TWS can't be read or no scan answered — 503, the message says which
+     * @return the scan, as now stored
+     * @throws TwsBusyException        while another reading from TWS runs
+     * @throws TwsUnavailableException when TWS can't be read or no scan answered — the message says which
      */
-    public ScanRunResponse scanAgain() throws InterruptedException {
+    public Scan scanAgain() throws InterruptedException {
         ScanReading reading = twsReader.readScan();
         Scan scan = reading.scan();
         syncService.syncScan(scan, reading.dailyCloses());
-        return new ScanRunResponse(scan.scannedAt(), scan.candidates().size());
+        return scan;
     }
 }

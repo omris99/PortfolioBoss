@@ -42,11 +42,14 @@ class AlertControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
+    private AlertsReadService alertsReadService;
+
+    @MockitoBean
     private AlertService alertService;
 
     @Test
     void answersTheAlertsAndTheSettingsNotToBeKept() throws Exception {
-        given(alertService.currentAlerts()).willReturn(new AlertsResponse(
+        given(alertsReadService.currentAlerts()).willReturn(new AlertsResponse(
                 List.of(new AlertResponse(2, AlertType.ANALYST_CUT_TARGET, 8101, "ABCD", 12L,
                         "Morgan Stanley cut its target to 410.00 from 450.00", Instant.parse("2026-11-11T21:40:00Z"),
                         null)),

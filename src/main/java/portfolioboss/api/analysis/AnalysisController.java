@@ -28,6 +28,6 @@ class AnalysisController {
 
     @PostMapping(path = "/api/analysis", consumes = MediaType.APPLICATION_JSON_VALUE)
     private ResponseEntity<AnalysisRunResponse> analyze(@Valid @RequestBody AnalysisRequest request) {
-        return ResponseEntity.ok(analysisService.analyze(request.holdingIds()));
+        return ResponseEntity.ok(new AnalysisRunResponse(analysisService.analyze(request.holdingIds())));
     }
 }

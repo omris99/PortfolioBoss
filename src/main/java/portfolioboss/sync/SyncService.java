@@ -2,7 +2,6 @@ package portfolioboss.sync;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import portfolioboss.api.sync.response.SyncRunResponse;
 import portfolioboss.calculation.recommendations.ScanSchedule;
 import portfolioboss.exceptions.TwsBusyException;
 import portfolioboss.exceptions.TwsUnavailableException;
@@ -93,17 +92,17 @@ public class SyncService {
     /**
      * The Sync now button: what the startup reads, without restarting the app.
      *
-     * @throws TwsBusyException        while another reading from TWS runs — 409 ({@code ApiErrorHandler})
-     * @throws TwsUnavailableException when TWS can't be read — 503
+     * @return the portfolio IB sent, as now stored
+     * @throws TwsBusyException        while another reading from TWS runs
+     * @throws TwsUnavailableException when TWS can't be read
      */
-    public SyncRunResponse syncNow() throws InterruptedException {
+    public PortfolioSnapshot syncNow() throws InterruptedException {
         TwsReading reading = twsReader.readPortfolioUnlessBusy(isScanDue());
         storeWithFinnhubData(reading);
         downloadMissingFlexReports(reading.snapshot());
         downloadMissingDollarRates(reading.snapshot());
         printCapitalGainsTax();
-        PortfolioSnapshot snapshot = reading.snapshot();
-        return new SyncRunResponse(snapshot.asOf(), snapshot.holdings().size());
+        return reading.snapshot();
     }
 
     /** Once a trading day ({@link ScanSchedule}); when it is not due yet, says why. */

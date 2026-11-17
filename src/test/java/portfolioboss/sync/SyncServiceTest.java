@@ -12,7 +12,6 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
-import portfolioboss.api.sync.response.SyncRunResponse;
 import portfolioboss.exceptions.TwsBusyException;
 import portfolioboss.exceptions.TwsUnavailableException;
 import portfolioboss.ib.Holding;
@@ -112,9 +111,10 @@ class SyncServiceTest {
         given(finnhubClient.hasApiKey()).willReturn(true);
         given(finnhubClient.stockOrNullOnFailure(eq("ABCD"), any())).willReturn(FINNHUB_DATA_OF_DOLLAR_HOLDING);
 
-        SyncRunResponse answer = syncService.syncNow();
+        PortfolioSnapshot synced = syncService.syncNow();
 
-        assertThat(answer).isEqualTo(new SyncRunResponse(SYNCED_AT, 2));
+        assertThat(synced.asOf()).isEqualTo(SYNCED_AT);
+        assertThat(synced.holdings()).hasSize(2);
         assertThat(countOf("select count(*) from holding where account = '" + ACCOUNT + "'")).isEqualTo(2);
         assertThat(countOf("select count(*) from stock where con_id = " + DOLLAR_HOLDING_CON_ID)).isEqualTo(1);
     }
@@ -258,9 +258,10 @@ class SyncServiceTest {
         given(twsReader.readPortfolioUnlessBusy(anyBoolean())).willReturn(readingOfTwoHoldings());
         willThrow(new IllegalStateException("a made-up failure")).given(capitalGainsTaxService).printCapitalGainsTax();
 
-        SyncRunResponse answer = syncService.syncNow();
+        PortfolioSnapshot synced = syncService.syncNow();
 
-        assertThat(answer).isEqualTo(new SyncRunResponse(SYNCED_AT, 2));
+        assertThat(synced.asOf()).isEqualTo(SYNCED_AT);
+        assertThat(synced.holdings()).hasSize(2);
     }
 
     @Test

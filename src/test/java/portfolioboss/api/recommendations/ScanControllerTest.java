@@ -7,12 +7,16 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import portfolioboss.api.recommendations.response.ScanRunResponse;
 import portfolioboss.exceptions.TwsBusyException;
 import portfolioboss.exceptions.TwsUnavailableException;
+import portfolioboss.ib.Scan;
+import portfolioboss.ib.ScanRow;
+import portfolioboss.ib.StockContractDetails;
 import portfolioboss.recommendations.ScanService;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -37,12 +41,21 @@ class ScanControllerTest {
 
     @Test
     void scansAndAnswers200WithWhenAndHowManyStocks() throws Exception {
-        given(scanService.scanAgain()).willReturn(new ScanRunResponse(Instant.parse("2026-10-26T21:05:00Z"), 68));
+        given(scanService.scanAgain()).willReturn(scanOfTwoStocks());
 
         postScan("{}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.scannedAt").value("2026-10-26T21:05:00Z"))
-                .andExpect(jsonPath("$.candidateCount").value(68));
+                .andExpect(jsonPath("$.candidateCount").value(2));
+    }
+
+    /** Two made-up stocks on NASDAQ and NYSE, both kept: only when and how many reach the answer. */
+    private Scan scanOfTwoStocks() {
+        return new Scan(Instant.parse("2026-10-26T21:05:00Z"),
+                List.of(new ScanRow("SCAN_histPerfRatio3m_DESC", 0, 1, "HOTA"),
+                        new ScanRow("SCAN_histPerfRatio3m_DESC", 1, 2, "HOTB")),
+                Map.of(1, new StockContractDetails(1, "NASDAQ", "HOTA INC", "Technology", "Software"),
+                        2, new StockContractDetails(2, "NYSE", "HOTB CORP", "Industrials", "Machinery")));
     }
 
     /** A plain form, or text, is what a page on another site can send without asking: never a scan. */

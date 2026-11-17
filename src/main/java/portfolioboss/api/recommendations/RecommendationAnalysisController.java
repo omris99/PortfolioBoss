@@ -30,6 +30,7 @@ class RecommendationAnalysisController {
     @PostMapping(path = "/api/recommendations/analysis", consumes = MediaType.APPLICATION_JSON_VALUE)
     private ResponseEntity<RecommendationAnalysisRunResponse> analyze(
             @Valid @RequestBody RecommendationAnalysisRequest request) {
-        return ResponseEntity.ok(recommendationAnalysisService.analyze(request.candidateId()));
+        return ResponseEntity.ok(
+                new RecommendationAnalysisRunResponse(recommendationAnalysisService.analyze(request.candidateId())));
     }
 }

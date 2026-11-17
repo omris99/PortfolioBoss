@@ -2,14 +2,10 @@ package portfolioboss.alerts;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import portfolioboss.api.alerts.request.AlertSettingsRequest;
-import portfolioboss.api.alerts.response.AlertResponse;
-import portfolioboss.api.alerts.response.AlertSettingResponse;
-import portfolioboss.api.alerts.response.AlertsResponse;
-import portfolioboss.api.recommendations.RecommendationsReadService;
 import portfolioboss.calculation.alerts.AlertChangesCalculator;
 import portfolioboss.calculation.alerts.AlertCondition;
 import portfolioboss.calculation.alerts.AlertKey;
+import portfolioboss.calculation.alerts.AlertSetting;
 import portfolioboss.calculation.alerts.AlertSettings;
 import portfolioboss.calculation.alerts.HoldingAlertsCalculator;
 import portfolioboss.calculation.marketdata.DailyClosesWithSpy;
@@ -32,6 +28,7 @@ import portfolioboss.ib.Holding;
 import portfolioboss.model.alerts.AlertType;
 import portfolioboss.model.portfolio.HoldingStatus;
 import portfolioboss.recommendations.CandidateWithItsList;
+import portfolioboss.recommendations.ScanListsService;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -46,9 +43,9 @@ import java.util.stream.Collectors;
 
 /**
  * The alerts (MY_HOLDINGS_TODO.md, session 5ב, decisions 14–17): the check after every sync and after the settings are
- * saved, what the bell shows, the bell's "seen", and the settings drawer. It reads what the screen shows — the holdings
- * as the last sync stored them, their closes, Finnhub's answer, the Dow Jones targets, the latest scan's short list —
- * and writes only the {@code alert} and {@code alert_setting} tables.
+ * saved, the bell's "seen", and the settings drawer's Save — what the bell shows is {@code api.alerts.AlertsReadService}'s.
+ * It reads what the screen shows — the holdings as the last sync stored them, their closes, Finnhub's answer, the Dow
+ * Jones targets, the latest scan's short list — and writes only the {@code alert} and {@code alert_setting} tables.
  */
 @Service
 public class AlertService {
@@ -60,13 +57,13 @@ public class AlertService {
     private final DailyCloseRepository dailyCloseRepository;
     private final StockRepository stockRepository;
     private final AnalystPriceTargetRepository analystPriceTargetRepository;
-    private final RecommendationsReadService recommendationsReadService;
+    private final ScanListsService scanListsService;
 
     public AlertService(AlertRepository alertRepository, AlertSettingRepository alertSettingRepository,
                         AccountStateRepository accountStateRepository, HoldingRepository holdingRepository,
                         DailyCloseRepository dailyCloseRepository, StockRepository stockRepository,
                         AnalystPriceTargetRepository analystPriceTargetRepository,
-                        RecommendationsReadService recommendationsReadService) {
+                        ScanListsService scanListsService) {
         this.alertRepository = alertRepository;
         this.alertSettingRepository = alertSettingRepository;
         this.accountStateRepository = accountStateRepository;
@@ -74,20 +71,7 @@ public class AlertService {
         this.dailyCloseRepository = dailyCloseRepository;
         this.stockRepository = stockRepository;
         this.analystPriceTargetRepository = analystPriceTargetRepository;
-        this.recommendationsReadService = recommendationsReadService;
-    }
-
-    /** {@code GET /api/alerts}: the alerts of the types turned on, the newest first, and every type's setting. */
-    @Transactional(readOnly = true)
-    public AlertsResponse currentAlerts() {
-        AlertSettings settings = alertSettingRepository.alertSettings();
-        List<AlertType> enabledTypes = settings.enabledTypes();
-        Map<Integer, Long> holdingIdByConId = holdingIdByConId();
-        List<AlertResponse> alerts = enabledTypes.isEmpty() ? List.of()
-                : alertRepository.findByAlertTypeInOrderByCreatedAtDescIdDesc(enabledTypes).stream()
-                        .map(alert -> new AlertResponse(alert, holdingIdByConId.get(alert.conId())))
-                        .toList();
-        return new AlertsResponse(alerts, settings.allSettings().stream().map(AlertSettingResponse::new).toList());
+        this.scanListsService = scanListsService;
     }
 
     /**
@@ -128,12 +112,14 @@ public class AlertService {
         }
     }
 
-    /** The settings drawer's Save: every type's line, then a check with the new numbers — no sync needed. */
+    /**
+     * The settings drawer's Save: every type's line, then a check with the new numbers — no sync needed.
+     *
+     * @param settings every type once — the request was checked for it
+     */
     @Transactional
-    public void saveSettings(AlertSettingsRequest request) {
-        alertSettingRepository.saveAll(request.settings().stream()
-                .map(settingRequest -> new AlertSettingEntity(settingRequest.toAlertSetting()))
-                .toList());
+    public void saveSettings(List<AlertSetting> settings) {
+        alertSettingRepository.saveAll(settings.stream().map(AlertSettingEntity::new).toList());
         checkAlerts();
     }
 
@@ -175,13 +161,13 @@ public class AlertService {
 
     /**
      * ז: every stock of the latest scan's short list. The rule is the short list itself
-     * ({@code RecommendationsReadService.shortListOfLatestScan}), so there is nothing to compute here but the words.
+     * ({@link ScanListsService#shortListOfLatestScan}), so there is nothing to compute here but the words.
      */
     private List<AlertCondition> shortListConditions(AlertSettings settings) {
         if (!settings.isEnabled(AlertType.ENTERED_SHORT_LIST)) {
             return List.of();
         }
-        return recommendationsReadService.shortListOfLatestScan().candidates().stream()
+        return scanListsService.shortListOfLatestScan().candidates().stream()
                 .map(this::shortListConditionOf)
                 .toList();
     }
@@ -193,15 +179,6 @@ public class AlertService {
                 candidateWithItsList.analystTarget().upsidePercent());
         return new AlertCondition(new AlertKey(AlertType.ENTERED_SHORT_LIST, candidate.conId(), null),
                 candidate.symbol(), message);
-    }
-
-    /** The holdings of the latest sync's account, by contract id: an alert opens its holding's drawer. */
-    private Map<Integer, Long> holdingIdByConId() {
-        return accountStateRepository.findFirstByOrderByAsOfDesc()
-                .map(latestSync -> holdingRepository.findByAccountOrderById(latestSync.account()))
-                .orElse(List.of())
-                .stream()
-                .collect(Collectors.toMap(HoldingEntity::conId, HoldingEntity::id));
     }
 
     /** "[alerts] checked: 2 new (ABCD, WXYZ), 1 no longer true". */

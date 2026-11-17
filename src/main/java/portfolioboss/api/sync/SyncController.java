@@ -27,6 +27,6 @@ class SyncController {
     /** {@code request} says nothing: it is there so that only a JSON request is accepted (see {@link SyncRequest}). */
     @PostMapping(path = "/api/syncs", consumes = MediaType.APPLICATION_JSON_VALUE)
     private ResponseEntity<SyncRunResponse> syncNow(@RequestBody SyncRequest request) throws InterruptedException {
-        return ResponseEntity.ok(syncService.syncNow());
+        return ResponseEntity.ok(new SyncRunResponse(syncService.syncNow()));
     }
 }

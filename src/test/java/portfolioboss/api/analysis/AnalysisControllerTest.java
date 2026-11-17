@@ -3,15 +3,19 @@ package portfolioboss.api.analysis;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.web.server.ResponseStatusException;
+import portfolioboss.ai.ClaudeReply;
+import portfolioboss.ai.SearchResults;
+import portfolioboss.ai.StockAnalysisOutcome;
+import portfolioboss.ai.StockAnalysisRun;
+import portfolioboss.ai.StockSearches;
 import portfolioboss.analysis.AnalysisService;
-import portfolioboss.api.analysis.response.AnalysisRunResponse;
-import portfolioboss.api.analysis.response.FailedAnalysisResponse;
+import portfolioboss.exceptions.AnalysisOffException;
+import portfolioboss.exceptions.HoldingIsClosedException;
+import portfolioboss.exceptions.HoldingNotFoundException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -41,28 +45,37 @@ class AnalysisControllerTest {
 
     @Test
     void runsTheAnalysisAndAnswers200WithWhatItDidAndCost() throws Exception {
-        AnalysisRunResponse summary = new AnalysisRunResponse(6,
-                List.of(new FailedAnalysisResponse("AEVA", "Claude declined to answer")), 18, 63_000, 5_400,
-                new BigDecimal("0.180000"));
-        given(analysisService.analyze(List.of(7L, 8L))).willReturn(summary);
+        given(analysisService.analyze(List.of(7L, 8L))).willReturn(runOfOneAnalyzedAndOneFailed());
 
         postAnalysis("""
                 {"holdingIds": [7, 8]}""")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.analyzed").value(6))
+                .andExpect(jsonPath("$.analyzed").value(1))
                 .andExpect(jsonPath("$.failed[0].symbol").value("AEVA"))
                 .andExpect(jsonPath("$.failed[0].message").value("Claude declined to answer"))
-                .andExpect(jsonPath("$.tavilyCredits").value(18))
-                .andExpect(jsonPath("$.inputTokens").value(63_000))
-                .andExpect(jsonPath("$.outputTokens").value(5_400))
-                .andExpect(jsonPath("$.costUsd").value(0.18));
+                .andExpect(jsonPath("$.tavilyCredits").value(5))
+                .andExpect(jsonPath("$.inputTokens").value(21_000))
+                .andExpect(jsonPath("$.outputTokens").value(1_800))
+                .andExpect(jsonPath("$.costUsd").value(0.06));
+    }
+
+    /**
+     * A made-up run: AAPL analyzed — 5 credits, 21,000 and 1,800 tokens, $0.06 — and AEVA failed. The answer needs
+     * none of Claude's result, so there is none.
+     */
+    private StockAnalysisRun runOfOneAnalyzedAndOneFailed() {
+        StockSearches searchesOfFiveCredits = new StockSearches(new SearchResults(List.of(), 2),
+                new SearchResults(List.of(), 1), new SearchResults(List.of(), 1), new SearchResults(List.of(), 1));
+        ClaudeReply reply = new ClaudeReply(null, "claude-sonnet-5-5", 21_000, 1_800, new BigDecimal("0.060000"));
+        return new StockAnalysisRun(List.of(
+                new StockAnalysisOutcome("AAPL", reply, searchesOfFiveCredits, null),
+                new StockAnalysisOutcome("AEVA", null, null, "Claude declined to answer")));
     }
 
     /** {@code {}} is how the UI asks for every open holding. */
     @Test
     void anEmptyBodyAnalyzesEveryOpenHolding() throws Exception {
-        given(analysisService.analyze(any())).willReturn(new AnalysisRunResponse(0, List.of(), 0, 0, 0,
-                BigDecimal.ZERO));
+        given(analysisService.analyze(any())).willReturn(new StockAnalysisRun(List.of()));
 
         postAnalysis("{}").andExpect(status().isOk());
 
@@ -92,7 +105,7 @@ class AnalysisControllerTest {
 
     @Test
     void answers503WithTheMissingKey() throws Exception {
-        given(analysisService.analyze(any())).willThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+        given(analysisService.analyze(any())).willThrow(new AnalysisOffException(
                 "The analysis is off: ANTHROPIC_API_KEY is not set in config/local.env"));
 
         postAnalysis("{}")
@@ -103,10 +116,8 @@ class AnalysisControllerTest {
 
     @Test
     void answers404ForAnUnknownHoldingAnd400ForAClosedOne() throws Exception {
-        given(analysisService.analyze(List.of(999L)))
-                .willThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "No holding with id 999"));
-        given(analysisService.analyze(List.of(9L))).willThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "INTC is closed: only open holdings are analyzed"));
+        given(analysisService.analyze(List.of(999L))).willThrow(new HoldingNotFoundException(999L));
+        given(analysisService.analyze(List.of(9L))).willThrow(new HoldingIsClosedException("INTC"));
 
         postAnalysis("""
                 {"holdingIds": [999]}""")

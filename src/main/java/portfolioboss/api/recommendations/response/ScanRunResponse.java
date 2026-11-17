@@ -1,5 +1,7 @@
 package portfolioboss.api.recommendations.response;
 
+import portfolioboss.ib.Scan;
+
 import java.time.Instant;
 
 /**
@@ -9,4 +11,8 @@ import java.time.Instant;
  * @param candidateCount the stocks the scan kept, on NYSE or NASDAQ
  */
 public record ScanRunResponse(Instant scannedAt, int candidateCount) {
+
+    public ScanRunResponse(Scan scan) {
+        this(scan.scannedAt(), scan.candidates().size());
+    }
 }

@@ -3,18 +3,21 @@ package portfolioboss.api.recommendations;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.web.server.ResponseStatusException;
-import portfolioboss.api.analysis.response.AnalysisRunResponse;
-import portfolioboss.api.analysis.response.FailedAnalysisResponse;
-import portfolioboss.api.recommendations.response.RecommendationAnalysisRunResponse;
-import portfolioboss.api.recommendations.response.RecommendationPickResponse;
+import portfolioboss.ai.ClaudeReply;
+import portfolioboss.ai.SearchResults;
+import portfolioboss.ai.StockAnalysisOutcome;
+import portfolioboss.ai.StockAnalysisRun;
+import portfolioboss.ai.StockSearches;
+import portfolioboss.exceptions.AnalysisOffException;
+import portfolioboss.exceptions.CandidateNotFoundException;
 import portfolioboss.model.marketdata.RiskSign;
+import portfolioboss.recommendations.RecommendationAnalysisRun;
 import portfolioboss.recommendations.RecommendationAnalysisService;
+import portfolioboss.recommendations.RecommendationPick;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -37,10 +40,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(RecommendationAnalysisController.class)
 class RecommendationAnalysisControllerTest {
 
-    private static final AnalysisRunResponse TEN_ANALYZED = new AnalysisRunResponse(9,
-            List.of(new FailedAnalysisResponse("ABCD", "Claude declined to answer")), 45, 94_500, 8_100,
-            new BigDecimal("0.270000"));
-
     @Autowired
     private MockMvc mockMvc;
 
@@ -50,19 +49,21 @@ class RecommendationAnalysisControllerTest {
     /** {@code {}} is how the page asks for the short list and the recommendation. */
     @Test
     void anEmptyBodyAnalyzesTheShortListAndAnswersWithThePicks() throws Exception {
-        given(recommendationAnalysisService.analyze(null)).willReturn(new RecommendationAnalysisRunResponse(
-                TEN_ANALYZED, List.of(new RecommendationPickResponse(41, "WXYZ", List.of(), false, 3, 3, 27.1),
-                        new RecommendationPickResponse(43, "EFGH", List.of(RiskSign.LOSES_MONEY), true, 0, -1, 18.2))));
+        StockAnalysisRun twoAnalyzedAndOneFailed = new StockAnalysisRun(List.of(analyzedOutcomeOf("WXYZ"),
+                analyzedOutcomeOf("EFGH"), new StockAnalysisOutcome("ABCD", null, null, "Claude declined to answer")));
+        given(recommendationAnalysisService.analyze(null)).willReturn(new RecommendationAnalysisRun(
+                twoAnalyzedAndOneFailed, List.of(new RecommendationPick(41, "WXYZ", List.of(), false, 3, 3, 27.1),
+                        new RecommendationPick(43, "EFGH", List.of(RiskSign.LOSES_MONEY), true, 0, -1, 18.2))));
 
         postAnalysis("{}")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.analysis.analyzed").value(9))
+                .andExpect(jsonPath("$.analysis.analyzed").value(2))
                 .andExpect(jsonPath("$.analysis.failed[0].symbol").value("ABCD"))
                 .andExpect(jsonPath("$.analysis.failed[0].message").value("Claude declined to answer"))
-                .andExpect(jsonPath("$.analysis.tavilyCredits").value(45))
-                .andExpect(jsonPath("$.analysis.inputTokens").value(94_500))
-                .andExpect(jsonPath("$.analysis.outputTokens").value(8_100))
-                .andExpect(jsonPath("$.analysis.costUsd").value(0.27))
+                .andExpect(jsonPath("$.analysis.tavilyCredits").value(10))
+                .andExpect(jsonPath("$.analysis.inputTokens").value(21_000))
+                .andExpect(jsonPath("$.analysis.outputTokens").value(1_800))
+                .andExpect(jsonPath("$.analysis.costUsd").value(0.06))
                 .andExpect(jsonPath("$.picks[0].candidateId").value(41))
                 .andExpect(jsonPath("$.picks[0].symbol").value("WXYZ"))
                 .andExpect(jsonPath("$.picks[0].riskSigns").isEmpty())
@@ -79,8 +80,8 @@ class RecommendationAnalysisControllerTest {
     /** One candidate's analysis makes no recommendation: {@code picks} is {@code null}. */
     @Test
     void aCandidateIdAnalyzesThatCandidateAlone() throws Exception {
-        given(recommendationAnalysisService.analyze(7L)).willReturn(new RecommendationAnalysisRunResponse(
-                new AnalysisRunResponse(1, List.of(), 5, 10_500, 900, new BigDecimal("0.030000")), null));
+        given(recommendationAnalysisService.analyze(7L)).willReturn(new RecommendationAnalysisRun(
+                new StockAnalysisRun(List.of(analyzedOutcomeOf("KRVN"))), null));
 
         postAnalysis("""
                 {"candidateId": 7}""")
@@ -106,8 +107,7 @@ class RecommendationAnalysisControllerTest {
     void answers503WithTheMissingKey() throws Exception {
         String reason = "The recommendation is off: FINNHUB_API_KEY is not set in config/local.env, and without the "
                 + "company figures no stock can be picked";
-        given(recommendationAnalysisService.analyze(any()))
-                .willThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, reason));
+        given(recommendationAnalysisService.analyze(any())).willThrow(new AnalysisOffException(reason));
 
         postAnalysis("{}")
                 .andExpect(status().isServiceUnavailable())
@@ -116,8 +116,7 @@ class RecommendationAnalysisControllerTest {
 
     @Test
     void answers404ForACandidateNotInTheLists() throws Exception {
-        given(recommendationAnalysisService.analyze(999L)).willThrow(new ResponseStatusException(
-                HttpStatus.NOT_FOUND, "No candidate with id 999 in the latest scan's lists"));
+        given(recommendationAnalysisService.analyze(999L)).willThrow(new CandidateNotFoundException(999L));
 
         postAnalysis("""
                 {"candidateId": 999}""")
@@ -133,5 +132,13 @@ class RecommendationAnalysisControllerTest {
     private ResultActions postAnalysis(String body) throws Exception {
         return mockMvc.perform(post("/api/recommendations/analysis").contentType(MediaType.APPLICATION_JSON)
                 .content(body));
+    }
+
+    /** A made-up stock analyzed: 5 credits, 10,500 and 900 tokens, $0.03. The answer needs none of Claude's result. */
+    private StockAnalysisOutcome analyzedOutcomeOf(String symbol) {
+        StockSearches searchesOfFiveCredits = new StockSearches(new SearchResults(List.of(), 2),
+                new SearchResults(List.of(), 1), new SearchResults(List.of(), 1), new SearchResults(List.of(), 1));
+        ClaudeReply reply = new ClaudeReply(null, "claude-sonnet-5-5", 10_500, 900, new BigDecimal("0.030000"));
+        return new StockAnalysisOutcome(symbol, reply, searchesOfFiveCredits, null);
     }
 }

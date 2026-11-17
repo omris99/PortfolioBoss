@@ -9,7 +9,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import portfolioboss.api.recommendations.response.ScanRunResponse;
 import portfolioboss.exceptions.TwsBusyException;
 import portfolioboss.exceptions.TwsUnavailableException;
 import portfolioboss.ib.Benchmark;
@@ -64,9 +63,10 @@ class ScanServiceTest {
                 Benchmark.SPY_CON_ID, List.of(new DailyClose(LocalDate.of(2026, 10, 26), 690.1)))));
         int holdingCountBefore = countOf("select count(*) from holding");
 
-        ScanRunResponse answer = scanService.scanAgain();
+        Scan scanned = scanService.scanAgain();
 
-        assertThat(answer).isEqualTo(new ScanRunResponse(SCANNED_AT, 2));
+        assertThat(scanned.scannedAt()).isEqualTo(SCANNED_AT);
+        assertThat(scanned.candidates()).hasSize(2);
         assertThat(countOf("select count(*) from scan")).isEqualTo(1);
         assertThat(countOf("select count(*) from scan_candidate")).isEqualTo(2);
         assertThat(countOf("select count(*) from daily_close where con_id in (" + HOTA_CON_ID + ", "

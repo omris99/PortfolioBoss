@@ -10,11 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import portfolioboss.api.alerts.request.AlertSettingRequest;
-import portfolioboss.api.alerts.request.AlertSettingsRequest;
-import portfolioboss.api.alerts.response.AlertResponse;
-import portfolioboss.api.alerts.response.AlertsResponse;
-import portfolioboss.api.recommendations.RecommendationsReadService;
+import portfolioboss.calculation.alerts.AlertSetting;
 import portfolioboss.calculation.marketdata.AnalystTargetCalculator;
 import portfolioboss.calculation.marketdata.Momentum;
 import portfolioboss.calculation.recommendations.HotStockCalculator;
@@ -30,6 +26,7 @@ import portfolioboss.ib.ScanRow;
 import portfolioboss.ib.StockContractDetails;
 import portfolioboss.model.alerts.AlertType;
 import portfolioboss.recommendations.CandidateWithItsList;
+import portfolioboss.recommendations.ScanListsService;
 import portfolioboss.recommendations.ShortList;
 import portfolioboss.sync.PortfolioSyncService;
 
@@ -44,10 +41,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 
 /**
- * The check, the bell's list, "seen" and the settings against the real PostgreSQL test database, with the short list
- * replaced by a stand-in ({@code @MockitoBean}). Two made-up holdings, ABCD and WXYZ, 100 shares each at an average of
- * $100; a P&L of −2,000 is −20%. The "trades" alert is turned off in each test — a holding synced without trades has the
- * "no buy entered" warning —, except in the one about it.
+ * The check, "seen" and the settings' Save against the real PostgreSQL test database — what they store in the
+ * {@code alert} and {@code alert_setting} tables; what the bell reads of them is {@code AlertsReadServiceTest}'s —, with
+ * the short list replaced by a stand-in ({@code @MockitoBean}). Two made-up holdings, ABCD and WXYZ, 100 shares each at
+ * an average of $100; a P&L of −2,000 is −20%. The "trades" alert is turned off in each test — a holding synced without
+ * trades has the "no buy entered" warning —, except in the one about it.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -61,8 +59,7 @@ class AlertServiceTest {
     private static final Instant FIRST_SYNC = Instant.parse("2026-11-10T21:40:00Z");
     private static final Instant SECOND_SYNC = Instant.parse("2026-11-11T21:40:00Z");
     private static final Instant THIRD_SYNC = Instant.parse("2026-11-12T21:40:00Z");
-    private static final AlertSettingRequest TRADES_ALERT_OFF =
-            new AlertSettingRequest(AlertType.TRADES_DONT_MATCH_IB, false, null);
+    private static final AlertSetting TRADES_ALERT_OFF = new AlertSetting(AlertType.TRADES_DONT_MATCH_IB, false, null);
 
     @Autowired
     private AlertService alertService;
@@ -83,12 +80,12 @@ class AlertServiceTest {
     private JdbcTemplate jdbc;
 
     @MockitoBean
-    private RecommendationsReadService recommendationsReadService;
+    private ScanListsService scanListsService;
 
     @BeforeEach
     void turnOffTheTradesAlertAndEmptyTheShortList() {
-        alertSettingRepository.save(new AlertSettingEntity(TRADES_ALERT_OFF.toAlertSetting()));
-        given(recommendationsReadService.shortListOfLatestScan()).willReturn(new ShortList(null, 0, 0, List.of()));
+        alertSettingRepository.save(new AlertSettingEntity(TRADES_ALERT_OFF));
+        given(scanListsService.shortListOfLatestScan()).willReturn(new ShortList(null, 0, 0, List.of()));
     }
 
     @Test
@@ -156,30 +153,34 @@ class AlertServiceTest {
     @Test
     void aStockInTheShortListIsAnAlertWithoutAHolding() {
         syncAt(FIRST_SYNC, 0, 0);
-        given(recommendationsReadService.shortListOfLatestScan()).willReturn(shortListOfHota());
+        given(scanListsService.shortListOfLatestScan()).willReturn(shortListOfHota());
 
         alertService.checkAlerts();
-        AlertsResponse alerts = alertService.currentAlerts();
 
-        assertThat(alerts.alerts()).singleElement().satisfies(alert -> {
-            assertThat(alert.alertType()).isEqualTo(AlertType.ENTERED_SHORT_LIST);
-            assertThat(alert.symbol()).isEqualTo("HOTA");
-            assertThat(alert.holdingId()).isNull();
-            assertThat(alert.message()).isEqualTo("Entered the short list: hot, the analysts' target 30.0% above the price");
-        });
+        assertThat(jdbc.queryForMap("select alert_type, con_id, symbol, subject, message from alert"))
+                .containsEntry("alert_type", "ENTERED_SHORT_LIST")
+                .containsEntry("con_id", 9001)
+                .containsEntry("symbol", "HOTA")
+                .containsEntry("subject", null)
+                .containsEntry("message", "Entered the short list: hot, the analysts' target 30.0% above the price");
     }
 
-    /** Off: not checked and not shown — and an alert open when it was turned off isn't ended, nobody looked. */
+    /**
+     * Off: not checked — WXYZ falling as far makes no alert — and an alert open when it was turned off isn't ended,
+     * nobody looked. That the bell doesn't show it is {@code AlertsReadServiceTest}'s.
+     */
     @Test
-    void aTypeTurnedOffIsNeitherCheckedNorShown() {
+    void aTypeTurnedOffIsNotCheckedAndItsOpenAlertStaysOpen() {
         syncAt(FIRST_SYNC, -2_000, 0);
         alertService.checkAlerts();
 
-        alertService.saveSettings(settingsRequestWith(TRADES_ALERT_OFF,
-                new AlertSettingRequest(AlertType.FAR_BELOW_AVERAGE_COST, false, BigDecimal.valueOf(15))));
+        alertService.saveSettings(settingsWith(TRADES_ALERT_OFF,
+                new AlertSetting(AlertType.FAR_BELOW_AVERAGE_COST, false, BigDecimal.valueOf(15))));
+        syncAt(SECOND_SYNC, -2_000, -2_000);
+        alertService.checkAlerts();
 
-        assertThat(countOf("select count(*) from alert where ended_at is null")).isEqualTo(1);
-        assertThat(alertService.currentAlerts().alerts()).isEmpty();
+        assertThat(jdbc.queryForList("select symbol from alert where ended_at is null", String.class))
+                .containsExactly("ABCD");
     }
 
     /** −12% is not 15% below the average, but it is 10% below: saving the new number checks again, without a sync. */
@@ -189,29 +190,12 @@ class AlertServiceTest {
         alertService.checkAlerts();
         assertThat(countOf("select count(*) from alert")).isZero();
 
-        alertService.saveSettings(settingsRequestWith(TRADES_ALERT_OFF,
-                new AlertSettingRequest(AlertType.FAR_BELOW_AVERAGE_COST, true, BigDecimal.valueOf(10))));
+        alertService.saveSettings(settingsWith(TRADES_ALERT_OFF,
+                new AlertSetting(AlertType.FAR_BELOW_AVERAGE_COST, true, BigDecimal.valueOf(10))));
 
         assertThat(countOf("select count(*) from alert where alert_type = 'FAR_BELOW_AVERAGE_COST'")).isEqualTo(1);
-        assertThat(alertService.currentAlerts().settings())
-                .filteredOn(setting -> setting.alertType() == AlertType.FAR_BELOW_AVERAGE_COST)
-                .singleElement()
-                .satisfies(setting -> {
-                    assertThat(setting.threshold()).isEqualByComparingTo("10");
-                    assertThat(setting.defaultThreshold()).isEqualByComparingTo("15");
-                });
-    }
-
-    @Test
-    void theBellsListIsTheNewestFirstWithEachHoldingsId() {
-        syncAt(FIRST_SYNC, -2_000, -2_000);
-        alertService.checkAlerts();
-
-        List<AlertResponse> alerts = alertService.currentAlerts().alerts();
-
-        assertThat(alerts).extracting(AlertResponse::symbol).containsExactly("WXYZ", "ABCD");
-        assertThat(alerts).extracting(AlertResponse::holdingId)
-                .containsExactly(holdingIdOf(WXYZ_CON_ID), holdingIdOf(ABCD_CON_ID));
+        assertThat(jdbc.queryForObject("select threshold from alert_setting where alert_type = 'FAR_BELOW_AVERAGE_COST'",
+                BigDecimal.class)).isEqualByComparingTo("10");
     }
 
     /** Opening the bell sees everything there is; an alert that comes later is new again. */
@@ -243,15 +227,14 @@ class AlertServiceTest {
                 0.0, ACCOUNT);
     }
 
-    /** Every type as it starts, but for the lines given. */
-    private AlertSettingsRequest settingsRequestWith(AlertSettingRequest... changedSettings) {
-        List<AlertSettingRequest> settings = Arrays.stream(AlertType.values())
+    /** Every type as it starts, but for the lines given — the whole drawer, as its Save sends it. */
+    private List<AlertSetting> settingsWith(AlertSetting... changedSettings) {
+        return Arrays.stream(AlertType.values())
                 .map(type -> Arrays.stream(changedSettings)
-                        .filter(changedSetting -> changedSetting.alertType() == type)
+                        .filter(changedSetting -> changedSetting.type() == type)
                         .findFirst()
-                        .orElse(new AlertSettingRequest(type, true, type.defaultThreshold())))
+                        .orElse(new AlertSetting(type, true, type.defaultThreshold())))
                 .toList();
-        return new AlertSettingsRequest(settings);
     }
 
     /**
@@ -276,10 +259,6 @@ class AlertServiceTest {
         CandidateWithItsList hotaInTheShortList = new CandidateWithItsList(hota, new HotStockCalculator(momentum),
                 new AnalystTargetCalculator(targets, 100.0, scanDate));
         return new ShortList(1L, 1, 1, List.of(hotaInTheShortList));
-    }
-
-    private long holdingIdOf(int conId) {
-        return jdbc.queryForObject("select id from holding where account = ? and con_id = ?", Long.class, ACCOUNT, conId);
     }
 
     private int countOf(String countQuery) {

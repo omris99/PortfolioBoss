@@ -11,6 +11,9 @@ import portfolioboss.model.portfolio.TradeSide;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+import static portfolioboss.api.RequestValidationMessages.TOO_MANY_DIGITS;
+import static portfolioboss.api.RequestValidationMessages.WHOLE_NUMBER;
+
 /**
  * The body of {@code POST /api/holdings/{holdingId}/trades} and {@code PUT /api/trades/{tradeId}}: one buy or sell as
  * the user typed it. The annotations are checked by {@code @Valid} before the controller method runs, and their limits
@@ -29,16 +32,4 @@ public record TradeRequest(
         @Size(max = 500) String note,
         @PositiveOrZero @Digits(integer = 14, fraction = 6, message = TOO_MANY_DIGITS) BigDecimal commission,
         Long investorId) {
-
-    /**
-     * Replaces Hibernate Validator's "numeric value out of bounds (<14 digits>.<6 digits> expected)", which the UI shows.
-     * Also used by {@link NewManualPositionRequest}.
-     */
-    public static final String TOO_MANY_DIGITS = "must have at most 6 decimal places (and 14 digits before the point)";
-
-    /**
-     * The same, for a quantity: {@code @Digits} with {@code fraction = 0}. It counts the decimal places as they were
-     * written, so 10.0 is rejected too; the UI sends 10. Also used by {@link NewManualPositionRequest}.
-     */
-    protected static final String WHOLE_NUMBER = "must be a whole number (at most 14 digits)";
 }

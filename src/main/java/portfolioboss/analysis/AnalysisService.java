@@ -1,19 +1,19 @@
 package portfolioboss.analysis;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.ai.AiKeys;
 import portfolioboss.ai.ClaudeReply;
 import portfolioboss.ai.StockAnalysisOutcome;
 import portfolioboss.ai.StockAnalysisPipeline;
 import portfolioboss.ai.StockAnalysisRun;
 import portfolioboss.ai.StockToAnalyze;
-import portfolioboss.api.analysis.response.AnalysisRunResponse;
 import portfolioboss.db.analysis.StockAnalysisEntity;
 import portfolioboss.db.analysis.StockAnalysisRepository;
 import portfolioboss.db.portfolio.HoldingEntity;
 import portfolioboss.db.portfolio.HoldingRepository;
+import portfolioboss.exceptions.AnalysisOffException;
+import portfolioboss.exceptions.HoldingIsClosedException;
+import portfolioboss.exceptions.HoldingNotFoundException;
 import portfolioboss.model.portfolio.HoldingStatus;
 import portfolioboss.utils.Utils;
 
@@ -50,10 +50,15 @@ public class AnalysisService {
     }
 
     /**
-     * {@code holdingIds} empty or {@code null}: every open holding. A missing key is 503, an id that doesn't exist 404,
-     * a closed holding 400 — all before anything is searched.
+     * {@code holdingIds} empty or {@code null}: every open holding. A missing key, an id that doesn't exist and a closed
+     * holding are refused before anything is searched.
+     *
+     * @return what the run did and cost — the outcomes in the order of the holdings
+     * @throws AnalysisOffException      while Tavily's or Claude's key is missing
+     * @throws HoldingNotFoundException  for an id no holding has
+     * @throws HoldingIsClosedException  for a closed holding
      */
-    public AnalysisRunResponse analyze(List<Long> holdingIds) {
+    public StockAnalysisRun analyze(List<Long> holdingIds) {
         refuseWhileAKeyIsMissing();
         List<HoldingEntity> holdings = findHoldingsToAnalyze(holdingIds);
         Instant analyzedAt = Instant.now();
@@ -63,13 +68,13 @@ public class AnalysisService {
                 holdings.stream().map(this::stockToAnalyze).toList(), today);
 
         stockAnalysisRepository.saveAll(analysesToStore(holdings, run, analyzedAt));
-        return new AnalysisRunResponse(run);
+        return run;
     }
 
     private void refuseWhileAKeyIsMissing() {
         String missingKeyName = aiKeys.findMissingKeyName();
         if (missingKeyName != null) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+            throw new AnalysisOffException(
                     "The analysis is off: " + missingKeyName + " is not set in config/local.env");
         }
     }
@@ -83,10 +88,9 @@ public class AnalysisService {
 
     private HoldingEntity findOpenHolding(long holdingId) {
         HoldingEntity holding = holdingRepository.findById(holdingId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No holding with id " + holdingId));
+                .orElseThrow(() -> new HoldingNotFoundException(holdingId));
         if (holding.status() != HoldingStatus.OPEN) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    holding.symbol() + " is closed: only open holdings are analyzed");
+            throw new HoldingIsClosedException(holding.symbol());
         }
         return holding;
     }

@@ -7,26 +7,27 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.ai.AiKeys;
 import portfolioboss.ai.ClaudeReply;
 import portfolioboss.ai.SearchResult;
 import portfolioboss.ai.SearchResults;
 import portfolioboss.ai.Sentiment;
+import portfolioboss.ai.StockAnalysisOutcome;
 import portfolioboss.ai.StockAnalysisPipeline;
 import portfolioboss.ai.StockAnalysisResult;
+import portfolioboss.ai.StockAnalysisRun;
 import portfolioboss.ai.StockAnalyzer;
 import portfolioboss.ai.StockSearches;
 import portfolioboss.ai.StockToAnalyze;
 import portfolioboss.ai.TavilyClient;
-import portfolioboss.api.analysis.response.AnalysisRunResponse;
-import portfolioboss.api.analysis.response.FailedAnalysisResponse;
 import portfolioboss.db.analysis.StockAnalysisEntity;
 import portfolioboss.db.analysis.StockAnalysisRepository;
+import portfolioboss.exceptions.AnalysisOffException;
+import portfolioboss.exceptions.HoldingIsClosedException;
+import portfolioboss.exceptions.HoldingNotFoundException;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -35,6 +36,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -103,15 +105,15 @@ class AnalysisServiceTest {
 
     @Test
     void analyzesEveryOpenHoldingWhenNoneIsNamed() {
-        AnalysisRunResponse summary = analysisService.analyze(null);
+        StockAnalysisRun run = analysisService.analyze(null);
 
         assertThat(storedAnalysisSymbols()).containsExactly("AAPL", "AEVA");
-        assertThat(summary.analyzed()).isEqualTo(2);
-        assertThat(summary.failed()).isEmpty();
-        assertThat(summary.tavilyCredits()).isEqualTo(10);
-        assertThat(summary.inputTokens()).isEqualTo(21_000);
-        assertThat(summary.outputTokens()).isEqualTo(1_800);
-        assertThat(summary.costUsd()).isEqualByComparingTo("0.06");
+        assertThat(run.analyzedOutcomes()).hasSize(2);
+        assertThat(run.failedOutcomes()).isEmpty();
+        assertThat(run.tavilyCredits()).isEqualTo(10);
+        assertThat(run.inputTokens()).isEqualTo(21_000);
+        assertThat(run.outputTokens()).isEqualTo(1_800);
+        assertThat(run.costUsd()).isEqualByComparingTo("0.06");
     }
 
     /** Decision 8: the symbol, the currency and IB's price — nothing else about the holding. */
@@ -174,10 +176,10 @@ class AnalysisServiceTest {
 
     @Test
     void analyzesOnlyTheHoldingsNamed() {
-        AnalysisRunResponse summary = analysisService.analyze(List.of(aevaHoldingId));
+        StockAnalysisRun run = analysisService.analyze(List.of(aevaHoldingId));
 
         assertThat(storedAnalysisSymbols()).containsExactly("AEVA");
-        assertThat(summary.analyzed()).isEqualTo(1);
+        assertThat(run.analyzedOutcomes()).hasSize(1);
         then(tavilyClient).should(never()).searchAnalystForecasts("AAPL");
     }
 
@@ -189,11 +191,13 @@ class AnalysisServiceTest {
         given(stockAnalyzer.analyze(argThat(stock -> stock != null && stock.symbol().equals("AEVA")), any(), any()))
                 .willThrow(new IllegalStateException("Claude declined to answer"));
 
-        AnalysisRunResponse summary = analysisService.analyze(null);
+        StockAnalysisRun run = analysisService.analyze(null);
 
-        assertThat(summary.analyzed()).isEqualTo(1);
-        assertThat(summary.failed()).containsExactly(new FailedAnalysisResponse("AEVA", "Claude declined to answer"));
-        assertThat(summary.tavilyCredits()).isEqualTo(5);
+        assertThat(run.analyzedOutcomes()).hasSize(1);
+        assertThat(run.failedOutcomes())
+                .extracting(StockAnalysisOutcome::symbol, StockAnalysisOutcome::failureMessage)
+                .containsExactly(tuple("AEVA", "Claude declined to answer"));
+        assertThat(run.tavilyCredits()).isEqualTo(5);
         entityManager.flush();
         List<StockAnalysisEntity> latest = stockAnalysisRepository.findLatestOfEveryHolding();
         assertThat(latest).extracting(StockAnalysisEntity::holdingId).containsExactly(appleHoldingId, aevaHoldingId);
@@ -201,28 +205,23 @@ class AnalysisServiceTest {
     }
 
     @Test
-    void aMissingKeyIs503BeforeAnythingIsSearched() {
+    void aMissingKeyStopsTheRunBeforeAnythingIsSearched() {
         given(aiKeys.findMissingKeyName()).willReturn("TAVILY_API_KEY");
 
         assertThatThrownBy(() -> analysisService.analyze(null))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-                    assertThat(exception.getReason())
-                            .isEqualTo("The analysis is off: TAVILY_API_KEY is not set in config/local.env");
-                });
+                .isInstanceOf(AnalysisOffException.class)
+                .hasMessage("The analysis is off: TAVILY_API_KEY is not set in config/local.env");
         verifyNoInteractions(tavilyClient, stockAnalyzer);
     }
 
     @Test
-    void anUnknownHoldingIs404AndAClosedOneIs400() {
+    void anUnknownHoldingAndAClosedOneAreRefusedBeforeAnythingIsSearched() {
         assertThatThrownBy(() -> analysisService.analyze(List.of(appleHoldingId, 999_999L)))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
-                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+                .isInstanceOf(HoldingNotFoundException.class)
+                .hasMessage("No holding with id 999999");
         assertThatThrownBy(() -> analysisService.analyze(List.of(intelHoldingId)))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(exception.getReason()).isEqualTo("INTC is closed: only open holdings are analyzed");
-                });
+                .isInstanceOf(HoldingIsClosedException.class)
+                .hasMessage("INTC is closed: only open holdings are analyzed");
         verifyNoInteractions(tavilyClient, stockAnalyzer);
     }
 

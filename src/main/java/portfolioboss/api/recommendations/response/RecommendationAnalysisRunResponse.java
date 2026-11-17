@@ -1,6 +1,7 @@
 package portfolioboss.api.recommendations.response;
 
 import portfolioboss.api.analysis.response.AnalysisRunResponse;
+import portfolioboss.recommendations.RecommendationAnalysisRun;
 
 import java.util.List;
 
@@ -15,4 +16,9 @@ import java.util.List;
 public record RecommendationAnalysisRunResponse(
         AnalysisRunResponse analysis,
         List<RecommendationPickResponse> picks) {
+
+    public RecommendationAnalysisRunResponse(RecommendationAnalysisRun run) {
+        this(new AnalysisRunResponse(run.analysis()),
+                run.picks() == null ? null : run.picks().stream().map(RecommendationPickResponse::new).toList());
+    }
 }

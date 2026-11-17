@@ -7,11 +7,9 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.ai.AiKeys;
 import portfolioboss.ai.ClaudeReply;
 import portfolioboss.ai.EventMagnitude;
@@ -19,15 +17,14 @@ import portfolioboss.ai.NewsEvent;
 import portfolioboss.ai.NewsEventType;
 import portfolioboss.ai.SearchResults;
 import portfolioboss.ai.Sentiment;
+import portfolioboss.ai.StockAnalysisOutcome;
 import portfolioboss.ai.StockAnalysisPipeline;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.ai.StockAnalyzer;
 import portfolioboss.ai.StockToAnalyze;
 import portfolioboss.ai.TavilyClient;
-import portfolioboss.api.analysis.response.FailedAnalysisResponse;
-import portfolioboss.api.recommendations.RecommendationsReadService;
-import portfolioboss.api.recommendations.response.RecommendationAnalysisRunResponse;
-import portfolioboss.api.recommendations.response.RecommendationPickResponse;
+import portfolioboss.exceptions.AnalysisOffException;
+import portfolioboss.exceptions.CandidateNotFoundException;
 import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.ib.Scan;
@@ -53,6 +50,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -79,7 +77,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
-@Import({RecommendationAnalysisService.class, RecommendationsReadService.class, StockAnalysisPipeline.class,
+@Import({RecommendationAnalysisService.class, ScanListsService.class, StockAnalysisPipeline.class,
         PortfolioSyncService.class})
 class RecommendationAnalysisServiceTest {
 
@@ -143,16 +141,16 @@ class RecommendationAnalysisServiceTest {
 
     @Test
     void theFullRunAnalyzesTheFirstTenHotCandidatesAndPicksThree() {
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
 
         assertThat(storedAnalysisSymbols()).containsExactly("HOT01", "HOT02", "HOT03", "HOT04", "HOT05", "HOT06",
                 "HOT07", "HOT08", "HOT09", "HOT10");
-        assertThat(response.analysis().analyzed()).isEqualTo(10);
-        assertThat(response.analysis().tavilyCredits()).isEqualTo(50);
-        assertThat(response.picks()).extracting(RecommendationPickResponse::symbol)
+        assertThat(run.analysis().analyzedOutcomes()).hasSize(10);
+        assertThat(run.analysis().tavilyCredits()).isEqualTo(50);
+        assertThat(run.picks()).extracting(RecommendationPick::symbol)
                 .containsExactly("HOT01", "HOT02", "HOT03");
-        assertThat(response.picks().getFirst().candidateId()).isEqualTo(candidateIdOf("HOT01"));
-        assertThat(response.picks().getFirst().riskSigns()).isEmpty();
+        assertThat(run.picks().getFirst().candidateId()).isEqualTo(candidateIdOf("HOT01"));
+        assertThat(run.picks().getFirst().riskSigns()).isEmpty();
         then(tavilyClient).should(never()).searchNews("HOT11");
         then(tavilyClient).should(never()).searchNews("TOOHOT");
     }
@@ -177,11 +175,11 @@ class RecommendationAnalysisServiceTest {
     void withoutAStockWithEnoughUpsideNothingIsPaidForAndNoRecommendationIsStored() {
         jdbc.update("update analyst_price_target set price_target = 1");
 
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
         entityManager.flush();
 
-        assertThat(response.analysis().analyzed()).isZero();
-        assertThat(response.picks()).isEmpty();
+        assertThat(run.analysis().analyzedOutcomes()).isEmpty();
+        assertThat(run.picks()).isEmpty();
         verifyNoInteractions(tavilyClient, stockAnalyzer);
         then(finnhubClient).should(never()).stock(anyString(), any());
         assertThat(jdbc.queryForObject("select picks::text from investment_recommendation", String.class))
@@ -190,21 +188,21 @@ class RecommendationAnalysisServiceTest {
 
     @Test
     void aPickCarriesHowFarTheAnalystsTargetIsAboveItsPrice() {
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
 
-        assertThat(response.picks().getFirst().targetUpsidePercent()).isCloseTo(30, within(1e-9));
+        assertThat(run.picks().getFirst().targetUpsidePercent()).isCloseTo(30, within(1e-9));
     }
 
     /** V11: the full run's picks are kept, in their order, with the scan they came from — for the measurement. */
     @Test
     void theFullRunStoresItsPicksInTheirOrder() {
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
         entityManager.flush();
 
         Map<String, Object> stored = jdbc.queryForMap("""
                 select scan_id, picks::text as picks from investment_recommendation""");
         long latestScanId = jdbc.queryForObject("select max(id) from scan", Long.class);
-        String expectedPicks = response.picks().stream()
+        String expectedPicks = run.picks().stream()
                 .map(pick -> String.valueOf(pick.candidateId()))
                 .collect(Collectors.joining(", ", "[", "]"));
         assertThat(stored.get("scan_id")).isEqualTo(latestScanId);
@@ -217,10 +215,10 @@ class RecommendationAnalysisServiceTest {
         given(finnhubClient.stock(anyString(), any()))
                 .willAnswer(invocation -> new Stock(invocation.getArgument(0), null, FALLING_REVENUE_AND_HIGH_DEBT));
 
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
         entityManager.flush();
 
-        assertThat(response.picks()).isEmpty();
+        assertThat(run.picks()).isEmpty();
         assertThat(jdbc.queryForObject("select picks::text from investment_recommendation", String.class))
                 .isEqualTo("[]");
     }
@@ -257,9 +255,9 @@ class RecommendationAnalysisServiceTest {
     void aCandidateWhoseRiskSignsWeighMoreThanTwoIsNotPicked() {
         given(finnhubClient.stock(eq("HOT01"), any())).willReturn(new Stock("HOT01", null, FALLING_REVENUE_AND_HIGH_DEBT));
 
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
 
-        assertThat(response.picks()).extracting(RecommendationPickResponse::symbol)
+        assertThat(run.picks()).extracting(RecommendationPick::symbol)
                 .containsExactly("HOT02", "HOT03", "HOT04");
     }
 
@@ -277,10 +275,10 @@ class RecommendationAnalysisServiceTest {
                     .willReturn(new Stock(symbol, null, FALLING_REVENUE_AND_HIGH_DEBT));
         }
 
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
 
-        assertThat(response.picks()).extracting(RecommendationPickResponse::symbol).containsExactly("HOT10", "HOT01");
-        assertThat(response.picks().getLast().riskSigns()).containsExactly(RiskSign.HIGH_DEBT);
+        assertThat(run.picks()).extracting(RecommendationPick::symbol).containsExactly("HOT10", "HOT01");
+        assertThat(run.picks().getLast().riskSigns()).containsExactly(RiskSign.HIGH_DEBT);
     }
 
     /** Decision 13: HOT05's news reports a partnership with a giant (+3), which puts it before HOT01 … HOT04 (0). */
@@ -294,12 +292,12 @@ class RecommendationAnalysisServiceTest {
         given(stockAnalyzer.analyze(argThat(stock -> stock != null && stock.symbol().equals("HOT05")), any(), any()))
                 .willReturn(replyWithAPartnership);
 
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
 
-        assertThat(response.picks()).extracting(RecommendationPickResponse::symbol)
+        assertThat(run.picks()).extracting(RecommendationPick::symbol)
                 .containsExactly("HOT05", "HOT01", "HOT02");
-        assertThat(response.picks().getFirst().newsScore()).isEqualTo(3);
-        assertThat(response.picks().getFirst().score()).isEqualTo(3);
+        assertThat(run.picks().getFirst().newsScore()).isEqualTo(3);
+        assertThat(run.picks().getFirst().score()).isEqualTo(3);
     }
 
     /** Finnhub refusing a call: the analysis is stored all the same, without the figures — and is never picked. */
@@ -307,15 +305,15 @@ class RecommendationAnalysisServiceTest {
     void whenFinnhubFailsTheAnalysisIsStoredWithoutItsFiguresAndNotPicked() {
         given(finnhubClient.stock(eq("HOT01"), any())).willThrow(new IllegalStateException("401 Unauthorized"));
 
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
         entityManager.flush();
 
-        assertThat(response.analysis().analyzed()).isEqualTo(10);
+        assertThat(run.analysis().analyzedOutcomes()).hasSize(10);
         assertThat(jdbc.queryForObject("""
                 select stock_analysis.finnhub_stock is null from stock_analysis
                 join scan_candidate on scan_candidate.id = stock_analysis.scan_candidate_id
                 where scan_candidate.symbol = 'HOT01'""", Boolean.class)).isTrue();
-        assertThat(response.picks()).extracting(RecommendationPickResponse::symbol)
+        assertThat(run.picks()).extracting(RecommendationPick::symbol)
                 .containsExactly("HOT02", "HOT03", "HOT04");
     }
 
@@ -324,36 +322,35 @@ class RecommendationAnalysisServiceTest {
         given(stockAnalyzer.analyze(argThat(stock -> stock != null && stock.symbol().equals("HOT01")), any(), any()))
                 .willThrow(new IllegalStateException("Claude declined to answer"));
 
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(null);
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
 
         assertThat(storedAnalysisSymbols()).hasSize(9).doesNotContain("HOT01");
-        assertThat(response.analysis().failed())
-                .containsExactly(new FailedAnalysisResponse("HOT01", "Claude declined to answer"));
-        assertThat(response.picks()).extracting(RecommendationPickResponse::symbol)
+        assertThat(run.analysis().failedOutcomes())
+                .extracting(StockAnalysisOutcome::symbol, StockAnalysisOutcome::failureMessage)
+                .containsExactly(tuple("HOT01", "Claude declined to answer"));
+        assertThat(run.picks()).extracting(RecommendationPick::symbol)
                 .containsExactly("HOT02", "HOT03", "HOT04");
     }
 
     /** One candidate, from any list: its analysis, and no recommendation. */
     @Test
     void oneCandidateIsAnalyzedWithoutARecommendation() {
-        RecommendationAnalysisRunResponse response = recommendationAnalysisService.analyze(candidateIdOf("TOOHOT"));
+        RecommendationAnalysisRun run = recommendationAnalysisService.analyze(candidateIdOf("TOOHOT"));
 
         assertThat(storedAnalysisSymbols()).containsExactly("TOOHOT");
-        assertThat(response.analysis().analyzed()).isEqualTo(1);
-        assertThat(response.picks()).isNull();
+        assertThat(run.analysis().analyzedOutcomes()).hasSize(1);
+        assertThat(run.picks()).isNull();
     }
 
     /** Without Finnhub no stock could be picked, so the full run spends nothing; one candidate is analyzed without it. */
     @Test
-    void withoutFinnhubsKeyTheFullRunIs503ButOneCandidateIsAnalyzed() {
+    void withoutFinnhubsKeyTheFullRunIsRefusedButOneCandidateIsAnalyzed() {
         given(finnhubClient.hasApiKey()).willReturn(false);
 
         assertThatThrownBy(() -> recommendationAnalysisService.analyze(null))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-                    assertThat(exception.getReason()).isEqualTo("The recommendation is off: FINNHUB_API_KEY is not "
-                            + "set in config/local.env, and without the company figures no stock can be picked");
-                });
+                .isInstanceOf(AnalysisOffException.class)
+                .hasMessage("The recommendation is off: FINNHUB_API_KEY is not set in config/local.env, and without "
+                        + "the company figures no stock can be picked");
         verifyNoInteractions(tavilyClient, stockAnalyzer);
 
         recommendationAnalysisService.analyze(candidateIdOf("HOT01"));
@@ -363,32 +360,25 @@ class RecommendationAnalysisServiceTest {
     }
 
     @Test
-    void aMissingKeyOfTheAnalysisIs503BeforeAnythingIsSearched() {
+    void aMissingKeyOfTheAnalysisStopsTheRunBeforeAnythingIsSearched() {
         given(aiKeys.findMissingKeyName()).willReturn("ANTHROPIC_API_KEY");
 
         assertThatThrownBy(() -> recommendationAnalysisService.analyze(candidateIdOf("HOT01")))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-                    assertThat(exception.getReason())
-                            .isEqualTo("The analysis is off: ANTHROPIC_API_KEY is not set in config/local.env");
-                });
+                .isInstanceOf(AnalysisOffException.class)
+                .hasMessage("The analysis is off: ANTHROPIC_API_KEY is not set in config/local.env");
         verifyNoInteractions(tavilyClient, stockAnalyzer, finnhubClient);
     }
 
     /** FALLING is in the scan but in no list; 999 999 is in no scan at all. */
     @Test
-    void aCandidateThatIsNotInTheLatestScansListsIs404() {
+    void aCandidateThatIsNotInTheLatestScansListsIsNotFound() {
         long fallingCandidateId = candidateIdOf("FALLING");
 
         assertThatThrownBy(() -> recommendationAnalysisService.analyze(fallingCandidateId))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
-                    assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-                    assertThat(exception.getReason())
-                            .isEqualTo("No candidate with id " + fallingCandidateId + " in the latest scan's lists");
-                });
+                .isInstanceOf(CandidateNotFoundException.class)
+                .hasMessage("No candidate with id " + fallingCandidateId + " in the latest scan's lists");
         assertThatThrownBy(() -> recommendationAnalysisService.analyze(999_999L))
-                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
-                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+                .isInstanceOf(CandidateNotFoundException.class);
         verifyNoInteractions(tavilyClient, stockAnalyzer);
     }
 

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import portfolioboss.alerts.AlertService;
+import portfolioboss.api.alerts.request.AlertSettingRequest;
 import portfolioboss.api.alerts.request.AlertSettingsRequest;
 import portfolioboss.api.alerts.request.AlertsSeenRequest;
 import portfolioboss.api.alerts.response.AlertsResponse;
@@ -22,9 +23,11 @@ import portfolioboss.api.alerts.response.AlertsResponse;
 @RestController
 class AlertController {
 
+    private final AlertsReadService alertsReadService;
     private final AlertService alertService;
 
-    private AlertController(AlertService alertService) {
+    private AlertController(AlertsReadService alertsReadService, AlertService alertService) {
+        this.alertsReadService = alertsReadService;
         this.alertService = alertService;
     }
 
@@ -33,7 +36,7 @@ class AlertController {
     private ResponseEntity<AlertsResponse> currentAlerts() {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(alertService.currentAlerts());
+                .body(alertsReadService.currentAlerts());
     }
 
     /** {@code request} says nothing: it is there so that only a JSON request is accepted. */
@@ -46,7 +49,7 @@ class AlertController {
     /** 400 with the fields named ({@code ApiErrorHandler}) when a line is wrong. */
     @PutMapping(path = "/api/alerts/settings", consumes = MediaType.APPLICATION_JSON_VALUE)
     private ResponseEntity<Void> saveSettings(@Valid @RequestBody AlertSettingsRequest request) {
-        alertService.saveSettings(request);
+        alertService.saveSettings(request.settings().stream().map(AlertSettingRequest::toAlertSetting).toList());
         return ResponseEntity.noContent().build();
     }
 }

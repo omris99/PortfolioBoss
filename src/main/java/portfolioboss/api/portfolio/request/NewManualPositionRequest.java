@@ -12,8 +12,8 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-import static portfolioboss.api.portfolio.request.TradeRequest.TOO_MANY_DIGITS;
-import static portfolioboss.api.portfolio.request.TradeRequest.WHOLE_NUMBER;
+import static portfolioboss.api.RequestValidationMessages.TOO_MANY_DIGITS;
+import static portfolioboss.api.RequestValidationMessages.WHOLE_NUMBER;
 
 /**
  * The body of {@code POST /api/manual-positions}: a new manual position — its details as in

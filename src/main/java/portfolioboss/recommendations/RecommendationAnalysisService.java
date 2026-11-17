@@ -1,24 +1,20 @@
 package portfolioboss.recommendations;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 import portfolioboss.ai.AiKeys;
 import portfolioboss.ai.ClaudeReply;
 import portfolioboss.ai.StockAnalysisOutcome;
 import portfolioboss.ai.StockAnalysisPipeline;
 import portfolioboss.ai.StockAnalysisRun;
 import portfolioboss.ai.StockToAnalyze;
-import portfolioboss.api.analysis.response.AnalysisRunResponse;
-import portfolioboss.api.recommendations.RecommendationsReadService;
-import portfolioboss.api.recommendations.response.RecommendationAnalysisRunResponse;
-import portfolioboss.api.recommendations.response.RecommendationPickResponse;
 import portfolioboss.calculation.recommendations.RecommendationCalculator;
 import portfolioboss.calculation.recommendations.RecommendationCandidate;
 import portfolioboss.db.analysis.StockAnalysisEntity;
 import portfolioboss.db.analysis.StockAnalysisRepository;
 import portfolioboss.db.recommendations.InvestmentRecommendationEntity;
 import portfolioboss.db.recommendations.InvestmentRecommendationRepository;
+import portfolioboss.exceptions.AnalysisOffException;
+import portfolioboss.exceptions.CandidateNotFoundException;
 import portfolioboss.stocks.FinnhubClient;
 import portfolioboss.stocks.Stock;
 
@@ -54,32 +50,35 @@ public class RecommendationAnalysisService {
     private final AiKeys aiKeys;
     private final FinnhubClient finnhubClient;
     private final StockAnalysisPipeline stockAnalysisPipeline;
-    private final RecommendationsReadService recommendationsReadService;
+    private final ScanListsService scanListsService;
     private final StockAnalysisRepository stockAnalysisRepository;
     private final InvestmentRecommendationRepository investmentRecommendationRepository;
 
     public RecommendationAnalysisService(AiKeys aiKeys, FinnhubClient finnhubClient,
                                          StockAnalysisPipeline stockAnalysisPipeline,
-                                         RecommendationsReadService recommendationsReadService,
+                                         ScanListsService scanListsService,
                                          StockAnalysisRepository stockAnalysisRepository,
                                          InvestmentRecommendationRepository investmentRecommendationRepository) {
         this.aiKeys = aiKeys;
         this.finnhubClient = finnhubClient;
         this.stockAnalysisPipeline = stockAnalysisPipeline;
-        this.recommendationsReadService = recommendationsReadService;
+        this.scanListsService = scanListsService;
         this.stockAnalysisRepository = stockAnalysisRepository;
         this.investmentRecommendationRepository = investmentRecommendationRepository;
     }
 
     /**
      * {@code candidateId} {@code null}: the short list, then the recommendation. Otherwise that candidate alone, from any
-     * of the three lists, and no recommendation. A missing key is 503, a candidate that isn't in the latest scan's lists
-     * 404 — both before anything is searched.
+     * of the three lists, and no recommendation. A missing key and a candidate that isn't in the latest scan's lists are
+     * refused before anything is searched.
+     *
+     * @throws AnalysisOffException       while a key the run needs is missing
+     * @throws CandidateNotFoundException for a candidate in none of the latest scan's lists
      */
-    public RecommendationAnalysisRunResponse analyze(Long candidateId) {
+    public RecommendationAnalysisRun analyze(Long candidateId) {
         boolean recommending = candidateId == null;
         refuseWhileAKeyIsMissing(recommending);
-        ShortList shortList = recommending ? recommendationsReadService.shortListOfLatestScan() : null;
+        ShortList shortList = recommending ? scanListsService.shortListOfLatestScan() : null;
         List<CandidateWithItsList> candidates =
                 recommending ? shortList.candidates() : List.of(findCandidateInTheLists(candidateId));
         Instant analyzedAt = Instant.now();
@@ -97,19 +96,19 @@ public class RecommendationAnalysisService {
         List<Stock> finnhubStocks = pendingFinnhubStocks.stream().map(Future::resultNow).toList();
 
         stockAnalysisRepository.saveAll(analysesToStore(candidates, finnhubStocks, run, analyzedAt));
-        List<RecommendationPickResponse> picks = recommending ? pick(shortList, finnhubStocks, run, today) : null;
+        List<RecommendationPick> picks = recommending ? pick(shortList, finnhubStocks, run, today) : null;
         if (recommending && shortList.scanId() != null) {
             storeTheRecommendation(shortList.scanId(), picks, analyzedAt);
         }
-        return new RecommendationAnalysisRunResponse(new AnalysisRunResponse(run), picks);
+        return new RecommendationAnalysisRun(run, picks);
     }
 
     /**
      * Every full run's picks are kept, an empty list too — "no recommendation this time" is an answer the measurement
      * counts (decision 9), also when no stock had enough upside and none was analyzed.
      */
-    private void storeTheRecommendation(long scanId, List<RecommendationPickResponse> picks, Instant recommendedAt) {
-        List<Long> pickedCandidateIds = picks.stream().map(RecommendationPickResponse::candidateId).toList();
+    private void storeTheRecommendation(long scanId, List<RecommendationPick> picks, Instant recommendedAt) {
+        List<Long> pickedCandidateIds = picks.stream().map(RecommendationPick::candidateId).toList();
         investmentRecommendationRepository.save(
                 new InvestmentRecommendationEntity(scanId, recommendedAt, pickedCandidateIds));
     }
@@ -118,22 +117,21 @@ public class RecommendationAnalysisService {
     private void refuseWhileAKeyIsMissing(boolean recommending) {
         String missingKeyName = aiKeys.findMissingKeyName();
         if (missingKeyName != null) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+            throw new AnalysisOffException(
                     "The analysis is off: " + missingKeyName + " is not set in config/local.env");
         }
         if (recommending && !finnhubClient.hasApiKey()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+            throw new AnalysisOffException(
                     "The recommendation is off: FINNHUB_API_KEY is not set in config/local.env, and without the "
                             + "company figures no stock can be picked");
         }
     }
 
     private CandidateWithItsList findCandidateInTheLists(long candidateId) {
-        return recommendationsReadService.candidatesWithTheirListsOfLatestScan().stream()
+        return scanListsService.candidatesWithTheirListsOfLatestScan().stream()
                 .filter(candidateWithItsList -> candidateWithItsList.candidate().id() == candidateId)
                 .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "No candidate with id " + candidateId + " in the latest scan's lists"));
+                .orElseThrow(() -> new CandidateNotFoundException(candidateId));
     }
 
     /** The symbol, the currency and the last close IB sent — all Claude is told about the stock (decision 6). */
@@ -174,8 +172,8 @@ public class RecommendationAnalysisService {
     }
 
     /** Only the stocks analyzed can be picked: one that failed has no analysis to show beside the pick. */
-    private List<RecommendationPickResponse> pick(ShortList shortList, List<Stock> finnhubStocks, StockAnalysisRun run,
-                                                  LocalDate today) {
+    private List<RecommendationPick> pick(ShortList shortList, List<Stock> finnhubStocks, StockAnalysisRun run,
+                                          LocalDate today) {
         List<CandidateWithItsList> candidates = shortList.candidates();
         List<RecommendationCandidate> analyzedCandidates = new ArrayList<>();
         for (int index = 0; index < candidates.size(); index++) {
@@ -190,16 +188,16 @@ public class RecommendationAnalysisService {
         RecommendationCalculator recommendationCalculator = new RecommendationCalculator(analyzedCandidates, today);
         List<RecommendationCandidate> picks = recommendationCalculator.picks();
         printPicks(picks, analyzedCandidates.size(), shortList);
-        return picks.stream().map(pick -> pickResponseOf(pick, recommendationCalculator, today)).toList();
+        return picks.stream().map(pick -> recommendationPickOf(pick, recommendationCalculator, today)).toList();
     }
 
     /**
      * A pick always has Finnhub's answer and a target with enough upside: a stock without either is never picked.
      */
-    private RecommendationPickResponse pickResponseOf(RecommendationCandidate pick,
-                                                      RecommendationCalculator recommendationCalculator,
-                                                      LocalDate today) {
-        return new RecommendationPickResponse(pick.candidateId(), pick.stock().symbol(), pick.riskSigns(),
+    private RecommendationPick recommendationPickOf(RecommendationCandidate pick,
+                                                    RecommendationCalculator recommendationCalculator,
+                                                    LocalDate today) {
+        return new RecommendationPick(pick.candidateId(), pick.stock().symbol(), pick.riskSigns(),
                 pick.reportsWithin14Days(today), pick.newsScore(today), recommendationCalculator.scoreOf(pick),
                 pick.analystTarget().upsidePercent());
     }

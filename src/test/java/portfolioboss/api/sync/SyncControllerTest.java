@@ -7,12 +7,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import portfolioboss.api.sync.response.SyncRunResponse;
 import portfolioboss.exceptions.TwsBusyException;
 import portfolioboss.exceptions.TwsUnavailableException;
+import portfolioboss.ib.Holding;
+import portfolioboss.ib.PortfolioSnapshot;
 import portfolioboss.sync.SyncService;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -37,12 +39,18 @@ class SyncControllerTest {
 
     @Test
     void syncsAndAnswers200WithWhenAndHowManyHoldings() throws Exception {
-        given(syncService.syncNow()).willReturn(new SyncRunResponse(Instant.parse("2026-11-11T21:40:00Z"), 8));
+        given(syncService.syncNow()).willReturn(new PortfolioSnapshot("ACCOUNT", Instant.parse("2026-11-11T21:40:00Z"),
+                50_000.0, 10_000.0, List.of(holdingOf("ABCD", 1), holdingOf("WXYZ", 2))));
 
         postSync("{}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.syncedAt").value("2026-11-11T21:40:00Z"))
-                .andExpect(jsonPath("$.holdingCount").value(8));
+                .andExpect(jsonPath("$.holdingCount").value(2));
+    }
+
+    /** A made-up holding: only how many there are reaches the answer. */
+    private Holding holdingOf(String symbol, int conId) {
+        return new Holding(symbol, conId, "STK", "USD", 10, 100.0, 110.0, 1_100.0, 100.0, 0.0, "ACCOUNT");
     }
 
     /** A plain form, or text, is what a page on another site can send without asking: never a sync. */

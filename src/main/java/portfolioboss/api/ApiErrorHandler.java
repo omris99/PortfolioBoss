@@ -11,6 +11,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import portfolioboss.exceptions.AnalysisOffException;
+import portfolioboss.exceptions.CandidateNotFoundException;
+import portfolioboss.exceptions.HoldingIsClosedException;
+import portfolioboss.exceptions.HoldingNotFoundException;
 import portfolioboss.exceptions.TwsBusyException;
 import portfolioboss.exceptions.TwsUnavailableException;
 
@@ -23,8 +27,10 @@ import java.util.stream.Collectors;
  * {@code ResponseStatusException}, malformed JSON (400) and a wrong {@code Content-Type} (415).
  *
  * <p>Changed here: the {@code detail} of a failed {@code @Valid} — Spring's own is just "Invalid request content.",
- * which doesn't say which field was wrong —, and the answers to TWS's two failures, the same for every endpoint that
- * reads TWS (Scan again, Sync now), with the user's message as the {@code detail}.
+ * which doesn't say which field was wrong —, the answers to TWS's two failures, the same for every endpoint that
+ * reads TWS (Scan again, Sync now), with the user's message as the {@code detail}, and the answers to the paid
+ * analyses' refusals (a key missing, an id not found, a closed holding). The services behind the endpoints throw the
+ * app's own exceptions and know nothing of HTTP; the status of each is decided here.
  */
 @RestControllerAdvice
 class ApiErrorHandler extends ResponseEntityExceptionHandler {
@@ -39,6 +45,22 @@ class ApiErrorHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(TwsUnavailableException.class)
     private ProblemDetail answerTwsUnavailable(TwsUnavailableException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
+    }
+
+    /** A key a paid analysis needs is missing: the message names it. */
+    @ExceptionHandler(AnalysisOffException.class)
+    private ProblemDetail answerAnalysisOff(AnalysisOffException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
+    }
+
+    @ExceptionHandler({HoldingNotFoundException.class, CandidateNotFoundException.class})
+    private ProblemDetail answerNotFound(RuntimeException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
+    }
+
+    @ExceptionHandler(HoldingIsClosedException.class)
+    private ProblemDetail answerHoldingIsClosed(HoldingIsClosedException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
     }
 
     @Override

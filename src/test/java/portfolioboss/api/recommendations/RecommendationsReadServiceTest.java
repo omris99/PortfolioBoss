@@ -39,6 +39,7 @@ import portfolioboss.model.recommendations.HotStockLabel;
 import portfolioboss.model.recommendations.NotPickableReason;
 import portfolioboss.model.recommendations.WeighedAnalystMove;
 import portfolioboss.model.recommendations.WeighedNewsEvent;
+import portfolioboss.recommendations.ScanListsService;
 import portfolioboss.recommendations.ShortList;
 import portfolioboss.stocks.CompanyFacts;
 import portfolioboss.stocks.EarningsDate;
@@ -78,7 +79,7 @@ import static org.assertj.core.api.Assertions.within;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
-@Import({PortfolioSyncService.class, RecommendationsReadService.class})
+@Import({PortfolioSyncService.class, RecommendationsReadService.class, ScanListsService.class})
 class RecommendationsReadServiceTest {
 
     private static final String ACCOUNT = "U1234567";
@@ -101,6 +102,10 @@ class RecommendationsReadServiceTest {
 
     @Autowired
     private RecommendationsReadService recommendationsReadService;
+
+    /** The short list is its: the page marks the same stocks ({@code inShortList}). */
+    @Autowired
+    private ScanListsService scanListsService;
 
     @Autowired
     private InvestorRepository investorRepository;
@@ -283,7 +288,7 @@ class RecommendationsReadServiceTest {
         storeTheScan();
         long scanId = jdbc.queryForObject("select id from scan", Long.class);
 
-        ShortList shortList = recommendationsReadService.shortListOfLatestScan();
+        ShortList shortList = scanListsService.shortListOfLatestScan();
 
         assertThat(shortList.scanId()).isEqualTo(scanId);
         assertThat(shortList.hotStockCount()).isEqualTo(2);
@@ -297,7 +302,7 @@ class RecommendationsReadServiceTest {
 
     @Test
     void beforeTheFirstScanTheShortListIsEmpty() {
-        ShortList shortList = recommendationsReadService.shortListOfLatestScan();
+        ShortList shortList = scanListsService.shortListOfLatestScan();
 
         assertThat(shortList.scanId()).isNull();
         assertThat(shortList.candidates()).isEmpty();

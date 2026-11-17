@@ -1,6 +1,7 @@
 package portfolioboss.api.recommendations.response;
 
 import portfolioboss.model.marketdata.RiskSign;
+import portfolioboss.recommendations.RecommendationPick;
 
 import java.util.List;
 
@@ -23,4 +24,9 @@ public record RecommendationPickResponse(
         int newsScore,
         int score,
         double targetUpsidePercent) {
+
+    public RecommendationPickResponse(RecommendationPick pick) {
+        this(pick.candidateId(), pick.symbol(), pick.riskSigns(), pick.reportsWithin14Days(), pick.newsScore(),
+                pick.score(), pick.targetUpsidePercent());
+    }
 }
