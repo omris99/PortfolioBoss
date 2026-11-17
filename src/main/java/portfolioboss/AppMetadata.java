@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.22.0";
+    public static final String VERSION = "0.37.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,180 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.37.0: [The Taxes page]
+ * TaxesPage added (/taxes, the seventh page): each year's capital gains tax in shekels, as the broker withholds it — a tab for Portfolio and for each investor besides the account owner.
+ * TaxYearCard added: the year's tax so far, what the broker paid and refunded at each month's end, what the current month will settle, and how far the checking off has come.
+ * TaxYearCard: a shield the broker won't refund on December 31 is shown with the days left, as information for a decision, never as a warning.
+ * SettlementDaysTable added: one table per year, the newest month first; a day opens into its sales, a stock's line into the buys it took from, with the gain both ways and the one that counts.
+ * TaxCheckCell and BrokerRecordedAmountForm added: Confirm takes the calculated amount as the broker's, the pencil types another with a note, and Confirm the whole month does a month at once.
+ * TaxCheckCell: a confirmed day's ✓ shows when it was confirmed and its note, and the calculated amount too when the broker recorded another; investors' tabs are read only.
+ * TaxSetupCard added: in place of the page while IB's Flex report isn't connected (its two keys missing) or its history isn't downloaded yet (it comes with the next sync).
+ * SettlementDayStatus added: each day's state decided in Java — calculated, confirmed, calculated to 0, waiting for a rate, can't be calculated (type the broker's amount), sold more than bought.
+ * FifoSale.costAtTheAverageCost added: the shares' cost at the Closed page's average cost, carried from sale to sale; a sale whose FIFO cost differs by more than a cent gets the page's note.
+ * TaxesResponse: flexConnected and flexReportsStoredUpTo added — whether IB's Flex keys are set and up to which day its reports are stored, for the page's setup card.
+ * HelpOnHover added: the Taxes page's "?", a Radix tooltip that opens on hover or keyboard focus and never moves the focus, so it can't reopen itself or swallow the next click.
+ * InvestorTabs added in place of WeightsTabs: one tab row shared by the weights, the Weight tab, If I buy, the Averaging calculator and the Taxes page.
+ * format: shekels, dollars and exchange rates (three decimals) added — the first page with two currencies side by side, so every amount carries its currency's sign.
+ *
+ * VERSION 0.36.0: [The tax confirmations, and /api/taxes]
+ * V19 tax_confirmation: what Phoenix recorded for one of the account's settlement days, as the user confirmed it — one per day, in shekels to the agora; the calculated amount is never stored.
+ * TaxYearWithItsConfirmations added: a confirmed amount is final — it counts in the year's tax and monthly settlements in place of the calculated one, even if the calculation changes later.
+ * TaxYearWithItsConfirmations: a day is waiting or confirmed, with no "matches" or "differs" — a number the user typed is the right one.
+ * TaxYearBalance added: the year's tax, shield and monthly settlements taken out of TaxYearCalculator, so that the same rule runs on the calculated amounts and on the recorded ones.
+ * AccountTaxWithItsConfirmations added: each confirmation goes to its settlement day's year; one whose day the calculation no longer has is kept as a day calculated as 0, never dropped.
+ * GET /api/taxes added (TaxesReadService, TaxController): the account's years as recorded, each other investor's as calculated — each day's sales with their buys and both ways of the gain.
+ * POST /api/taxes/confirmations added (TaxConfirmationService): one day or a whole month in one request, stored together or not at all; 409 for a day confirmed already, 400 for a day without a calculated entry.
+ * PUT and DELETE /api/taxes/confirmations/{id} added: a confirmation's amount and note corrected, or the confirmation cancelled so the day waits again; JSON only, like every write.
+ *
+ * VERSION 0.35.0: [The capital gains tax, computed]
+ * CapitalGainsTaxCalculator added: the tax of the account or of one investor — FIFO, each sale's taxable gain, an entry per settlement day, each tax year with its monthly settlements.
+ * FifoSalesCalculator added: each sale takes its shares from the earliest buys still held (SharesSoldFromOneBuy), commissions spread by quantity; the closed positions stay at average cost.
+ * TaxableGainOfSharesFromOneBuy added: the gain in dollars at the sale's rate and in shekels at both rates — the one closer to zero is taxed, 0 when one gains and the other loses.
+ * SaleTaxableGain added: a sale's taxable gain over its buys, each at its settlement day's rate, or why it isn't computed — HKD, a rate not out yet, an over-sale, a corporate action not followed.
+ * SettlementDayEntry and TaxYearCalculator added: a day's sales and IB fees net into 25% to pay or a shield; a month settles as a payment, a refund or a kept shield; the year is the settlement day's.
+ * SplitAdjustedFlexTrades added: Flex's trades show no split, so the trades before a reverse split or a split are restated in the shares of after it, in memory; any other corporate action is not followed.
+ * FlexReportReader and FlexReportStorageService: the Corporate Actions section (its detail rows) and each trade's fifoPnlRealized, IB's own FIFO gain, are read and stored.
+ * V18: flex_corporate_action, flex_report.corporate_action_count and flex_trade.fifo_pnl_realized; deleting the flex_report rows downloads the history again with them.
+ * OurFifoAgainstIbsFifo added: every Flex sale's FIFO gain checked against IB's own, to the cent.
+ * CapitalGainsTaxService added: the account's tax from Flex with IB's fees, each other investor's from their typed trades at their Flex twins' settlement days — in shekels, their cash untouched.
+ * SyncService: after the rates, every sync that reached TWS prints the tax; a failure prints [tax error] and never fails the sync.
+ * Console: [tax] capital gains tax 2025: … ILS on a taxable gain of … ILS (N sales), per investor too, then [tax] our FIFO against IB's: N of N sales match; Flex lines count corporate actions.
+ *
+ * VERSION 0.34.0: [The Bank of Israel's exchange rates for the tax]
+ * exchangerates package added: the Bank of Israel's representative rates, under tax — a source of data like stocks that downloads, stores and says which rate a day takes, knowing nothing of trades.
+ * BankOfIsraelClient added: the Bank of Israel's SDMX service — a currency's rates of a period as CSV, no key (none for the Hong Kong dollar); a 404 is "no rate in these days" unless over 14 days.
+ * BankOfIsraelRatesReader added: the CSV's columns found by name (TIME_PERIOD, OBS_VALUE); a line with another number of fields or an unreadable value fails the answer, naming the line.
+ * V17 exchange_rate: a row per currency and day the Bank of Israel published a rate, one unbroken stretch, never replaced — a published rate is final.
+ * ExchangeRates added: the rate a settlement day takes — its own, or the last one before it on a day the Bank of Israel published none (a holiday); none after the last stored rate.
+ * ExchangeRateDownloadSchedule added: only the days really missing are asked for, before or after the stored stretch, never a stored day; a holiday inside the stretch is never asked again.
+ * SettlementDayRatesService added: the dollar settlement days of the Flex trades and cash transactions, and the typed trades' estimated by UsSettlementDayEstimate (T+1 since 28.05.2024, T+2 before).
+ * SyncService: after the Flex reports, every sync that reached TWS downloads the dollar rates still missing; a failure prints [exchangerates error] and never fails the sync.
+ * Console: [exchangerates] Bank of Israel: asking for the USD rates of …, stored N USD rates (…), no USD rate published in … and skipped: every settlement day up to 16.11 has its USD rate.
+ *
+ * VERSION 0.33.0: [IB's Flex reports for the capital gains tax]
+ * tax package added: the capital gains tax's own package, under api; its first part stores every trade and cash transaction of the account from IB's Flex reports, day trades included.
+ * FlexClient added: IB's Flex Web Service — SendRequest for a period, then GetStatement until the report is ready —, with FLEX_TOKEN and FLEX_QUERY_ID from config/local.env; read only.
+ * FlexClient: no error prints the address it called, which holds the token; a refusal fails at once with IB's code and words, "please try again shortly" is tried again for two minutes.
+ * FlexReportReader added: the report's XML into FlexReport, FlexReportTrade and FlexReportCashTransaction with IB's signs; a missing field fails the report by name, a DOCTYPE is refused.
+ * V16 flex_trade, flex_cash_transaction and flex_report: each execution and cash transaction as IB wrote it, replaced by IB's id so a second download adds nothing, and a log of the downloads.
+ * FlexDownloadSchedule added: the days not stored yet, in periods of at most 365 days — first from January 1 of the earliest typed trade's year, then from a week before the last day stored.
+ * FlexDownloadSchedule: a period starts and ends on a weekday, since IB refuses one that starts or ends on a Saturday or a Sunday with 1003 "Statement is not available".
+ * SyncService: after the store and the alerts, every sync that reached TWS downloads the Flex reports not stored yet; a failure prints [tax error] and never fails the sync.
+ * TradeRepository.findEarliestTradeDate added: where the first download of the Flex reports starts.
+ * Console: [tax] Flex off when a key is missing, then [tax] Flex: asking IB for …, [tax] Flex: N trades, M cash transactions (…) and [tax] Flex skipped: already read up to 13.11.
+ *
+ * VERSION 0.32.0: [Sync now and the alerts]
+ * Sync now added: a button in the top bar that reads TWS as the startup does — the portfolio, a scan when due, the holdings' details and targets, Finnhub — through POST /api/syncs, then reloads the page.
+ * Sync now: while another reading runs, or when TWS can't be read, a banner gives the server's words over the last sync's figures, with Try again.
+ * SyncService added: the startup's sync and Sync now's are one flow — whether a scan is due, the reading, Finnhub, the store — that announces every stored sync with PortfolioSyncedEvent; TwsPortfolioRunner only exits on a database failure and starts the UI.
+ * ApiErrorHandler: TwsBusyException is 409 and TwsUnavailableException 503, with the user's message, for every endpoint that reads TWS; ScanService no longer turns them into its own errors.
+ * Alerts added, in a package of their own (alerts): nine kinds — momentum turned weak, a close below the 50- or 200-day average, a report soon, an analyst cutting a target, far below the average cost, above the weight limit, trades that don't match IB, a stock entering the short list.
+ * Alerts: checked after every sync against the alerts still open — a condition true for the first time is a new alert, one no longer true ends it; nothing leaves the machine.
+ * V15 alert and alert_setting: one open alert per condition, guarded by a partial unique index, the ended ones kept as history; a kind's settings stored only once saved.
+ * Alerts bell: at the top bar's left, before the name, with the number not yet seen in the accent blue; opening it marks them seen and lists them newest first, each a link to its holding's drawer or to Recommendations.
+ * Alert settings drawer: behind the bell's ⚙, each kind on or off and four numbers — days before a report, days back for a target cut, the drop from the average cost, the weight limit —; saving checks the alerts again at once.
+ * DailyClosesWithSpy added: a stock's momentum against SPY from the stored closes, shared by both read services and the alerts instead of written in each; PortfolioWeightsCalculator: a holding's share of the whole account, the UI's rule in Java.
+ * Momentum: aboveSma200() beside aboveSma50(), for the alerts; the score is unchanged.
+ * DrawerShell taken out of DrawerFrame as every drawer's frame, the alert settings' too; useReadingFromTws and ReadingFromTwsButton replace useScanAgain, shared by Scan again and Sync now.
+ * Console: [alerts] checked: N new (ABCD, WXYZ), M no longer true after every sync and every save of the settings, and [alerts error] when a check after a sync fails.
+ *
+ * VERSION 0.31.0: [The Averaging calculator]
+ * Averaging calculator added: a new page, /averaging, third in the navigation, that plans buying more of several holdings at once, each with the Weight tab's purchase for a target weight or an amount.
+ * Averaging calculator: the weights' tabs, each a plan of its own; the holdings below their average cost first, the farthest below first, the rest folded with "1 purchase planned" while folded.
+ * Averaging calculator cash card: every purchase typed on the tab added up with its commissions against the tab's cash — "Cash left", or an orange "… short" —, kept in view, with Clear.
+ * Averaging calculator: under each holding, what to know before buying more — warning signs, momentum, the analysts' target and the next report; a calculation only, nothing sent or saved.
+ * Weight tab: "Buying more of several holdings? Averaging calculator →" under the calculator, whatever is typed, opens the page on the same investor's tab.
+ * TavilyClient: the three searches on any site leave out tavily.com, whose company pages, titled with the symbol, had taken the place of real articles (INTC: 3 of 5 news results).
+ *
+ * VERSION 0.30.0: [The holdings' figures on screen]
+ * CompanyInfoResponse added: Finnhub's four fields of a holding and of a scanned stock moved into one companyInfo object, with when Finnhub answered; null while it never answered.
+ * Positions table: Analysts' target (the upside, the firms under it) and Earnings (the date, "in 6 days" under it within 14 days) can be turned on in the Columns menu.
+ * Holding drawer: a Warning signs row under the key figures — the Signal dot's warning signs and the risk signs together, each risk sign with its figure, then the timing note.
+ * Holding drawer: Analysts & news opens with the analysts' target from Dow Jones, and a new Company tab shows Finnhub's next report and four figures with their rules; open holdings only.
+ * Timing note: run over with a yellow highlighter (the new color highlight) instead of the outlined box with a calendar icon, everywhere a report 0–14 days away shows.
+ * Risk signs: "—" for a stock that has none, instead of "No risk signs"; "Not checked" explains on hover whether Finnhub never answered or gave none of the figures.
+ * Scanned stock's Company tab: "From Finnhub, answered …" instead of "with the analysis of …"; when Finnhub didn't answer, the reason replaces the list of dashes.
+ *
+ * VERSION 0.29.0: [The holdings get what a scanned stock has]
+ * Sector from IB: every sync takes a holding's sector (IB's broad word, "Technology") and its new industry ("Semiconductors") from its contract details; before, the sector was typed by hand.
+ * PUT /api/holdings/{id}/sector removed with SectorRequest; the Positions table's sector cell is text now, the sector over the industry, and the drawer shows "Technology / Semiconductors".
+ * TwsReader: every ./run.sh also reads the holdings' contract details and Dow Jones headlines, in the same rounds as the scan's, so a holding the scan found too is read once.
+ * RequestBatch: a second request of the same kind on one connection numbers on from the first, instead of reusing ids that had already ended and waiting out its timeout.
+ * Finnhub for the holdings: after TWS disconnects, every holding in USD is asked about at once, the symbol only, without a button; a failed call prints [stocks error] and keeps what was stored.
+ * V13 stock: what Finnhub answered about each holding (finnhub_data), replaced per contract on every sync; V14 adds holding.industry.
+ * GET /api/portfolio: each holding also carries its analysts' target from Dow Jones, the next earnings date, Finnhub's four figures, its risk signs, the 14-day timing note and its industry.
+ * RiskSignsCalculator added: the risk signs and the timing note taken out of RecommendationCandidate unchanged, so a holding is judged by the same rules as a scanned stock.
+ * Weights ring: the "No sector" slice is now the holdings IB gives no sector for, "1 holding IB gives no sector for"; before, it said to add the sector in Positions.
+ * Console: [ib] contract details received for N of M holdings, the holdings' price targets, [stocks] Finnhub answered for N of M holdings in dollars, and [db] stored Finnhub's data.
+ *
+ * VERSION 0.28.0: [The new average after a purchase in the Weight tab]
+ * Weight tab: every purchase shows the new average cost, the commission counted in as IB counts it, and how far the price must rise to reach it, beside today's average.
+ * Weight tab: at or above the average a purchase says "Already reached: the price is X% above the average" instead of a rise to reach.
+ * Weight tab: a second field, "Or buy for an amount", buys whole shares at IB's last price; typing in one field empties the other.
+ * calculateWholeSharesForAmount added: the whole shares an amount buys, shared by the Weight tab and the Recommendations page's If I buy.
+ *
+ * VERSION 0.27.0: [The analysts' target from Dow Jones in the recommendation]
+ * Scan: every scan also reads half a year of each stock's Dow Jones headlines through IB (reqHistoricalNews, read-only, free), page by page, and the analysts' price targets in them.
+ * PriceTargetHeadlineReader added: reads a firm's target from Dow Jones's four headline forms, only for the stock's own company by IB's name; NewsHeadlinePaging pages back half a year.
+ * V12 analyst_price_target: one row per target headline by contract id, replaced for every stock whose headlines a scan read; a stock whose headlines didn't come keeps its old ones.
+ * AnalystTargetCalculator added: the median of each firm's latest target of the half year, 3 firms at least, against the last close; a median, since a split leaves stale targets far too high.
+ * Recommendation: a stock is picked only when the analysts' median target is at least 15% above its price; before, the target was only shown beside a pick.
+ * Short list: the first 10 hot stocks with that upside instead of the first 10 hot stocks; when none has it, nothing is paid for and "no recommendation" is stored.
+ * GET /api/recommendations: each stock also carries its analysts' target with every firm's, whether it is on the short list and the reasons it can't be picked; each pick its upside.
+ * Recommendations page: an Analysts' target column in the three lists, the firms' targets first in the drawer's Analysts & news tab, and "Why not the others" grouped by reason.
+ * Hot list's detail line: the analysts' part shows the rating and the trend only; MarketBeat's upside moved to the drawer, since the row's column is Dow Jones's.
+ * Tests: the test profile caps each context's database pool at 3, so the suite no longer runs out of PostgreSQL connections while the app runs.
+ *
+ * VERSION 0.26.0: [The recommendation and the analysis on the Recommendations page]
+ * RecommendationCard added: the code's latest picks above the lists, each with its risk signs, a line from the figures, its score and news, or none qualified, and why the others weren't picked.
+ * Analyze & recommend added: the short list's paid run after a confirm quoting its cost; Analyze for one stock from its row (after a confirm) or its drawer; one run at a time on the page.
+ * Hot list: a line under each analyzed stock with its risk signs, the analysts, the earnings date (outlined within 14 days) and the news score, and why it moves in full under it.
+ * Stock drawer: new Analysts & news (with the news score's parts), Company (Finnhub's figures and the signs they raise) and If I buy (shares, commission, the stock's and sector's weights after) tabs.
+ * GET /api/recommendations: each stock also carries its news score's parts with their points, its risk signs' weight, its score and whether it can be picked, so the page holds no weight.
+ * Analysts & news: actions without a price target (rating services' letters) are no longer listed, since they count for nothing; "Why it moves" shows under the news, for holdings too.
+ * RiskSignTag shows the figure that raised a sign ("Expensive · P/E 52"); TimingNote added for a report within 14 days, outlined, never in the warning tone.
+ *
+ * VERSION 0.25.0: [Analysis and recommendation of hot stocks]
+ * POST /api/recommendations/analysis added: analyzes the Recommendations short list (the first 10 Hot) or one stock with Tavily, Claude and Finnhub, then the code picks up to 3.
+ * RecommendationCalculator added: picks stocks with Finnhub's figures whose risk signs weigh 2 at most, ordered by the news score less the risks; Claude never picks.
+ * RiskSign and RecommendationCandidate added: loses money, high debt, expensive, revenue falling, recovering, each with its own weight; a figure Finnhub didn't give raises no sign.
+ * NewsScoreCalculator added: weighs the week's news events (deals by size, outlook, earnings, approvals, offerings, lawsuits) and the analysts' up/downgrades with a target from 30 days.
+ * StockAnalysisResult: Claude also reports moveReason (why the price moved, with its headline) and newsEvents (kind, size for deals only, NOT_IN_THE_LIST when no kind fits).
+ * StockAnalysisPipeline added: the four searches and Claude for every stock at once, shared by the holdings' Analyze and the Recommendations page's.
+ * V10: stock_analysis also holds a scanned stock's analysis, with Finnhub's answer; V11: investment_recommendation keeps every full run's picks for the measurement, none too.
+ * GET /api/recommendations: each stock's latest analysis by contract id from any scan, Finnhub's figures, risk signs, news score and timing note, and the latest recommendation.
+ * Console: "[ai] recommended …" or "[ai] no recommendation: …" after a full run, and "[stocks error] SYMBOL: why" when a call to Finnhub fails.
+ *
+ * VERSION 0.24.0: [Earnings dates and company figures from Finnhub]
+ * FinnhubClient added (new package stocks): a stock's next earnings date and four company figures from Finnhub's free plan, sending only the symbol; nothing calls it yet, the analysis will.
+ * Stock added: what Finnhub knows about a stock — its next EarningsDate (the day, before the open or after the close) and CompanyFacts (revenue growth %, net margin %, debt to equity, P/E).
+ * FINNHUB_API_KEY: optional, in config/local.env; without it the app starts as usual and prints "[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)".
+ *
+ * VERSION 0.23.0: [Hot stocks from IB's scan]
+ * RecommendationsPage added: a fifth page lists the US stocks IB's scan finds in a long upward trend, as Hot, Too hot and Correcting, with each investor's free cash above them.
+ * CandidateDrawer added: a scanned stock's drawer with why it is in its list, its year, IB's sector and exchange, the holdings it moves with, and its momentum checks.
+ * Scan for hot stocks: ./run.sh asks IB for the stocks that rose most over 3 and 6 months (above $15, $2B, a million shares a day), then their contract details, NYSE and NASDAQ only.
+ * ScanSchedule added: ./run.sh scans once a US trading day, only when the market has closed since the last scan by the New York clock, and says why when it skips.
+ * Scan again added (POST /api/scans): a new scan on demand from the page, free and read-only; 503 with a clear message when TWS can't be read, 409 while another reading runs.
+ * TwsReader added: the one place that connects to TWS, for the startup and Scan again alike, one reading at a time; TwsPortfolioRunner now decides, stores and opens the UI.
+ * HotStockCalculator added: a long trend (above the 200-day average, the 50-day above it), then Hot 0–15% above the 50-day, Too hot above, Correcting below; Pulled back and Recovering marks.
+ * ReturnsCorrelation added: how closely a scanned stock moves with each holding, from daily returns on shared dates; the page shows the top 3 and "Moves together" from 0.7.
+ * GET /api/recommendations added: the latest scan's three lists in the page's order, each stock with its momentum, stretch, marks, correlations and the investors who hold it.
+ * V9__scans: the scan and scan_candidate tables keep every scan with each stock's last close, the base of a later measurement; the stocks' daily closes go into daily_close.
+ * Momentum: the year's figures — highest close, return since IB's first close with the months it covers, biggest fall — are added to every holding's momentum in the JSON.
+ * PortfolioWrapper: IB's code 165 ("50 out of 992 items retrieved") is information, not an error; an answer or an error after its request has ended is dropped.
+ * Colors: the neutrals are a cool slate (Claude Design's scheme "A · Slate") in place of the warm cream; every text still passes WCAG AA on its ground.
+ *
+ * VERSION 0.22.1: [Weights from the design system]
+ * WeightGraphs: the two weight graphs are now the halves of one "Weights" card with the investor tabs in its header, so a tab clearly switches both; the left-out note sits inside it.
+ * Tip added: a small bubble from the design system that explains a weight on hover or keyboard focus, in place of the browser's tooltip; only the weight graphs use it for now.
+ * SectorWeightsCard: legend rows can be reached with the keyboard and open their Tip; the ring is thinner and the other slices fade more; "Other" names its sectors and counts their holdings.
+ * HoldingWeightsCard: bars sit on a grey track and are scaled by amount, so they show even when IB reports no cash; every row, the cash too, can be reached with the keyboard and opens its Tip.
+ * WeightsTabs: names in sentence case instead of the BUY/SELL capitals; only the selected tab is in the Tab order, and the left and right arrow keys move to the previous or next tab.
+ * StocksAndCashBar: "Stocks" and "Cash" with their percents now sit on a line above a thinner bar; cash below zero gets an info icon.
+ * WeightCalculatorPanel: the result is a box of rows on hairlines with the P&L's basis under it; a target that can't be used turns the field red; "already at the target" and "can't calculate" get grey boxes.
+ * Chart colors: the pink sector color is darker (#db6898, from the design system), so it reaches the 3:1 contrast a mark needs on white; the old one was 2.6:1.
+ *
  * VERSION 0.22.0: [Weights per investor, trades need a price]
  * WeightsTabs added: the Overview's weight graphs and the drawer's Weight tab get tabs — Portfolio, then each investor, the owner first; hidden with one investor.
  * investmentsAndCash added: an investor's tab weighs their own shares of each holding and their own cash, by their card's rule, so their weights add up to 100% of their money.

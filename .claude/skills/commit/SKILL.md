@@ -30,26 +30,48 @@ Stage and commit the current changes.
 (`docs: ...`, `chore: ...`). Never invent a scope that isn't on this list; if nothing
 fits, leave it out.
 
-*In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection, derived buy/sell dates,
-write endpoints for the sector and trades, the UI that shows the positions and enters the sector and trades, the
+*In the code today (Milestone 1: Maven + Spring Boot, PostgreSQL, sync at connection — with each holding's sector and
+industry from IB's contract details, its Dow Jones target and Finnhub's figures, served with its risk signs as the
+company info a scanned stock has too, and shown in the Positions table and the holding drawer —, derived
+buy/sell dates, write endpoints for the trades, the UI that shows the positions and enters the trades, the
 reconciliation warnings, the closed positions — commissions, average cost, and manual positions with their own
 trades — several investors sharing the account, with their deposits, the momentum score from IB's daily closes, and the
 stock analysis — Tavily's searches (kept with each analysis), Claude's extraction, the consensus, the analysts' trend
 from price-target moves and the colored dot — behind `POST /api/analysis` and in the UI's Signal column, a holding
 drawer's "Analysts & news" tab and the Analyze buttons — the UI's light redesign: four pages, a drawer per holding
-and per closed position, a Columns menu, forms in modals — and, worked out in the UI only, the Overview's weight graphs
-by sector and by holding with the cash, and the drawer's target-weight calculator):*
+and per closed position, a Columns menu, forms in modals —, worked out in the UI only, the Overview's weight graphs
+by sector and by holding with the cash, and the drawer's target-weight calculator, with the new average after a
+purchase and a purchase for an amount, and the Averaging calculator page, which plans such purchases for several
+holdings at once against the cash — and the Recommendations page: IB's scan for hot stocks once a trading day in `./run.sh` and on demand (Scan again, `POST
+/api/scans`), the hot / too hot / correcting lists with their correlations to the holdings behind
+`GET /api/recommendations`, and a drawer per scanned stock — and, behind `POST /api/recommendations/analysis`, the
+analysis of the short list with Finnhub's earnings date and company figures, the risk signs, the news events and their
+score, and the code's pick, stored for the measurement; on the page, the recommendation card with Analyze & recommend,
+an Analyze per stock, a detail line under each analyzed Hot row, and the drawer's Analysts & news, Company and If I buy
+tabs — and the analysts' target: Dow Jones's headlines read with every scan, the median of the firms' targets, and the
+short list of the hot stocks with enough upside — Sync now, the startup's reading on demand (`POST /api/syncs`) — the
+alerts: checked on every sync, a bell in the top bar and a settings drawer behind its ⚙ — and the capital gains tax's
+first part: IB's Flex reports, downloaded on every sync and stored — its second: the Bank of Israel's dollar rates of
+the settlement days — and its third: the tax itself, FIFO, the taxable gain, each year's balance and the corporate
+actions, worked out from what is stored and printed after every sync — and its fourth: the confirmations of what
+Phoenix recorded, and the Taxes page's endpoints under `/api/taxes` — and its fifth: the Taxes page itself, each day's
+status and the FIFO-against-average-cost flag worked out in Java):*
 
 | Scope | Covers |
 |---|---|
-| `ib` | `IbGateway`, `PortfolioWrapper`, `TwsPortfolioRunner` — socket, reader loop, EWrapper callbacks (the portfolio's and the daily closes'), and the startup read from TWS — and what IB reports, as records (`Holding`, `PortfolioSnapshot`, `DailyClose`, `Benchmark`) |
+| `ib` | `IbGateway`, `PortfolioWrapper`, `RequestBatch`, `TwsReader` (the one class that connects to TWS: the startup's reading, Sync now's and Scan again's), `TwsPortfolioRunner` (the startup: a sync through `api.SyncService`, then the UI) — socket, reader loop, EWrapper callbacks (the portfolio's, the scans', the contract details', Dow Jones's headlines' and the daily closes') — `NewsHeadlinePaging` and `PriceTargetHeadlineReader` (the headlines page by page, and the targets in them), and what IB reports, as records (`Holding`, `PortfolioSnapshot`, `DailyClose`, `Benchmark`, `HotStockScan`, `ScanRow`, `StockContractDetails`, `ScanCandidate`, `Scan`, `NewsHeadline`, `AnalystPriceTarget`, `TwsReading`, `ScanReading`) |
 | `report` | the console snapshot report and its formatting |
-| `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`, which the service puts together), `HoldingWriteController` + `HoldingWriteService` (sector and trade writes), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `AnalysisController` + `AnalysisService` (`POST /api/analysis`: runs the analysis and stores it), `ApiErrorHandler`, and the `api/request/` and `api/response/` records |
-| `ai` | `portfolioboss.ai` — `AiKeys` (the two API keys from `config/local.env`), `TavilyClient` + `SearchResult` / `SearchResults` / `StockSearches` (the four searches, the symbol filter, and what is kept with an analysis), `StockAnalyzer` + `StockToAnalyze` / `ClaudeReply` (the call to Claude), and the shape of Claude's answer (`StockAnalysisResult`, `SourceConsensus`, `RatingCounts`, `AnalystAction`, `Headline`, `AnalystRating`, `AnalystActionType`, `Sentiment`), which is also its JSON schema |
+| `api` | the local Spring MVC API, which always reads from the database: `PortfolioController` + `PortfolioReadService` (`GET /api/portfolio`, which the service puts together), `HoldingWriteController` + `HoldingWriteService` (trade writes; the sector is IB's since 2026-11-05), `ManualPositionWriteController` + `ManualPositionWriteService` (manual positions and their trades), `InvestorWriteController` + `InvestorWriteService` (investors and their deposits/withdrawals), `AnalysisController` + `AnalysisService` (`POST /api/analysis`: runs the holdings' analysis and stores it), `RecommendationsController` + `RecommendationsReadService` (`GET /api/recommendations`), `RecommendationAnalysisController` + `RecommendationAnalysisService` (`POST /api/recommendations/analysis`: the short list's analysis, Finnhub, the pick), `CandidateWithItsList`, `ShortList`, `ScanController` + `ScanService` (`POST /api/scans`: a new scan through `TwsReader`), `SyncController` + `SyncService` (since 2026-11-11: the sync from TWS, the startup's and Sync now's `POST /api/syncs`; it publishes `PortfolioSyncedEvent`, then downloads the Flex reports and the rates and prints the capital gains tax), `ApiErrorHandler` (also TWS's 409 / 503), and the `api/request/` and `api/response/` records |
+| `alerts` | `portfolioboss.alerts` (since 2026-11-11) — the whole feature in one package: `AlertType`, `ThresholdUnit`, `AlertKey`, `AlertCondition`, `AlertSetting(s)`, the rules (`HoldingAlertsCalculator`, `AlertChangesCalculator`), the `alert` and `alert_setting` tables (`AlertEntity`, `AlertSettingEntity` + repositories), `AlertService`, `AlertsAfterSync` (checks after every sync), `AlertController` (`GET /api/alerts`, `POST /api/alerts/seen`, `PUT /api/alerts/settings`), and its `request/` and `response/` records |
+| `tax` | `portfolioboss.tax` (since 2026-11-15, CAPITAL_GAINS_TAX_TODO.md) — the capital gains tax in one package, under `api`: so far IB's Flex reports — `FlexClient` (IB's Flex Web Service, `FLEX_TOKEN` / `FLEX_QUERY_ID` from `config/local.env`), `FlexReportReader` and the records of a report (`FlexReport`, `FlexReportPeriod`, `FlexReportTrade`, `FlexReportCashTransaction`, `FlexReportRequestStatus`), `FlexDownloadSchedule` (which periods are due, weekdays only), the `flex_trade`, `flex_cash_transaction` and `flex_report` tables (`FlexTradeEntity`, `FlexCashTransactionEntity`, `FlexReportEntity` + repositories), `FlexReportStorageService` and `FlexDownloadService` (called by `api.SyncService` on every sync); since session 2 also which settlement days need an exchange rate — `SettlementDayRatesService` (called by `api.SyncService` after the Flex reports) and `UsSettlementDayEstimate` (a typed trade's settlement day); since session 3 the corporate actions (`FlexReportCorporateAction`, the `flex_corporate_action` table — `FlexCorporateActionEntity` + repository) and the tax itself — `TaxCalculationTrade`, `TradesOfOneStock`, `SplitAdjustedFlexTrades`, `TypedTradeSettlementDays`, `FifoSalesCalculator` / `FifoSale` / `SharesSoldFromOneBuy`, `TaxableGainOfSharesFromOneBuy`, `SaleTaxableGain` / `SaleNotComputedReason`, `TaxDeductibleExpense`, `SettlementDayEntry`, `TaxYearCalculator` / `MonthlySettlement`, `CapitalGainsTaxCalculator`, `OurFifoAgainstIbsFifo`, `CapitalGainsTaxService` (called by `api.SyncService` after the rates) with `CapitalGainsTaxOfTheAccountAndInvestors` / `InvestorCapitalGainsTax`, and `CapitalGainsTaxConsoleLines`; since session 4 the year's balance as a record of its own (`TaxYearBalance`), the confirmations — `TaxConfirmation`, `SettlementDayWithItsConfirmation`, `TaxYearWithItsConfirmations`, `AccountTaxWithItsConfirmations`, the `tax_confirmation` table (`TaxConfirmationEntity` + repository), `TaxConfirmationService` — and the page's endpoints, `TaxesReadService` + `TaxController` (`GET /api/taxes`, `POST` / `PUT` / `DELETE /api/taxes/confirmations`), with its `request/` and `response/` records; since session 5 `SettlementDayStatus` (each day's state, for the Taxes page) |
+| `exchangerates` | `portfolioboss.exchangerates` (since 2026-11-15, CAPITAL_GAINS_TAX_TODO.md session 2) — the Bank of Israel's representative rates, under `tax`: `BankOfIsraelClient` (its public SDMX service, no key) and `BankOfIsraelRatesReader` (its CSV) with `BankOfIsraelRate`, `ExchangeRateDownloadPeriod`, `ExchangeRateDownloadSchedule` (only the days really missing), the `exchange_rate` table (`ExchangeRateEntity` + `ExchangeRateRepository`), `ExchangeRates` (which rate a settlement day takes) and `ExchangeRateDownloadService` |
+| `ai` | `portfolioboss.ai` — `AiKeys` (the two API keys from `config/local.env`), `TavilyClient` + `SearchResult` / `SearchResults` / `StockSearches` (the four searches, the symbol filter, and what is kept with an analysis), `StockAnalyzer` + `StockToAnalyze` / `ClaudeReply` (the call to Claude), `StockAnalysisPipeline` + `StockAnalysisOutcome` / `StockAnalysisRun` (the searches then Claude, every stock at once — shared by both Analyze runs), and the shape of Claude's answer (`StockAnalysisResult`, `SourceConsensus`, `RatingCounts`, `AnalystAction`, `Headline`, `MoveReason`, `NewsEvent`, `AnalystRating`, `AnalystActionType`, `Sentiment`, `NewsEventType`, `EventMagnitude`), which is also its JSON schema |
+| `stocks` | `portfolioboss.stocks` (since 2026-10-27) — `FinnhubClient` (Finnhub's two calls, with its own `FINNHUB_API_KEY` from `config/local.env`; called on Analyze and, for the holdings in USD, on every `./run.sh`) and what Finnhub reports about a stock (`Stock`, `EarningsDate`, `CompanyFacts`) |
 | `db` | `portfolioboss.db` (entities, repositories, `PortfolioSyncService`, the sync at connection, `JsonColumnMapper` for the `JSONB` column), the Flyway migrations in `src/main/resources/db/migration/`, `scripts/backup-db.sh` |
-| `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`) and `AnalystConsensus` |
-| `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `OrderCommission`: derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score, the analysts' consensus and trend and the dot, the default commission — no Spring, no database |
-| `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) and `UiLauncher`, which starts it and opens the browser |
+| `model` | `portfolioboss.model` (since 2026-10-09) — the values the whole app shares, with no computation: the enums stored by name (`TradeSide`, `HoldingStatus`, `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`, `NotPickableReason`), `AnalystConsensus`, and the news score's parts with their points (`WeighedNewsEvent`, `WeighedAnalystMove`) |
+| `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `AnalystTargetCalculator`, `RecommendationCandidate`, `RecommendationCalculator`, `NewsScoreCalculator`, `RiskSignsCalculator`, `OrderCommission`, `DailyClosesWithSpy`, `PortfolioWeightsCalculator` (both 2026-11-11): derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score and the year's figures, the analysts' consensus and trend and the dot, the hot-stock rule and the page's order, the correlations, when a scan is due, the analysts' target from Dow Jones, the risk signs and the timing note (a scanned stock's and a holding's), the news score and the pick, the default commission, a stock's momentum against SPY from the stored closes, a holding's share of the whole account — no Spring, no database |
+| `exceptions` | `portfolioboss.exceptions` (since 2026-10-26) — the app's own exceptions (`TwsUnavailableException`, `TwsBusyException`, `FlexReportUnavailableException`, `ExchangeRatesUnavailableException`) |
+| `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) — its pages, the Recommendations page's pieces in `components/recommendations/`, the Averaging calculator's in `components/averagingCalculator/`, the alerts bell and settings drawer in `components/alerts/`, the Taxes page's in `components/taxes/`, and what a holding and a scanned stock both show in `components/companyInfo/` and `components/AnalystTarget.tsx` — and `UiLauncher`, which starts it and opens the browser |
 | `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling |
 
 Tests (`src/test/`) take the scope of the code they cover.
@@ -58,14 +80,12 @@ Tests (`src/test/`) take the scope of the code they cover.
 
 | Scope | Arrives |
 |---|---|
-| `thesis` | M1 — the written thesis per holding (the actual product) |
 | `analytics` | M3 — correlated clusters, TWR, SPY benchmark (the weight of each holding and sector is already in the UI, scope `ui`) |
-| `averaging` | M3 — the averaging-down calculator's verdict ladder (its weight part, the drawer's Weight tab, is in the UI, scope `ui`) |
-| `alerts` | M4 — rule-based alerts |
+| `averaging` | M3 — the averaging-down calculator's verdict ladder (its weight part and the new average after a purchase — the drawer's Weight tab — and the Averaging calculator page are in the UI, scope `ui`) |
 | `journal` | M4 — decision journal |
 
 **Examples:**
-- `feat(thesis): add sell-trigger field to the thesis entity`
+- `feat(ui): add a Company tab to the holding drawer`
 - `fix(ib): unsubscribe from account updates before disconnecting`
 - `refactor(report): extract money formatting out of PortfolioWrapper`
 - `docs: add CLAUDE.md project guide`
@@ -80,9 +100,16 @@ Tests (`src/test/`) take the scope of the code they cover.
 - The body should explain *what* and *why*, not restate the diff line by line
 - This project is **read-only toward IB by design** — a commit that adds `placeOrder`, `cancelOrder`, any
   order-related callback, an API endpoint that writes anything other than PortfolioBoss's own data (the hand-entered
-  sector, trades, manual positions, investors and their deposits, and the stock analyses), CORS configuration, a write
-  endpoint that accepts something other than JSON, binding beyond localhost, or sending a quantity, a cost, an investor
-  or the account number to Tavily or Claude is a signal something is wrong; flag it instead of committing
+  trades, manual positions, investors and their deposits, the stock analyses, the scans, the recommendations, a sync —
+  with the Flex reports and the exchange rates it downloads —, the alerts with their settings, and the tax
+  confirmations),
+  CORS configuration, a
+  write endpoint that accepts something other than JSON, binding beyond localhost, a second place that connects to TWS
+  besides `ib.TwsReader`, or sending a quantity, a cost, an investor or the account number to Tavily or Claude — or
+  anything but a symbol to Finnhub, or anything but the token, the query's number and two dates to IB's Flex Web
+  Service, or printing an address `FlexClient` called (the token is in it), or anything but a currency's series and two
+  dates to the Bank of Israel — is a signal something is wrong; flag it
+  instead of committing
 - If `$ARGUMENTS` is provided, use it as the commit message (skip analysis)
 
 ## Arguments

@@ -7,7 +7,7 @@ import java.time.LocalDate;
 /**
  * The analysts' consensus as one source shows it (MarketBeat, Financhill, stockanalysis…), extracted by Claude from
  * that source's search result without merging it with any other (AI_ANALYSIS_TODO.md, decision 16). Which source the
- * UI shows is the code's choice: {@code calculation.ConsensusCalculator}.
+ * UI shows is the code's choice: {@code calculation.analysis.ConsensusCalculator}.
  *
  * <p>{@code @Nullable} marks what the source may not show: the schema Claude answers in allows {@code null} there and
  * nowhere else (the SDK reads any annotation named {@code Nullable}).

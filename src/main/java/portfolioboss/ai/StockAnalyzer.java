@@ -23,7 +23,7 @@ import java.time.LocalDate;
  * One call to Claude per stock (AI_ANALYSIS_TODO.md, 2.2): it reads the four searches' results and answers in the JSON
  * schema of {@link StockAnalysisResult} — no tools and no searching of its own (decision 1). The SDK derives the schema
  * from the record, the API holds Claude to it, and the SDK reads the answer back into the record. Claude only reports;
- * what is decided from the answer is worked out in code ({@code calculation.ConsensusCalculator},
+ * what is decided from the answer is worked out in code ({@code calculation.analysis.ConsensusCalculator},
  * {@code AnalystTrendCalculator} and {@code SignalCalculator}).
  */
 @Component
@@ -48,8 +48,10 @@ public class StockAnalyzer {
     /**
      * Session 0's instructions, with decision 16's change — a consensus per source, never merged or chosen —, decision
      * 18's — no analysts' trend, which the code works out from the actions —, decision 19's — MarketBeat's results for
-     * the actions, up to 10 of them, each once —, decision 20's — each action's result date — and decision 21's: the two
-     * news searches for actions, roundups of several companies, dates without a year, headlines from the news only.
+     * the actions, up to 10 of them, each once —, decision 20's — each action's result date —, decision 21's — the two
+     * news searches for actions, roundups of several companies, dates without a year, headlines from the news only —
+     * and the reason the price has been moving and the week's events, from the news only (RECOMMENDATIONS_TODO.md,
+     * decisions 4 and 13).
      */
     private static final String INSTRUCTIONS = """
             You extract facts about one stock from web search results, for a long-term investor's portfolio tool. \
@@ -95,6 +97,25 @@ public class StockAnalyzer {
             sentiment: how the news in news_search_results reads for someone who holds the stock: POSITIVE, NEUTRAL \
             or NEGATIVE; null when there is no news from the last 14 days. sentimentReason: one short sentence in \
             English saying why, or null.
+
+            moveReason: why the stock's price has been moving, as the news in news_search_results explains it — \
+            for example an earnings report, guidance, a contract or a product —, in one short sentence in English, \
+            with the title of the result it rests on, word for word, and its url. A result that only reports the \
+            price moving, without a cause, doesn't explain it. null when the news doesn't say why the price moved.
+
+            newsEvents: each event about this stock that news_search_results reports, with its type: PARTNERSHIP, \
+            MAJOR_CONTRACT, PRODUCT_LAUNCH, GUIDANCE_RAISED, EARNINGS_BEAT, REGULATORY_APPROVAL (a regulator's \
+            approval or clearance), GUIDANCE_CUT, EARNINGS_MISS, SHARE_OFFERING (the company selling new shares — \
+            notes, bonds, loans and other debt are not), LAWSUIT_OR_REGULATION (a lawsuit, an investigation, a fine, \
+            or a regulator's refusal). An event that none of these types fits is NOT_IN_THE_LIST: never the closest \
+            type. An event reported by several results is listed once. An analyst's rating or price target (those \
+            are recentActions), investors buying or selling the shares, and a result that only reports the price \
+            moving, are no event. magnitude, only for PARTNERSHIP and MAJOR_CONTRACT: HIGH when the result names one \
+            of the world's largest companies as the partner or customer, or states an amount it presents as \
+            material; MEDIUM when it names a well-known company or states an amount; LOW otherwise. What you know of \
+            the other company's size may be used for the magnitude; never what you know of this stock. For every \
+            other type magnitude is null. summary: one short sentence in English; title: the result's title, word \
+            for word; url: the result's url.
             """;
 
     /** {@code null} while {@code ANTHROPIC_API_KEY} is not set: the analysis is then off and never calls this. */
@@ -107,7 +128,7 @@ public class StockAnalyzer {
     }
 
     /**
-     * Claude reads {@code searches} as given — {@code api.AnalysisService} keeps only the results that name the stock
+     * Claude reads {@code searches} as given — {@code analysis.AnalysisService} keeps only the results that name the stock
      * ({@link StockSearches#mentioning}, decision 17). A refusal, or an answer cut off at {@link #MAX_TOKENS}, fails the
      * stock: an {@code IllegalStateException} with a message the UI can show.
      */

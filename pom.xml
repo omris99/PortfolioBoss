@@ -76,6 +76,14 @@
             <artifactId>spring-boot-starter-flyway-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- ArchUnit: reads the compiled classes and checks which package uses which, as a test (ArchitectureTest).
+             Its core only, inside an ordinary JUnit test: ArchUnit's own JUnit 5 engine isn't needed. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <version>1.5.1</version>
+            <scope>test</scope>
+        </dependency>
 
         <!-- IB's TWS API is not on Maven Central: run.sh installs ~/DevTools/twsapi/TwsApi.jar into the
              local Maven repository. "local" is only a label, not a real version. -->

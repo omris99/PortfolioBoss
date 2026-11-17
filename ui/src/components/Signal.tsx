@@ -1,5 +1,6 @@
 import { formatDateTime } from '../lib/format';
 import { dotClassOf, MOMENTUM_TONES, textClassOf } from '../lib/signalColors';
+import { WARNING_SIGN_TAG_CLASS } from '../lib/styles';
 import type { Holding, HoldingSignal, StockAnalysis } from '../types/portfolio';
 import { momentumScoreText, momentumText } from './Momentum';
 
@@ -33,6 +34,23 @@ export function warningSignsOf(holding: Holding): string[] {
   if (holding.analysis?.analystTrend === 'DETERIORATING') warningSigns.push('Analysts down');
   if (holding.analysis?.sentiment === 'NEGATIVE') warningSigns.push('News negative');
   return warningSigns;
+}
+
+/** The dot's warning signs as tags, for a row of warning signs that holds the risk signs too; nothing without any. */
+export function SignalWarningSignTags({ holding }: { holding: Holding }) {
+  return (
+    <>
+      {warningSignsOf(holding).map((warningSign) => (
+        <span
+          key={warningSign}
+          title={`${warningSign} · a warning sign of the Signal dot`}
+          className={WARNING_SIGN_TAG_CLASS}
+        >
+          {warningSign}
+        </span>
+      ))}
+    </>
+  );
 }
 
 /** A dot of one colour, `label` said on hover and to screen readers; an empty ring for `null`. */

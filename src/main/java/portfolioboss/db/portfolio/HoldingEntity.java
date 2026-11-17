@@ -1,0 +1,188 @@
+package portfolioboss.db.portfolio;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.Table;
+import portfolioboss.calculation.investors.PositionTrades;
+import portfolioboss.calculation.portfolio.HoldingHistory;
+import portfolioboss.calculation.portfolio.TradeFact;
+import portfolioboss.ib.Holding;
+import portfolioboss.ib.StockContractDetails;
+import portfolioboss.model.portfolio.HoldingStatus;
+import portfolioboss.utils.Utils;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * One row of the {@code holding} table: a position PortfolioBoss has seen at Interactive Brokers.
+ *
+ * <p>The broker figures are refreshed on every connection, and so is the {@code sector}, from IB's contract details
+ * (MY_HOLDINGS_TODO.md, decision 11). The {@code trades} are entered by the user and never overwritten by the sync. A
+ * holding that disappears from TWS is marked {@code CLOSED}, never deleted, so those manual entries survive.
+ *
+ * <p>Not to be confused with {@code calculation.Holding} (one IB reading) or {@code HoldingResponse} (what the
+ * UI receives). The column names are these field names in snake_case ({@code conId} is {@code con_id}).
+ */
+@Entity
+@Table(name = "holding")
+public class HoldingEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String account;
+    private int conId;
+    private String symbol;
+    private String secType;
+    private String currency;
+
+    /** IB's broad word, "Technology" — what IB calls {@code industry}. */
+    private String sector;
+    /** IB's finer word, "Semiconductors" — what IB calls {@code category}. */
+    private String industry;
+
+    private double position;
+    private Double averageCost;
+    private Double marketPrice;
+    private Double marketValue;
+    private Double unrealizedPnl;
+    private Double realizedPnl;
+
+    @Enumerated(EnumType.STRING)
+    private HoldingStatus status;
+
+    private Instant firstSeenAt;
+    private Instant lastSyncedAt;
+    private Instant closedDetectedAt;
+
+    @OneToMany(mappedBy = "holding")
+    @OrderBy("tradeDate, id")
+    private List<TradeEntity> trades = new ArrayList<>();
+
+    /** Required by JPA, which creates entities by reflection. */
+    protected HoldingEntity() {
+    }
+
+    /** A position seen for the first time: open, with no sector and no trades yet. */
+    public HoldingEntity(String account, Holding holdingFromIb, Instant syncedAt) {
+        this.account = account;
+        this.conId = holdingFromIb.conId();
+        this.secType = holdingFromIb.secType();      // fixed for a conId, so set only here
+        this.currency = holdingFromIb.currency();
+        this.firstSeenAt = syncedAt;
+        refreshFromIb(holdingFromIb, syncedAt);
+    }
+
+    /**
+     * Takes the broker's latest figures and reopens the holding if it was closed. It never touches {@code trades}:
+     * those are entered by hand. The sector and the industry come with the contract details, read apart:
+     * {@link #refreshSectorAndIndustryFromIb}.
+     */
+    public void refreshFromIb(Holding holdingFromIb, Instant syncedAt) {
+        symbol = holdingFromIb.symbol();
+        position = holdingFromIb.position();
+        averageCost = Utils.finiteOrNull(holdingFromIb.averageCost());
+        marketPrice = Utils.finiteOrNull(holdingFromIb.marketPrice());
+        marketValue = Utils.finiteOrNull(holdingFromIb.marketValue());
+        unrealizedPnl = Utils.finiteOrNull(holdingFromIb.unrealizedPnl());
+        realizedPnl = Utils.finiteOrNull(holdingFromIb.realizedPnl());
+        status = HoldingStatus.OPEN;
+        lastSyncedAt = syncedAt;
+        closedDetectedAt = null;
+    }
+
+    /**
+     * The holding is no longer in the portfolio TWS reported. What is held now is zero; the last average cost,
+     * price and realized P&amp;L stay as last seen, and {@code lastSyncedAt} stays the last time IB reported it.
+     */
+    public void markClosed(Instant syncedAt) {
+        status = HoldingStatus.CLOSED;
+        position = 0;
+        marketValue = 0.0;
+        unrealizedPnl = 0.0;
+        closedDetectedAt = syncedAt;
+    }
+
+    /**
+     * IB's two words for the company, from its contract details, under the market's names: the sector is IB's
+     * {@code industry} ("Technology"), the industry IB's {@code category} ("Semiconductors"). An empty word is none.
+     * Only the sync calls this, when the contract details came.
+     */
+    public void refreshSectorAndIndustryFromIb(StockContractDetails contractDetails) {
+        sector = Utils.trimmedOrNull(contractDetails.industry());
+        industry = Utils.trimmedOrNull(contractDetails.category());
+    }
+
+    public Long id() {
+        return id;
+    }
+
+    public int conId() {
+        return conId;
+    }
+
+    public String symbol() {
+        return symbol;
+    }
+
+    public String currency() {
+        return currency;
+    }
+
+    public String sector() {
+        return sector;
+    }
+
+    public String industry() {
+        return industry;
+    }
+
+    public HoldingStatus status() {
+        return status;
+    }
+
+    /** Ordered by trade date then id ({@code @OrderBy} on the field below). */
+    public List<TradeEntity> trades() {
+        return List.copyOf(trades);
+    }
+
+    /**
+     * What this holding's trades add up to — its dates, closed positions and warnings. Derived on every call, never
+     * stored, and here so that everything that reads it derives it the same way.
+     */
+    public HoldingHistory tradeHistory() {
+        return HoldingHistory.of(getTradeFacts());
+    }
+
+    /**
+     * Its trades with IB's last reading, for what is worked out investor by investor: how its quantity divides between
+     * them, their closed positions, their summary cards.
+     */
+    public PositionTrades toPositionTrades() {
+        return new PositionTrades(symbol, currency, toIbHolding(), getTradeFacts());
+    }
+
+    /**
+     * The stored figures as an IB reading again ({@code NULL} becomes {@code NaN}), so the derived math on
+     * {@code Holding} ({@code costBasis}, {@code unrealizedPnlPercent}) is not written a second time.
+     */
+    public Holding toIbHolding() {
+        return new Holding(symbol, conId, secType, currency, position,
+                Utils.nanIfNull(averageCost), Utils.nanIfNull(marketPrice), Utils.nanIfNull(marketValue),
+                Utils.nanIfNull(unrealizedPnl), Utils.nanIfNull(realizedPnl), account);
+    }
+
+    /** Its trades reduced to what the computation in {@code calculation} needs ({@link TradeEntity#toTradeFact()}). */
+    private List<TradeFact> getTradeFacts() {
+        return trades.stream().map(TradeEntity::toTradeFact).toList();
+    }
+}

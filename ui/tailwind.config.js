@@ -36,6 +36,7 @@ export default {
       'warn-minor': { DEFAULT: role('warn-minor'), edge: role('warn-minor-edge'), soft: role('warn-minor-soft') },
       'warn-real': { DEFAULT: role('warn-real'), soft: role('warn-real-soft') },
       'on-warn-real': role('on-warn-real'),
+      highlight: role('highlight'),
       signal: { green: role('signal-green'), yellow: role('signal-yellow'), red: role('signal-red'), none: role('signal-none') },
       status: { loading: role('status-loading'), ready: role('status-ready'), error: role('status-error') },
       // The sector ring's colors, in ring order (`fill-chart-1` for a slice, `bg-chart-1` for its legend swatch).

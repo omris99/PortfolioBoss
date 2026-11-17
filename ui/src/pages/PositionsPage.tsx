@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
+import { idFromAddress, OPENED_FROM_TABLE, wasOpenedFromTable } from '../lib/drawerAddress';
 import { openHoldingsOf } from '../lib/holdings';
 import { CARD_CLASS } from '../lib/styles';
 import type { Holding, PortfolioSnapshot } from '../types/portfolio';
@@ -36,22 +37,6 @@ function AttentionLine({ allHoldings, showsClosed }: { allHoldings: Holding[]; s
   );
 }
 
-/** The open row's holding id, from /positions/12; `null` at /positions, or for an address that is not a number. */
-function holdingIdFromAddress(holdingIdText: string | undefined): number | null {
-  if (holdingIdText === undefined) return null;
-  const holdingId = Number(holdingIdText);
-  return Number.isInteger(holdingId) ? holdingId : null;
-}
-
-/** Set when a drawer was opened from this page's table: closing it then goes back, instead of adding a step. */
-interface OpenedFromTable {
-  openedFromTable: true;
-}
-
-function wasOpenedFromTable(state: unknown): boolean {
-  return typeof state === 'object' && state !== null && (state as Partial<OpenedFromTable>).openedFromTable === true;
-}
-
 /** The row `step` away from `holdingId` in the table's order, round the ends. */
 function neighbourOf(rows: Holding[], holdingId: number, step: number): Holding {
   const index = rows.findIndex((holding) => holding.id === holdingId);
@@ -72,7 +57,7 @@ export function PositionsPage({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const openHoldingId = holdingIdFromAddress(useParams().holdingId);
+  const openHoldingId = idFromAddress(useParams().holdingId);
   const [showClosed, setShowClosed] = useState(false);
   const [sortState, setSortState] = useState<SortState>(DEFAULT_SORT);
   const [visibleColumnKeys, setVisibleColumnKeys] = useVisibleColumnKeys(POSITION_COLUMNS);
@@ -86,7 +71,7 @@ export function PositionsPage({
   const rows = sortHoldings(showsClosed ? allHoldings : openHoldings, sortState);
 
   const openDrawer = (holdingId: number) =>
-    navigate(`/positions/${holdingId}`, { state: { openedFromTable: true } satisfies OpenedFromTable });
+    navigate(`/positions/${holdingId}`, { state: OPENED_FROM_TABLE });
   const closeDrawer = () => {
     if (wasOpenedFromTable(location.state)) {
       navigate(-1);

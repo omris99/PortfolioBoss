@@ -11,9 +11,9 @@ export interface DonutSlice {
 
 const SIZE = 168;
 const CENTER = SIZE / 2;
-/** One pixel short of the edge, so an outlined slice's stroke isn't cut off. */
-const OUTER_RADIUS = CENTER - 1;
-const INNER_RADIUS = 60;
+/** A ring 26px wide, with room around it for an outlined slice's stroke. */
+const OUTER_RADIUS = 80;
+const INNER_RADIUS = 54;
 /** The space between two slices, measured at the inner edge (a little wider at the outer). */
 const GAP_BETWEEN_SLICES = 2;
 const GAP_ANGLE = GAP_BETWEEN_SLICES / INNER_RADIUS;
@@ -97,7 +97,7 @@ export function DonutChart({
               key={slice.key}
               d={path}
               fillRule="evenodd"
-              className={`transition-opacity ${slice.paintClass} ${isFaded ? 'opacity-40' : ''}`}
+              className={`transition-opacity ${slice.paintClass} ${isFaded ? 'opacity-[0.28]' : ''}`}
               onMouseEnter={() => onHighlight(slice.key)}
               onMouseLeave={() => onHighlight(null)}
             />

@@ -98,7 +98,7 @@ export function Modal({
 /**
  * Asks before deleting: `title` is the question ("Delete this trade?"), `item` the thing itself in one line, `children`
  * what follows from it ("This can't be undone." when omitted). `onConfirm` deletes and reloads; the dialog closes when
- * it succeeds and shows the API's reason when it is refused — a manual position's last sell, say.
+ * it succeeds and shows the API's reason when it is refused — for example a manual position's last sell.
  */
 export function ConfirmDialog({
   title,

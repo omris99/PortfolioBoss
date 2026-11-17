@@ -24,6 +24,12 @@ public class TavilyClient {
     private static final Duration SEARCH_TIMEOUT = Duration.ofSeconds(30);
     private static final int MAX_RESULTS = 5;
     private static final String MARKETBEAT_DOMAIN = "marketbeat.com";
+    /**
+     * Left out of the searches on any site: Tavily's own directory of companies ({@code tavily.com/knowledge/company/…}),
+     * in its answers since 2026-11-07 — a page per company of that name, a training centre in Russia for "INTC", whose
+     * title is the symbol, so the symbol filter keeps it, in the place of a real article (INTC got 3 of 5 news results).
+     */
+    private static final List<String> EXCLUDED_DOMAINS = List.of("tavily.com");
     /** After the symbol, in both searches for analysts' actions (decision 21). */
     private static final String ANALYST_ACTIONS_QUERY = " analyst price target upgrade downgrade";
 
@@ -58,6 +64,7 @@ public class TavilyClient {
                 "search_depth", "advanced",
                 "chunks_per_source", 3,
                 "max_results", MAX_RESULTS,
+                "exclude_domains", EXCLUDED_DOMAINS,
                 "include_published_date", true,
                 "include_usage", true));
     }
@@ -92,6 +99,7 @@ public class TavilyClient {
                 "time_range", "week",
                 "search_depth", "basic",
                 "max_results", MAX_RESULTS,
+                "exclude_domains", EXCLUDED_DOMAINS,
                 "include_published_date", true,
                 "include_usage", true));
     }
@@ -104,6 +112,7 @@ public class TavilyClient {
                 "time_range", "week",
                 "search_depth", "basic",
                 "max_results", MAX_RESULTS,
+                "exclude_domains", EXCLUDED_DOMAINS,
                 "include_published_date", true,
                 "include_usage", true));
     }

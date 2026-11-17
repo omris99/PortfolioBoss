@@ -97,6 +97,7 @@ class TavilyClientTest {
                 .andExpect(jsonPath("$.search_depth").value("advanced"))
                 .andExpect(jsonPath("$.chunks_per_source").value(3))
                 .andExpect(jsonPath("$.max_results").value(5))
+                .andExpect(jsonPath("$.exclude_domains").value("tavily.com"))
                 .andExpect(jsonPath("$.include_published_date").value(true))
                 .andExpect(jsonPath("$.include_usage").value(true))
                 .andExpect(jsonPath("$.include_raw_content").doesNotExist())
@@ -151,6 +152,7 @@ class TavilyClientTest {
                 .andExpect(jsonPath("$.search_depth").value("basic"))
                 .andExpect(jsonPath("$.include_domains").doesNotExist())
                 .andExpect(jsonPath("$.max_results").value(5))
+                .andExpect(jsonPath("$.exclude_domains").value("tavily.com"))
                 .andExpect(jsonPath("$.include_published_date").value(true))
                 .andRespond(withSuccess(NEWS_ANSWER, MediaType.APPLICATION_JSON));
 
@@ -170,6 +172,7 @@ class TavilyClientTest {
                 .andExpect(jsonPath("$.search_depth").value("basic"))
                 .andExpect(jsonPath("$.chunks_per_source").doesNotExist())
                 .andExpect(jsonPath("$.max_results").value(5))
+                .andExpect(jsonPath("$.exclude_domains").value("tavily.com"))
                 .andExpect(jsonPath("$.include_published_date").value(true))
                 .andRespond(withSuccess(NEWS_ANSWER, MediaType.APPLICATION_JSON));
 

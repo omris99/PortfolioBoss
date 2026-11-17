@@ -1,4 +1,4 @@
-/** Shown for any value that is missing: a figure IB did not report, or a sector or date not entered yet. */
+/** Shown for any value that is missing: a figure or a sector IB did not report, or a date not entered yet. */
 export const EMPTY_VALUE = '—';
 
 /** The real minus sign, as wide as "+", rather than a hyphen. */
@@ -30,11 +30,60 @@ export function formatSignedPercent(percent: number | null): string {
   return `${sign}${Math.abs(percent).toFixed(2)}%`;
 }
 
+/** A stock's move, with one decimal place and its sign: "+6.1%", "−7.4%", and "0.0%" with no sign at all. */
+export function formatSignedPercentOneDecimal(percent: number | null): string {
+  if (percent === null) return EMPTY_VALUE;
+  const rounded = Math.abs(percent).toFixed(1);
+  if (Number(rounded) === 0) return `${rounded}%`;
+  return `${percent > 0 ? '+' : MINUS_SIGN}${rounded}%`;
+}
+
+/** A correlation between −1 and 1, with two decimals: "0.81", "−0.12". */
+export function formatCorrelation(coefficient: number): string {
+  const sign = coefficient < 0 ? MINUS_SIGN : '';
+  return `${sign}${Math.abs(coefficient).toFixed(2)}`;
+}
+
 /** A part of a whole, with one decimal place and a sign only when below zero: "24.1%", "−3.0%". */
 export function formatPercent(percent: number | null): string {
   if (percent === null) return EMPTY_VALUE;
   const sign = percent < 0 ? MINUS_SIGN : '';
   return `${sign}${Math.abs(percent).toFixed(1)}%`;
+}
+
+const SHEKEL_SIGN = '₪';
+const DOLLAR_SIGN = '$';
+
+/** An amount in shekels, the sign before the ₪: "₪1,277.13", "−₪35.76". */
+export function formatShekels(amount: number | null): string {
+  if (amount === null) return EMPTY_VALUE;
+  const sign = amount < 0 ? MINUS_SIGN : '';
+  return `${sign}${SHEKEL_SIGN}${twoDecimalFormatter.format(Math.abs(amount))}`;
+}
+
+/** Always with its sign, and none for 0: "+₪5,108.50", "−₪3,397.50", "₪0.00". */
+export function formatSignedShekels(amount: number | null): string {
+  if (amount === null) return EMPTY_VALUE;
+  if (amount === 0) return formatShekels(0);
+  const sign = amount > 0 ? '+' : MINUS_SIGN;
+  return `${sign}${SHEKEL_SIGN}${twoDecimalFormatter.format(Math.abs(amount))}`;
+}
+
+/** An amount in dollars, the sign before the $: "$4,205.00", "−$12.00". */
+export function formatDollars(amount: number | null): string {
+  if (amount === null) return EMPTY_VALUE;
+  const sign = amount < 0 ? MINUS_SIGN : '';
+  return `${sign}${DOLLAR_SIGN}${twoDecimalFormatter.format(Math.abs(amount))}`;
+}
+
+/** An amount in a trade's own currency: "$4,205.00" in dollars, "2,500.00 HKD" in any other. */
+export function formatAmountInItsCurrency(amount: number, currency: string): string {
+  return currency === ACCOUNT_CURRENCY ? formatDollars(amount) : `${formatMoney(amount)} ${currency}`;
+}
+
+/** A Bank of Israel rate, with its 3 decimals: "3.050". */
+export function formatExchangeRate(rate: number | null): string {
+  return rate === null ? EMPTY_VALUE : rate.toFixed(3);
 }
 
 /** Whole share counts print without decimals; fractional shares keep 4 places. */

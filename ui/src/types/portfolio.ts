@@ -1,7 +1,8 @@
 /**
  * Mirrors the JSON served by `GET /api/portfolio` (the `*Response` records in
  * src/main/java/portfolioboss/api/response/) and sent to the write endpoints (the `*Request` records in
- * api/request/). A figure IB did not report arrives as `null`.
+ * api/request/). A figure IB did not report arrives as `null`. What a holding and a scanned stock both have — the
+ * momentum, the analysis, the analysts' target, the company info — is here too, and `recommendations.ts` builds on it.
  */
 
 export type HoldingStatus = 'OPEN' | 'CLOSED';
@@ -116,9 +117,9 @@ export interface Holding {
   id: number;
   /** IB's contract id. */
   conId: number;
-  /** Entered by hand; `null` until then. */
+  /** IB's, from the holding's contract details with every sync — never typed by hand; `null` when IB gives none. */
   sector: string | null;
-  /** A holding TWS no longer reports is `CLOSED`, never deleted, so its sector and trades survive. */
+  /** A holding TWS no longer reports is `CLOSED`, never deleted, so its trades survive. */
   status: HoldingStatus;
   /** 'yyyy-MM-dd', derived from `trades` by the API: the first buy since the position was last empty. */
   firstBuyDate: string | null;
@@ -138,6 +139,19 @@ export interface Holding {
   analysis: StockAnalysis | null;
   /** The colored dot; `null` without an analysis, or while fewer than two of its three signs are known. */
   signal: HoldingSignal | null;
+  // What a scanned stock has (MY_HOLDINGS_TODO.md, sessions 2 and 3); shown only — none of it changes the dot.
+  /** From the holding's Dow Jones headlines, against IB's latest price; no median under three firms. */
+  analystTarget: AnalystTarget;
+  /**
+   * What Finnhub last answered about the company, with the timing note counted from the last sync; `null` while it
+   * never answered — it is asked about the holdings in dollars only.
+   */
+  companyInfo: CompanyInfo | null;
+  /**
+   * IB's finer word, "Semiconductors", under `sector`; `null` until a sync reads it, and when IB gives none. IB names
+   * the two the other way round — a scanned stock's `industry` is the sector, its `category` this.
+   */
+  industry: string | null;
 }
 
 /** What a momentum score means: `STRONG` 4–5, `NEUTRAL` 2–3, `WEAK` 0–1 (AI_ANALYSIS_TODO.md, decision 5). */
@@ -173,6 +187,18 @@ export interface Momentum {
   /** 0–5. */
   score: number | null;
   label: MomentumLabel | null;
+  /** 'yyyy-MM-dd': the first close IB sent — about a year back, or when a young stock started trading. */
+  firstCloseDate: string;
+  /** The highest close of the year. */
+  high52Weeks: number;
+  /** The last close against the first one, over `monthsInMarket` months; null if the first close was not above 0. */
+  yearReturnPercent: number | null;
+  /** The biggest fall from a close to a later, lower one this year, in percent; 0 if it never fell. */
+  maxDrawdownPercent: number;
+  /** 12 for a full year (IB sends no more), otherwise the whole months the stock has traded. */
+  monthsInMarket: number;
+  /** How far below `high52Weeks` the last close is, in percent; 0 at the high. */
+  percentBelowHigh52Weeks: number;
 }
 
 /**
@@ -288,6 +314,112 @@ export interface StockAnalysis {
   raisedTargetCount: number;
   /** The price targets lowered. */
   loweredTargetCount: number;
+  /** Why the price has been moving, from the news; `null` when the news doesn't say, and before 2026-10-27. */
+  moveReason: MoveReason | null;
+  /** The week's events in the news, each once; none before 2026-10-27. */
+  newsEvents: NewsEvent[];
+}
+
+/** What kind of event the news reports; whether it is good or bad is the API's, by the kind. */
+export type NewsEventType =
+  | 'PARTNERSHIP'
+  | 'MAJOR_CONTRACT'
+  | 'PRODUCT_LAUNCH'
+  | 'GUIDANCE_RAISED'
+  | 'EARNINGS_BEAT'
+  | 'REGULATORY_APPROVAL'
+  | 'GUIDANCE_CUT'
+  | 'EARNINGS_MISS'
+  | 'SHARE_OFFERING'
+  | 'LAWSUIT_OR_REGULATION'
+  | 'NOT_IN_THE_LIST';
+
+/** One event the week's news reports about the stock, with the result it comes from. */
+export interface NewsEvent {
+  type: NewsEventType;
+  /** Only for a partnership or a major contract; null for every other kind. */
+  magnitude: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+  /** One short sentence in English. */
+  summary: string;
+  /** The result's title, word for word. */
+  title: string;
+  url: string;
+}
+
+/** Why a stock's price has been moving, as the week's news explains it, with the result it rests on. */
+export interface MoveReason {
+  /** One short sentence in English. */
+  reason: string;
+  /** The title of the result it rests on, word for word. */
+  title: string;
+  url: string;
+}
+
+/** One firm's price target, read from one Dow Jones headline. */
+export interface AnalystPriceTarget {
+  /** 'yyyy-MM-ddTHH:mm:ss', in IB's time zone. */
+  publishedAt: string;
+  /** As Dow Jones names it: "Piper Sandler", "B of A Securities". */
+  firm: string;
+  priceTarget: number;
+  /** The target it replaced; null when the headline names none ("Maintained", "Announced"). */
+  previousPriceTarget: number | null;
+  headline: string;
+}
+
+/**
+ * The analysts' target from a stock's Dow Jones headlines (RECOMMENDATIONS_TODO.md, decision 14): the median of each
+ * firm's latest target of the half year before the scan, or before a holding's last sync — the API's, never worked out
+ * here.
+ */
+export interface AnalystTarget {
+  /** null under three firms: an opinion, not a target. */
+  medianTarget: number | null;
+  /** How far it is above the price, in percent; null without a target or a price. */
+  upsidePercent: number | null;
+  /** 15% or more above the price: a scanned stock can be on the short list. */
+  hasEnoughUpside: boolean;
+  firmCount: number;
+  /** The newest first. */
+  latestTargetOfEachFirm: AnalystPriceTarget[];
+}
+
+/** The five risk signs (RECOMMENDATIONS_TODO.md, decision 5), in the order they are listed. */
+export type RiskSign = 'LOSES_MONEY' | 'HIGH_DEBT' | 'EXPENSIVE' | 'REVENUE_FALLING' | 'RECOVERING';
+
+/** A company's next earnings report, as Finnhub's calendar gives it. */
+export interface EarningsDate {
+  /** 'yyyy-MM-dd' */
+  date: string;
+  /** 'bmo' before the market opens, 'amc' after it closes, 'dmh' during the trading hours; null while not known. */
+  hour: string | null;
+}
+
+/** Four of a company's figures from Finnhub; each null when Finnhub doesn't give it. */
+export interface CompanyFacts {
+  /** The last 12 months' revenue against the 12 before, in percent. */
+  revenueGrowthPercent: number | null;
+  /** The last 12 months' net profit out of the revenue, in percent; negative for a loss. */
+  netMarginPercent: number | null;
+  /** The debt divided by the equity — a ratio: 2 is twice the equity. */
+  debtToEquity: number | null;
+  peRatio: number | null;
+}
+
+/**
+ * What Finnhub answered about a stock's company, with the risk signs and the timing note the API worked out from it —
+ * the same for a holding and a scanned stock.
+ */
+export interface CompanyInfo {
+  /** ISO instant: a holding's on the last run Finnhub answered for it, a scanned stock's with its analysis. */
+  finnhubAnsweredAt: string;
+  /** null when Finnhub's calendar has no report in the next four months. */
+  nextEarningsDate: EarningsDate | null;
+  /** The timing note: the next report is 0–14 days after a holding's last sync, or after the latest scan. */
+  reportsWithin14Days: boolean;
+  companyFacts: CompanyFacts;
+  /** null when Finnhub gave none of the four figures: then they were never checked, which an empty list would hide. */
+  riskSigns: RiskSign[] | null;
 }
 
 /**
@@ -434,4 +566,11 @@ export interface PortfolioSnapshot {
   investors: Investor[];
   /** `null` while nothing has been analyzed. */
   estimatedAnalysisCost: EstimatedAnalysisCost | null;
+}
+
+/** What `POST /api/syncs` (Sync now) answers once the new reading from TWS is stored. */
+export interface SyncRun {
+  /** The `asOf` the reloaded portfolio will carry. */
+  syncedAt: string;
+  holdingCount: number;
 }

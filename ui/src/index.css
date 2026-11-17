@@ -5,25 +5,29 @@
 /*
  * The design system's colors by role (Claude Design, "PortfolioBoss", tokens.json). Light theme only. Components never
  * use these directly: tailwind.config.js names them (`bg-surface`, `text-muted`, `border-strong`…).
+ *
+ * The neutrals — page, subtle, border, border-strong, the three text greys, accent-soft and selected — are scheme
+ * "A · Slate" from Claude Design's color-schemes page (2026-10-25): a cool blue-grey in place of the design system's warm
+ * cream (#f5f4f0), every text still WCAG AA on its ground. tokens.json still has the cream ones.
  */
 :root {
-  --color-page: #f5f4f0;
+  --color-page: #edf1f6;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
   --color-scrim: #1d202614;
   --color-scrim-modal: #1d202666;
-  --color-subtle: #efede8;
-  --color-border: #e2dfd8;
-  --color-border-strong: #8c877d;
+  --color-subtle: #e3e8ef;
+  --color-border: #d3dbe5;
+  --color-border-strong: #6f7b8c;
 
-  --color-text: #1d2026;
-  --color-text-muted: #575c66;
-  --color-text-faint: #6b707a;
+  --color-text: #18202b;
+  --color-text-muted: #4d5767;
+  --color-text-faint: #5f6979;
 
   --color-accent: #0f5b6b;
   --color-on-accent: #ffffff;
-  --color-accent-soft: #e3eff1;
-  --color-selected: #e3eff1;
+  --color-accent-soft: #e1eef1;
+  --color-selected: #e1eef1;
   --color-link: #1a5aad;
 
   --color-positive: #16723a;
@@ -45,6 +49,12 @@
   --color-warn-real-soft: #fde6da;
   --color-on-warn-real: #ffffff;
 
+  /*
+   * A highlighter, not a warning: "look at this date" — the next report 0–14 days away (MY_HOLDINGS_TODO.md, session 3,
+   * the user's choice). Brighter and more saturated than the minor warning's pale band, so the two read apart.
+   */
+  --color-highlight: #ffe94d;
+
   --color-signal-green: #1f8a47;
   --color-signal-yellow: #b88400;
   --color-signal-red: #c8322a;
@@ -54,12 +64,12 @@
    * The Overview's sector ring: four colors that mean nothing else in the app (green and red are P&L, yellow and orange
    * warnings), then one grey for the smaller sectors added together. The order matters: in a ring the last slice touches
    * the first, and blue and violet — the pair hardest to tell apart with a color-vision deficiency — sit 2nd and 4th,
-   * which never touch. Checked with a palette validator; the pink is light (2.6:1 on white), so every slice is named in
-   * the legend beside it.
+   * which never touch. Checked with a palette validator. The pink is the design system's darker one (3.3:1 on white,
+   * over the 3:1 a mark needs; the first, #ec7fa9, was 2.6:1), and every slice is still named in the legend beside it.
    */
   --color-chart-1: #00897b;
   --color-chart-2: #2a78d6;
-  --color-chart-3: #ec7fa9;
+  --color-chart-3: #db6898;
   --color-chart-4: #6250d6;
   --color-chart-rest: #868b94;
 

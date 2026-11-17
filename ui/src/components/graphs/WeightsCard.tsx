@@ -1,20 +1,22 @@
 import type { ReactNode } from 'react';
 import { formatPercent } from '../../lib/format';
-import { CARD_CLASS } from '../../lib/styles';
-import { CardHeading } from '../CardHeading';
 import type { Weight } from './portfolioWeights';
 
 /** The money in stocks and the cash keep one color each wherever a graph shows them side by side. */
 export const STOCKS_COLOR_CLASS = 'bg-accent';
 export const CASH_COLOR_CLASS = 'bg-accent-soft ring-1 ring-inset ring-accent';
 
-/** The frame both weight graphs share: a card, its title, and what its percentages are of (`caption`). */
+/**
+ * The frame both weight graphs share: one half of the Weights card — the card around both draws the border and the line
+ * between them —, its title, and under the title what its percentages are of (`caption`).
+ */
 export function WeightsCard({ title, caption, children }: { title: string; caption: string; children: ReactNode }) {
   return (
-    <section aria-label={title} className={`flex flex-col ${CARD_CLASS}`}>
-      <CardHeading title={title}>
-        <span className="ml-auto text-caption text-muted">{caption}</span>
-      </CardHeading>
+    <section aria-label={title} className="flex min-w-0 flex-col px-5 pb-5 pt-4">
+      <div className="mb-4">
+        <h3 className="text-section-title">{title}</h3>
+        <p className="mt-0.5 text-caption text-muted">{caption}</p>
+      </div>
       {children}
     </section>
   );
