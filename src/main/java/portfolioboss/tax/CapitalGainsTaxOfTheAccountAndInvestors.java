@@ -1,5 +1,8 @@
 package portfolioboss.tax;
 
+import portfolioboss.calculation.tax.CapitalGainsTaxCalculator;
+import portfolioboss.calculation.tax.OurFifoAgainstIbsFifo;
+
 import java.util.List;
 
 /**
@@ -11,7 +14,7 @@ import java.util.List;
  * @param otherInvestorsTax      every investor other than the account owner, in id order
  * @param ourFifoAgainstIbsFifo  the account's sales checked against IB's own FIFO
  */
-record CapitalGainsTaxOfTheAccountAndInvestors(CapitalGainsTaxCalculator accountTax,
+public record CapitalGainsTaxOfTheAccountAndInvestors(CapitalGainsTaxCalculator accountTax,
                                                List<InvestorCapitalGainsTax> otherInvestorsTax,
                                                OurFifoAgainstIbsFifo ourFifoAgainstIbsFifo) {
 }

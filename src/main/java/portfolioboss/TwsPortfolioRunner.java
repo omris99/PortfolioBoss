@@ -8,7 +8,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.TransactionException;
-import portfolioboss.api.SyncService;
+import portfolioboss.sync.SyncService;
 import portfolioboss.ui.UiLauncher;
 
 import java.nio.file.Path;

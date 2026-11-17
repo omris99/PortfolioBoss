@@ -2,6 +2,18 @@ package portfolioboss.tax;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import portfolioboss.db.tax.FlexCashTransactionEntity;
+import portfolioboss.db.tax.FlexCashTransactionRepository;
+import portfolioboss.db.tax.FlexCorporateActionEntity;
+import portfolioboss.db.tax.FlexCorporateActionRepository;
+import portfolioboss.db.tax.FlexReportEntity;
+import portfolioboss.db.tax.FlexReportRepository;
+import portfolioboss.db.tax.FlexTradeEntity;
+import portfolioboss.db.tax.FlexTradeRepository;
+import portfolioboss.flex.FlexReport;
+import portfolioboss.flex.FlexReportCashTransaction;
+import portfolioboss.flex.FlexReportCorporateAction;
+import portfolioboss.flex.FlexReportTrade;
 
 import java.time.Instant;
 import java.time.LocalDate;

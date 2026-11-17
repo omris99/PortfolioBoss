@@ -59,7 +59,7 @@ public class BankOfIsraelClient {
      * @throws ExchangeRatesUnavailableException when no answer came, the answer was an HTTP error, a period of more than
      *                                           two weeks had no rate at all, or the answer couldn't be read
      */
-    protected List<BankOfIsraelRate> exchangeRates(String currency, ExchangeRateDownloadPeriod period) {
+    public List<BankOfIsraelRate> exchangeRates(String currency, ExchangeRateDownloadPeriod period) {
         String csvText;
         try {
             csvText = restClient.get()

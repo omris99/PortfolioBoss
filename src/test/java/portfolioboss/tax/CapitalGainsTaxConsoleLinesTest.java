@@ -1,8 +1,14 @@
 package portfolioboss.tax;
 
 import org.junit.jupiter.api.Test;
+import portfolioboss.calculation.tax.CapitalGainsTaxCalculator;
+import portfolioboss.calculation.tax.OurFifoAgainstIbsFifo;
+import portfolioboss.calculation.tax.SaleTaxableGain;
+import portfolioboss.calculation.tax.TaxCalculationTrade;
+import portfolioboss.calculation.tax.TaxTestData;
+import portfolioboss.calculation.tax.TradesOfOneStock;
 import portfolioboss.exchangerates.ExchangeRates;
-import portfolioboss.model.TradeSide;
+import portfolioboss.model.portfolio.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -10,10 +16,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static portfolioboss.tax.TaxTestData.buy;
-import static portfolioboss.tax.TaxTestData.dollarRatesOfOneForTheYears;
-import static portfolioboss.tax.TaxTestData.sale;
-import static portfolioboss.tax.TaxTestData.stockOf;
+import static portfolioboss.calculation.tax.TaxTestData.buy;
+import static portfolioboss.calculation.tax.TaxTestData.dollarRatesOfOneForTheYears;
+import static portfolioboss.calculation.tax.TaxTestData.sale;
+import static portfolioboss.calculation.tax.TaxTestData.stockOf;
 
 /** What a sync prints of the tax (CAPITAL_GAINS_TAX_TODO.md, session 3.6). Made-up trades at a rate of 1. */
 class CapitalGainsTaxConsoleLinesTest {

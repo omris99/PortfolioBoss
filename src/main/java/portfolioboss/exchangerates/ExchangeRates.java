@@ -49,12 +49,12 @@ public record ExchangeRates(String currency, NavigableMap<LocalDate, BigDecimal>
     }
 
     /** The day of the first stored rate; empty when none is stored. */
-    protected Optional<LocalDate> firstRateDate() {
+    public Optional<LocalDate> firstRateDate() {
         return ratesByDate.isEmpty() ? Optional.empty() : Optional.of(ratesByDate.firstKey());
     }
 
     /** The day of the last stored rate; empty when none is stored. */
-    protected Optional<LocalDate> lastRateDate() {
+    public Optional<LocalDate> lastRateDate() {
         return ratesByDate.isEmpty() ? Optional.empty() : Optional.of(ratesByDate.lastKey());
     }
 }

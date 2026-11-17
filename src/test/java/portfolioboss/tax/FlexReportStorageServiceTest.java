@@ -8,6 +8,11 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import portfolioboss.flex.FlexReport;
+import portfolioboss.flex.FlexReportCashTransaction;
+import portfolioboss.flex.FlexReportCorporateAction;
+import portfolioboss.flex.FlexReportPeriod;
+import portfolioboss.flex.FlexReportTrade;
 
 import java.math.BigDecimal;
 import java.time.Instant;

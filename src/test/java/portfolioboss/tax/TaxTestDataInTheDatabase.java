@@ -2,15 +2,20 @@ package portfolioboss.tax;
 
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.jdbc.core.JdbcTemplate;
-import portfolioboss.db.HoldingEntity;
-import portfolioboss.db.HoldingRepository;
-import portfolioboss.db.InvestorEntity;
-import portfolioboss.db.InvestorRepository;
-import portfolioboss.db.PortfolioSyncService;
-import portfolioboss.db.TradeEntity;
+import portfolioboss.db.investors.InvestorEntity;
+import portfolioboss.db.investors.InvestorRepository;
+import portfolioboss.db.portfolio.HoldingEntity;
+import portfolioboss.db.portfolio.HoldingRepository;
+import portfolioboss.db.portfolio.TradeEntity;
+import portfolioboss.flex.FlexReport;
+import portfolioboss.flex.FlexReportCashTransaction;
+import portfolioboss.flex.FlexReportCorporateAction;
+import portfolioboss.flex.FlexReportPeriod;
+import portfolioboss.flex.FlexReportTrade;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
-import portfolioboss.model.TradeSide;
+import portfolioboss.model.portfolio.TradeSide;
+import portfolioboss.sync.PortfolioSyncService;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -29,15 +34,15 @@ import java.util.List;
  * in shekels, so 1,642.90 is taxed, 410.73. IB's $10 fee of 1 April (at 3.70) is a shield of 9.25: the year's tax is
  * 401.48.
  */
-class TaxTestDataInTheDatabase {
+public class TaxTestDataInTheDatabase {
 
     protected static final String ACCOUNT = "U7654321";
-    protected static final Instant SYNCED_AT = Instant.parse("2026-11-15T10:00:00Z");
+    public static final Instant SYNCED_AT = Instant.parse("2026-11-15T10:00:00Z");
     protected static final int STOCK_CON_ID = 8101;
-    protected static final LocalDate BUY_DAY = LocalDate.of(2026, 3, 2);
-    protected static final LocalDate SALE_DAY = LocalDate.of(2026, 6, 1);
-    protected static final LocalDate FEE_SETTLEMENT_DAY = LocalDate.of(2026, 4, 1);
-    protected static final LocalDate SALE_SETTLEMENT_DAY = LocalDate.of(2026, 6, 2);
+    public static final LocalDate BUY_DAY = LocalDate.of(2026, 3, 2);
+    public static final LocalDate SALE_DAY = LocalDate.of(2026, 6, 1);
+    public static final LocalDate FEE_SETTLEMENT_DAY = LocalDate.of(2026, 4, 1);
+    public static final LocalDate SALE_SETTLEMENT_DAY = LocalDate.of(2026, 6, 2);
 
     private final PortfolioSyncService portfolioSyncService;
     private final FlexReportStorageService flexReportStorageService;
@@ -59,13 +64,13 @@ class TaxTestDataInTheDatabase {
     }
 
     /** The holding, the rates, and the account's buy, sale and fee — the year of the class's description. */
-    protected void storeTheAccountsYear() {
+    public void storeTheAccountsYear() {
         syncTheHolding();
         storeTheRates();
         storeTheAccountsBuyAndSaleAt("150");
     }
 
-    protected void syncTheHolding() {
+    public void syncTheHolding() {
         portfolioSyncService.sync(new PortfolioSnapshot(ACCOUNT, SYNCED_AT, 50_000.0, 10_000.0, List.of(
                 new Holding("ABCD", STOCK_CON_ID, "STK", "USD", 10, 100.0, 110.0, 1_100.0, 100.0, 0.0, ACCOUNT))));
     }
@@ -78,7 +83,7 @@ class TaxTestDataInTheDatabase {
     }
 
     /** The buy of 10 at $100 and their sale at {@code salePrice}; stored again, IB's rows replace the stored ones. */
-    protected void storeTheAccountsBuyAndSaleAt(String salePrice) {
+    public void storeTheAccountsBuyAndSaleAt(String salePrice) {
         storeFlexReport(List.of(
                         flexTradeOf("1001", STOCK_CON_ID, BUY_DAY.atTime(10, 0), "10", "100", BigDecimal.ZERO),
                         flexTradeOf("1002", STOCK_CON_ID, SALE_DAY.atTime(11, 0), "-10", salePrice,
@@ -105,14 +110,14 @@ class TaxTestDataInTheDatabase {
                 new BigDecimal(price), new BigDecimal("-1"), "USD", BigDecimal.ZERO, "ExchTrade", ibsFifoGain);
     }
 
-    protected InvestorEntity storeAnInvestor(String name) {
+    public InvestorEntity storeAnInvestor(String name) {
         InvestorEntity investor = new InvestorEntity(name);
         entityManager.persist(investor);
         return investor;
     }
 
     /** With a $1 commission; the persistence context is emptied, so that the holding is read again with its trades. */
-    protected void typeInATradeOf(InvestorEntity investor, LocalDate tradeDate, TradeSide side, String quantity,
+    public void typeInATradeOf(InvestorEntity investor, LocalDate tradeDate, TradeSide side, String quantity,
                                   String price) {
         HoldingEntity holding = holdingRepository.findByAccountAndConId(ACCOUNT, STOCK_CON_ID).orElseThrow();
         entityManager.persist(new TradeEntity(holding, investorRepository.findById(investor.id()).orElseThrow(),

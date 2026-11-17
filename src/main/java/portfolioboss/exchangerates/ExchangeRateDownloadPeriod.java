@@ -9,9 +9,9 @@ import java.time.temporal.ChronoUnit;
  * @param fromDate the first day
  * @param toDate   the last day, not before {@code fromDate}
  */
-record ExchangeRateDownloadPeriod(LocalDate fromDate, LocalDate toDate) {
+public record ExchangeRateDownloadPeriod(LocalDate fromDate, LocalDate toDate) {
 
-    protected ExchangeRateDownloadPeriod {
+    public ExchangeRateDownloadPeriod {
         if (toDate.isBefore(fromDate)) {
             throw new IllegalArgumentException("A period can't end (" + toDate + ") before it starts (" + fromDate + ")");
         }

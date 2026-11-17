@@ -2,18 +2,34 @@ package portfolioboss.tax;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import portfolioboss.db.AccountStateEntity;
-import portfolioboss.db.AccountStateRepository;
-import portfolioboss.db.HoldingEntity;
-import portfolioboss.db.HoldingRepository;
-import portfolioboss.db.InvestorEntity;
-import portfolioboss.db.InvestorRepository;
-import portfolioboss.db.ManualPositionEntity;
-import portfolioboss.db.ManualPositionRepository;
-import portfolioboss.db.TradeEntity;
-import portfolioboss.exchangerates.ExchangeRateRepository;
+import portfolioboss.calculation.tax.CapitalGainsTaxCalculator;
+import portfolioboss.calculation.tax.OurFifoAgainstIbsFifo;
+import portfolioboss.calculation.tax.SaleTaxableGain;
+import portfolioboss.calculation.tax.SplitAdjustedFlexTrades;
+import portfolioboss.calculation.tax.TaxCalculationTrade;
+import portfolioboss.calculation.tax.TaxDeductibleExpense;
+import portfolioboss.calculation.tax.TradesOfOneStock;
+import portfolioboss.calculation.tax.TypedTradeSettlementDays;
+import portfolioboss.db.investors.InvestorEntity;
+import portfolioboss.db.investors.InvestorRepository;
+import portfolioboss.db.portfolio.AccountStateEntity;
+import portfolioboss.db.portfolio.AccountStateRepository;
+import portfolioboss.db.portfolio.HoldingEntity;
+import portfolioboss.db.portfolio.HoldingRepository;
+import portfolioboss.db.portfolio.ManualPositionEntity;
+import portfolioboss.db.portfolio.ManualPositionRepository;
+import portfolioboss.db.portfolio.TradeEntity;
+import portfolioboss.db.tax.ExchangeRateRepository;
+import portfolioboss.db.tax.FlexCashTransactionEntity;
+import portfolioboss.db.tax.FlexCashTransactionRepository;
+import portfolioboss.db.tax.FlexCorporateActionEntity;
+import portfolioboss.db.tax.FlexCorporateActionRepository;
+import portfolioboss.db.tax.FlexTradeEntity;
+import portfolioboss.db.tax.FlexTradeRepository;
 import portfolioboss.exchangerates.ExchangeRates;
-import portfolioboss.model.TradeSide;
+import portfolioboss.flex.FlexReportCorporateAction;
+import portfolioboss.flex.FlexReportTrade;
+import portfolioboss.model.portfolio.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -32,7 +48,7 @@ import java.util.Optional;
  * ({@link TypedTradeSettlementDays}); every amount at the Bank of Israel's rate of its settlement day. Nothing is
  * stored: the tax is derived on every call, so a trade typed in or corrected applies at once.
  *
- * <p>For now its one caller is the sync, which prints it ({@code api.SyncService}); the Taxes page's endpoint
+ * <p>For now its one caller is the sync, which prints it ({@code sync.SyncService}); the Taxes page's endpoint
  * (session 4) will serve the same {@link CapitalGainsTaxOfTheAccountAndInvestors}.
  */
 @Service
@@ -79,7 +95,7 @@ public class CapitalGainsTaxService {
      * first sync. Read in one transaction: with {@code open-in-view=false} that is where the entities can be read.
      */
     @Transactional(readOnly = true)
-    protected Optional<CapitalGainsTaxOfTheAccountAndInvestors> capitalGainsTaxOfTheAccountAndInvestors() {
+    public Optional<CapitalGainsTaxOfTheAccountAndInvestors> capitalGainsTaxOfTheAccountAndInvestors() {
         return accountStateRepository.findFirstByOrderByAsOfDesc().map(this::capitalGainsTaxAsOf);
     }
 
@@ -174,7 +190,7 @@ public class CapitalGainsTaxService {
     }
 
     /**
-     * As {@code calculation.HoldingHistory} orders them: by day, a buy before a sale of the same day — a typed trade has
+     * As {@code calculation.portfolio.HoldingHistory} orders them: by day, a buy before a sale of the same day — a typed trade has
      * no time —, then in the order they were typed in.
      */
     private List<TradeEntity> investorsTradesInOrder(long investorId, List<TradeEntity> trades) {

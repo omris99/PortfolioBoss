@@ -1,8 +1,10 @@
 package portfolioboss.tax;
 
 import org.springframework.stereotype.Service;
-import portfolioboss.db.TradeRepository;
-import portfolioboss.exchangerates.ExchangeRateDownloadService;
+import portfolioboss.calculation.tax.UsSettlementDayEstimate;
+import portfolioboss.db.portfolio.TradeRepository;
+import portfolioboss.db.tax.FlexCashTransactionRepository;
+import portfolioboss.db.tax.FlexTradeRepository;
 
 import java.time.LocalDate;
 import java.util.HashSet;
@@ -12,7 +14,7 @@ import java.util.Set;
  * Makes sure every settlement day the tax converts has the dollar's rate (CAPITAL_GAINS_TAX_TODO.md, session 2): gathers
  * the settlement days in dollars — of the account's trades and cash transactions in IB's Flex reports, and of the trades
  * typed in by hand, for each investor's tax —, and has {@link ExchangeRateDownloadService} download the rates still
- * missing. Called by {@code api.SyncService} after every sync that reached TWS, after the Flex reports, which bring the
+ * missing. Called by {@code sync.SyncService} after every sync that reached TWS, after the Flex reports, which bring the
  * account's settlement days.
  *
  * <p>Only the dollar: the Bank of Israel publishes no rate for the Hong Kong dollar, in any of its series (checked

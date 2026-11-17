@@ -10,7 +10,7 @@ import java.util.List;
  * Recommendations page's, RECOMMENDATIONS_TODO.md, decision 4). This record is the one definition of that
  * shape: the SDK turns it into the JSON schema Claude must answer in, the {@code stock_analysis} table stores it as
  * JSON, and the API sends it on. What is decided from it — which source's consensus to show, which way the analysts are
- * going, the dot's color — is worked out by {@code calculation.ConsensusCalculator}, {@code AnalystTrendCalculator} and
+ * going, the dot's color — is worked out by {@code calculation.analysis.ConsensusCalculator}, {@code AnalystTrendCalculator} and
  * {@code SignalCalculator} on every read, so a change of rule applies to old analyses too.
  *
  * <p>Claude reports only: what the results don't say is {@code null} ({@code @Nullable}, see {@link SourceConsensus})

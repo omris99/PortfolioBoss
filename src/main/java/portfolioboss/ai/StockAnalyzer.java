@@ -23,7 +23,7 @@ import java.time.LocalDate;
  * One call to Claude per stock (AI_ANALYSIS_TODO.md, 2.2): it reads the four searches' results and answers in the JSON
  * schema of {@link StockAnalysisResult} — no tools and no searching of its own (decision 1). The SDK derives the schema
  * from the record, the API holds Claude to it, and the SDK reads the answer back into the record. Claude only reports;
- * what is decided from the answer is worked out in code ({@code calculation.ConsensusCalculator},
+ * what is decided from the answer is worked out in code ({@code calculation.analysis.ConsensusCalculator},
  * {@code AnalystTrendCalculator} and {@code SignalCalculator}).
  */
 @Component
@@ -128,7 +128,7 @@ public class StockAnalyzer {
     }
 
     /**
-     * Claude reads {@code searches} as given — {@code api.AnalysisService} keeps only the results that name the stock
+     * Claude reads {@code searches} as given — {@code analysis.AnalysisService} keeps only the results that name the stock
      * ({@link StockSearches#mentioning}, decision 17). A refusal, or an answer cut off at {@link #MAX_TOKENS}, fails the
      * stock: an {@code IllegalStateException} with a message the UI can show.
      */

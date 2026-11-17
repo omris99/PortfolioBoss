@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
  * One firm's price target for a stock, read from one Dow Jones headline (RECOMMENDATIONS_TODO.md, decision 14), e.g.
  * "Snowflake Price Target Raised to $450.00/Share From $300.00 by Piper Sandler". It is in the price terms of its own
  * day: after a stock split an older target is several times too high — which is why the targets are combined by their
- * median ({@code calculation.AnalystTargetCalculator}).
+ * median ({@code calculation.marketdata.AnalystTargetCalculator}).
  *
  * @param publishedAt         when the headline came out
  * @param firm                the firm, as Dow Jones names it: "Piper Sandler", "B of A Securities"

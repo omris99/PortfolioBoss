@@ -2,7 +2,7 @@ package portfolioboss.alerts;
 
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import portfolioboss.api.PortfolioSyncedEvent;
+import portfolioboss.sync.PortfolioSyncedEvent;
 
 /**
  * Checks the alerts after every sync — {@code ./run.sh}'s startup and Sync now (MY_HOLDINGS_TODO.md, decision 14) — by

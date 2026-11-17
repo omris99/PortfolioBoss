@@ -1,7 +1,11 @@
 package portfolioboss.tax;
 
 import org.springframework.stereotype.Service;
-import portfolioboss.db.TradeRepository;
+import portfolioboss.calculation.tax.FlexDownloadSchedule;
+import portfolioboss.db.portfolio.TradeRepository;
+import portfolioboss.flex.FlexClient;
+import portfolioboss.flex.FlexReport;
+import portfolioboss.flex.FlexReportPeriod;
 
 import java.time.Instant;
 import java.time.LocalDate;

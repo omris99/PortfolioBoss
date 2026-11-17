@@ -1,6 +1,12 @@
 package portfolioboss.tax;
 
-import portfolioboss.tax.OurFifoAgainstIbsFifo.SaleWhoseGainDiffersFromIbs;
+import portfolioboss.calculation.tax.OurFifoAgainstIbsFifo;
+import portfolioboss.calculation.tax.OurFifoAgainstIbsFifo.SaleWhoseGainDiffersFromIbs;
+import portfolioboss.calculation.tax.SaleTaxableGain;
+import portfolioboss.calculation.tax.TaxCalculationTrade;
+import portfolioboss.calculation.tax.TaxYearBalance;
+import portfolioboss.calculation.tax.TaxYearCalculator;
+import portfolioboss.model.tax.SaleNotComputedReason;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;

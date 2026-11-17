@@ -22,8 +22,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * The one place that connects to TWS. It owns the TWS host, port and client id, opens a new {@link IbGateway} for each
  * reading and disconnects at its end, and lets one reading through at a time: TWS refuses a second connection with the
  * same client id. {@code ./run.sh} reads the portfolio through it at startup and the Sync now button reads it again
- * ({@code api.SyncService}, MY_HOLDINGS_TODO.md, session 5א), and the Scan again button reads a new scan
- * ({@code api.ScanService}, RECOMMENDATIONS_TODO.md, session 1b). Read-only, like everything that talks to IB: it never
+ * ({@code sync.SyncService}, MY_HOLDINGS_TODO.md, session 5א), and the Scan again button reads a new scan
+ * ({@code recommendations.ScanService}, RECOMMENDATIONS_TODO.md, session 1b). Read-only, like everything that talks to IB: it never
  * places, modifies or cancels an order.
  *
  * <p>{@code ./run.sh 7497 102} arrives as the two non-option arguments (port, client id).

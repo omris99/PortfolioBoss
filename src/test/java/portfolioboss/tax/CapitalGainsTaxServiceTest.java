@@ -6,9 +6,12 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
-import portfolioboss.db.InvestorEntity;
-import portfolioboss.db.PortfolioSyncService;
-import portfolioboss.model.TradeSide;
+import portfolioboss.calculation.tax.TaxCalculationTrade;
+import portfolioboss.calculation.tax.TaxYearCalculator;
+import portfolioboss.db.investors.InvestorEntity;
+import portfolioboss.flex.FlexReportCorporateAction;
+import portfolioboss.model.portfolio.TradeSide;
+import portfolioboss.sync.PortfolioSyncService;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
