@@ -1,6 +1,6 @@
 # PortfolioBoss — Product & Build Plan
 
-> Working plan for what we're building and in what order. Pairs with [README.md](README.md).
+> Working plan for what we're building and in what order. Pairs with [README.md](../README.md).
 
 ## 🎨 Visual target — the "Horizon" (אופק) demo
 

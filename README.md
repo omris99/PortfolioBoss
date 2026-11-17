@@ -136,7 +136,7 @@ the `portfolioboss_test` database, so PostgreSQL must be running.
 ## UI
 
 A React app in `ui/` (React 19, Vite, Tailwind, a light theme designed in Claude Design from
-[DESIGN_BRIEF.md](DESIGN_BRIEF.md)). Its dependencies need installing once:
+[DESIGN_BRIEF.md](implementation-plans/DESIGN_BRIEF.md)). Its dependencies need installing once:
 
 ```bash
 cd ui && npm install
@@ -180,18 +180,18 @@ themselves are never created or deleted through the API — only the sync does t
 
 ## Plans
 
-[TODO.md](TODO.md) is the initial plan (2026-07-18): the six principles every feature traces back to. Its first
+[TODO.md](implementation-plans/TODO.md) is the initial plan (2026-07-18): the six principles every feature traces back to. Its first
 principle, a written thesis per holding, was replaced on 2026-10-06 by data per holding. The work since is planned one
 file at a time, session by session:
 
 | Plan | What | State |
 |---|---|---|
-| [HOLDING_DETAILS_TODO.md](HOLDING_DETAILS_TODO.md) | Maven and Spring Boot, PostgreSQL, the sync, trades, warnings | done (two ideas left for later) |
-| [CLOSED_POSITIONS_TODO.md](CLOSED_POSITIONS_TODO.md) | the shares sold and their realized P&L | done |
-| [INVESTORS_TODO.md](INVESTORS_TODO.md) | several investors sharing one account | done |
-| [AI_ANALYSIS_TODO.md](AI_ANALYSIS_TODO.md) | momentum, and the analysis of analysts and news | done |
-| [RECOMMENDATIONS_TODO.md](RECOMMENDATIONS_TODO.md) | the Recommendations page | done but the measurement of the picks, which needs a month of prices (from about 2026-11-27) |
-| [MY_HOLDINGS_TODO.md](MY_HOLDINGS_TODO.md) | what the holdings still lack: averaging down, the earnings date and the analysts' target, the holdings that move together, alerts, the return against SPY | current |
+| [HOLDING_DETAILS_TODO.md](implementation-plans/HOLDING_DETAILS_TODO.md) | Maven and Spring Boot, PostgreSQL, the sync, trades, warnings | done (two ideas left for later) |
+| [CLOSED_POSITIONS_TODO.md](implementation-plans/CLOSED_POSITIONS_TODO.md) | the shares sold and their realized P&L | done |
+| [INVESTORS_TODO.md](implementation-plans/INVESTORS_TODO.md) | several investors sharing one account | done |
+| [AI_ANALYSIS_TODO.md](implementation-plans/AI_ANALYSIS_TODO.md) | momentum, and the analysis of analysts and news | done |
+| [RECOMMENDATIONS_TODO.md](implementation-plans/RECOMMENDATIONS_TODO.md) | the Recommendations page | done but the measurement of the picks, which needs a month of prices (from about 2026-11-27) |
+| [MY_HOLDINGS_TODO.md](implementation-plans/MY_HOLDINGS_TODO.md) | what the holdings still lack: averaging down, the earnings date and the analysts' target, the holdings that move together, alerts, the return against SPY | current |
 
 ## Layout
 
@@ -217,6 +217,7 @@ src/main/resources/application.properties  # loopback address, port 8080, databa
 src/main/resources/db/migration/           # Flyway migrations (V1 … V12)
 src/test/java/portfolioboss/               # JUnit 5; the database tests use portfolioboss_test
 scripts/backup-db.sh                       # dumps the database to ~/PortfolioBossBackups
+implementation-plans/                      # the plans: TODO.md, the design brief, and a *_TODO.md per stretch of work
 
 ui/src/
 ├── pages/                 # the five pages
