@@ -21,21 +21,21 @@ against its monthly statements. Each holding also gets a momentum score from IB'
 its analyst ratings and news (Tavily searches, Claude extracts, the code decides), stored in the same database. It is a
 Maven / Spring Boot application (Java 21, Spring Boot 4.1.1).
 
-[TODO.md](TODO.md) is the plan of record — the six product principles, the settled architecture
+[TODO.md](implementation-plans/TODO.md) is the plan of record — the six product principles, the settled architecture
 decisions, and the milestone breakdown. Read it before proposing features or structural changes;
 a feature that doesn't trace back to one of the six principles probably belongs in IBBot, not here.
-[HOLDING_DETAILS_TODO.md](HOLDING_DETAILS_TODO.md) is the session-by-session plan for the next stretch
+[HOLDING_DETAILS_TODO.md](implementation-plans/HOLDING_DETAILS_TODO.md) is the session-by-session plan for the next stretch
 of Milestone 1 (Postgres, trades, holding details); its sessions 0 (Maven + Spring Boot), 1
 (PostgreSQL, Flyway, schema, entities), 2 (sync at connection, API reads from the database), 3
 (derived buy/sell dates and holding period), 4 (write endpoints for the sector and trades), 5 (UI: the new
 columns and sorting), 6 (UI: entering the sector and trades) and 7 (reconciliation warnings) are done; 8–9 are
-ideas for later. [CLOSED_POSITIONS_TODO.md](CLOSED_POSITIONS_TODO.md) came next: the shares sold, with their realized
+ideas for later. [CLOSED_POSITIONS_TODO.md](implementation-plans/CLOSED_POSITIONS_TODO.md) came next: the shares sold, with their realized
 P&L — sessions 1 (the list derived from the trades already entered), 2 (commission, manual closed positions) and 3
 (their UI), 4 (average cost, partial sells, manual positions with trades of their own) and 5 (its UI) are done.
-[INVESTORS_TODO.md](INVESTORS_TODO.md), several investors sharing one IB account (each one's cash and profit), followed:
+[INVESTORS_TODO.md](implementation-plans/INVESTORS_TODO.md), several investors sharing one IB account (each one's cash and profit), followed:
 its sessions 1 (schema, computation, read API), 2 (write endpoints for investors, deposits and a trade's investor),
 3 (UI) and 4 (each investor's part of a shared position's profit) are done; its "out of scope" list holds the ideas for
-later. [AI_ANALYSIS_TODO.md](AI_ANALYSIS_TODO.md) is next: for each holding, momentum from IB's daily closes, and an
+later. [AI_ANALYSIS_TODO.md](implementation-plans/AI_ANALYSIS_TODO.md) is next: for each holding, momentum from IB's daily closes, and an
 analysis of analyst ratings and news — the server searches Tavily, Claude (Sonnet 5.5, no tools) only extracts JSON, and
 the code picks the consensus source, the analysts' trend and a colored signal — run only from a button. Its sessions 0
 (the experiment that settled the model and the searches), 1 (momentum: a 0–5 score from IB's daily closes, in
@@ -46,7 +46,7 @@ code from price-target moves, four searches (news articles for the analysts' act
 the search engine's copy), each source's copy date in the UI, and the search results Claude read kept with every
 analysis — what is left of its check is in the plan. Its API keys go in the git-ignored `config/local.env`, which
 Claude never reads or prints. The UI's redesign (begun 2026-10-11) is designed screen by screen in Claude Design from
-[DESIGN_BRIEF.md](DESIGN_BRIEF.md) — every screen's content, the color meanings to keep, made-up sample data (never the
+[DESIGN_BRIEF.md](implementation-plans/DESIGN_BRIEF.md) — every screen's content, the color meanings to keep, made-up sample data (never the
 real portfolio) — and built from that design system's tokens and component specs, not its preview code. All of it is in
 and browser-checked (2026-10-11): the light theme, the four pages with their addresses, the Overview, a drawer for a
 holding's details (`/positions/:holdingId`) and for a closed position, a Columns menu, the Signal cell in words, a
@@ -63,7 +63,7 @@ card with the tabs in its header, the explanations in a small bubble (`Tip`) ins
 Weight tab's result in rows. Every trade has a price since 2026-10-13 too: the API, the form and the table (V8) all
 refuse one without.
 
-[RECOMMENDATIONS_TODO.md](RECOMMENDATIONS_TODO.md) came next: a fifth page of hot US stocks — "hot" is a long
+[RECOMMENDATIONS_TODO.md](implementation-plans/RECOMMENDATIONS_TODO.md) came next: a fifth page of hot US stocks — "hot" is a long
 upward trend, then sorted by how far the price has stretched above its 50-day average —, a recommendation the code
 picks — by weighted risk signs from Finnhub's company figures and the closes, and by a news score from the events Claude
 classifies in the news and the analysts' moves (decision 13) —, and a measurement of how the picks did. Its sessions 0
@@ -92,7 +92,7 @@ firms at least) is 15%+ above the last close. Session 4ב is built (437 tests, t
 run from the page picked three, and the page was checked in the browser. Session 5 (the measurement) comes after, once a
 month of prices has passed since the first picks (from about 2026-11-27).
 
-[MY_HOLDINGS_TODO.md](MY_HOLDINGS_TODO.md) (2026-11-02) is the current plan: what the holdings themselves still lack
+[MY_HOLDINGS_TODO.md](implementation-plans/MY_HOLDINGS_TODO.md) (2026-11-02) is the current plan: what the holdings themselves still lack
 against TODO.md's six principles — in the weeks before, a scanned stock got more data than a holding. In order: how much a
 stock must rise to reach its new average after a buy (the drawer's Weight tab, UI only), the earnings date, Finnhub's
 figures and the Dow Jones target for the holdings too, the holdings that move together and a market drop of 20%, alerts
@@ -127,7 +127,7 @@ tests, V15 on the real database after a backup, 14 of 14 tables equal) and brows
 first look moved the bell to the left of the name. The alerts' channel (session 6, Telegram) is a plan for later. Session 4
 (holdings that move together, a market drop of 20%) waits.
 
-[CAPITAL_GAINS_TAX_TODO.md](CAPITAL_GAINS_TAX_TODO.md) (2026-11-13/14) is the current plan: the capital gains tax of every
+[CAPITAL_GAINS_TAX_TODO.md](implementation-plans/CAPITAL_GAINS_TAX_TODO.md) (2026-11-13/14) is the current plan: the capital gains tax of every
 sale in the account, in shekels and exactly as Phoenix — the Israeli broker the account is opened through, which withholds
 the tax — computes it (the settlement day's Bank of Israel rate, FIFO lot by lot, a yearly balance settled at each month's
 end), each investor's part, and a ✓ against what Phoenix actually withheld, on a seventh page, Taxes, designed in Claude

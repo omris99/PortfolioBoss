@@ -76,7 +76,7 @@ status and the FIFO-against-average-cost flag worked out in Java):*
 
 Tests (`src/test/`) take the scope of the code they cover.
 
-*Planned — add as each milestone lands (see [TODO.md](../../../TODO.md)):*
+*Planned — add as each milestone lands (see [TODO.md](../../../implementation-plans/TODO.md)):*
 
 | Scope | Arrives |
 |---|---|
