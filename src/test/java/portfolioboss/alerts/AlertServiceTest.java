@@ -14,10 +14,13 @@ import portfolioboss.calculation.alerts.AlertSetting;
 import portfolioboss.calculation.marketdata.AnalystTargetCalculator;
 import portfolioboss.calculation.marketdata.Momentum;
 import portfolioboss.calculation.recommendations.HotStockCalculator;
+import portfolioboss.calculation.splits.StockSplit;
 import portfolioboss.db.alerts.AlertSettingEntity;
 import portfolioboss.db.alerts.AlertSettingRepository;
 import portfolioboss.db.recommendations.ScanCandidateEntity;
 import portfolioboss.db.recommendations.ScanRepository;
+import portfolioboss.db.splits.StockSplitEntity;
+import portfolioboss.db.splits.StockSplitRepository;
 import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
@@ -33,6 +36,7 @@ import portfolioboss.sync.PortfolioSyncService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -78,6 +82,9 @@ class AlertServiceTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private StockSplitRepository stockSplitRepository;
 
     @MockitoBean
     private ScanListsService scanListsService;
@@ -148,6 +155,23 @@ class AlertServiceTest {
 
         assertThat(jdbc.queryForList("select subject from alert where alert_type = 'TRADES_DONT_MATCH_IB'",
                 String.class)).containsExactly("NO_TRADES_LOGGED", "NO_TRADES_LOGGED");
+    }
+
+    /** STOCK_SPLITS_TODO.md: 25 ABCD typed in before a split of 4 for 1 are IB's 100 — no warning, so no alert. */
+    @Test
+    void tradesHeldThroughASplitMatchIbAndMakeNoAlert() {
+        alertSettingRepository.deleteAll();   // every type on, as it starts
+        syncAt(FIRST_SYNC, 0, 0);
+        typeInABuy(ABCD_CON_ID, LocalDate.of(2026, 10, 1), "25", "400");
+        typeInABuy(WXYZ_CON_ID, LocalDate.of(2026, 10, 1), "100", "100");
+        stockSplitRepository.save(new StockSplitEntity(new StockSplit("A1", "ABCD", ABCD_CON_ID, ABCD_CON_ID,
+                LocalDateTime.of(2026, 10, 15, 20, 25), 1, 4), FIRST_SYNC));
+        entityManager.flush();
+        entityManager.clear();
+
+        alertService.checkAlerts();
+
+        assertThat(countOf("select count(*) from alert where alert_type = 'TRADES_DONT_MATCH_IB'")).isZero();
     }
 
     @Test
@@ -264,5 +288,15 @@ class AlertServiceTest {
     private int countOf(String countQuery) {
         entityManager.flush();
         return jdbc.queryForObject(countQuery, Integer.class);
+    }
+
+    /** The account owner's buy, without a commission. */
+    private void typeInABuy(int conId, LocalDate tradeDate, String quantity, String price) {
+        entityManager.flush();
+        long holdingId = jdbc.queryForObject("select id from holding where con_id = ?", Long.class, conId);
+        long accountOwnerId = jdbc.queryForObject("select id from investor where is_account_owner", Long.class);
+        jdbc.update("insert into trade (holding_id, investor_id, trade_date, side, quantity, price, commission) "
+                        + "values (?, ?, ?, 'BUY', ?, ?, 0)",
+                holdingId, accountOwnerId, tradeDate, new BigDecimal(quantity), new BigDecimal(price));
     }
 }

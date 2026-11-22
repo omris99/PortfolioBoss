@@ -81,7 +81,10 @@ public class ManualPositionEntity {
         return List.copyOf(trades);
     }
 
-    /** Like {@link HoldingEntity#toPositionTrades()}, without IB's reading: IB never reported it. */
+    /**
+     * Like {@code HoldingEntity.toPositionTrades}, without IB's reading — IB never reported it — and without splits: it has
+     * no contract, and was sold before the first sync.
+     */
     public PositionTrades toPositionTrades() {
         return new PositionTrades(symbol, currency, null, getTradeFacts());
     }

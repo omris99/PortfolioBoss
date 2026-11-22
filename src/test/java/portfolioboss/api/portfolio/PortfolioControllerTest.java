@@ -27,7 +27,9 @@ import portfolioboss.api.portfolio.response.ClosedPositionResponse;
 import portfolioboss.api.portfolio.response.ClosedPositionSource;
 import portfolioboss.api.portfolio.response.HoldingResponse;
 import portfolioboss.api.portfolio.response.PortfolioResponse;
+import portfolioboss.api.portfolio.response.StockSplitResponse;
 import portfolioboss.api.portfolio.response.TradeResponse;
+import portfolioboss.api.portfolio.response.TranslatedTradeResponse;
 import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.model.analysis.AnalystConsensus;
 import portfolioboss.model.analysis.AnalystTrend;
@@ -291,6 +293,27 @@ class PortfolioControllerTest {
                 .andExpect(jsonPath("$.holdings[0].industry").value("Computers"));
     }
 
+    /**
+     * A holding's split and the trade it translated (STOCK_SPLITS_TODO.md): the trade itself stays as typed, its
+     * translation comes beside it by its id.
+     */
+    @Test
+    void servesASplitAndTheTradeItTranslatedWithTheFieldNamesTheUiExpects() throws Exception {
+        PortfolioResponse withASplit = new PortfolioResponse(ACCOUNT, AS_OF, 100_000.0, 25_000.0,
+                List.of(heldThroughASplit()), List.of(), List.of(), null);
+        given(portfolioReadService.currentPortfolio()).willReturn(Optional.of(withASplit));
+
+        mockMvc.perform(get("/api/portfolio"))
+                .andExpect(jsonPath("$.holdings[0].stockSplits[0].splitDay").value("2026-03-10"))
+                .andExpect(jsonPath("$.holdings[0].stockSplits[0].sharesBeforeTheSplit").value(1))
+                .andExpect(jsonPath("$.holdings[0].stockSplits[0].sharesAfterTheSplit").value(4))
+                .andExpect(jsonPath("$.holdings[0].trades[0].quantity").value(10))
+                .andExpect(jsonPath("$.holdings[0].trades[0].price").value(400))
+                .andExpect(jsonPath("$.holdings[0].translatedTrades[0].tradeId").value(11))
+                .andExpect(jsonPath("$.holdings[0].translatedTrades[0].quantity").value(40))
+                .andExpect(jsonPath("$.holdings[0].translatedTrades[0].price").value(100));
+    }
+
     /** What the Analyze buttons quote before a paid run: the average cost of one stock's analysis. */
     @Test
     void servesTheEstimatedAnalysisCostWithTheFieldNamesTheUiExpects() throws Exception {
@@ -471,7 +494,8 @@ class PortfolioControllerTest {
         return new HoldingResponse("AAPL", "STK", "USD", 10.0, 150.0, 200.0, 2000.0, 500.0, 25.0, ACCOUNT,
                 1500.0, 33.333, 7, 265598, "Technology", HoldingStatus.OPEN,
                 LocalDate.of(2024, 3, 14), null, 920L, List.of(buy), List.of(), investorQuantities, momentum,
-                appleAnalysis(), HoldingSignal.YELLOW, appleAnalystTarget(), appleCompanyInfo(), "Computers");
+                appleAnalysis(), HoldingSignal.YELLOW, appleAnalystTarget(), appleCompanyInfo(), "Computers", List.of(),
+                List.of());
     }
 
     /** Made-up figures from Finnhub: a P/E above 50 raises the one sign, and the report is 0–14 days away. */
@@ -512,12 +536,24 @@ class PortfolioControllerTest {
                         "Apple unveils a new product", "https://example.com/news")));
     }
 
+    /** 10 made-up shares bought at $400, then a split of 4 for 1: IB's 40 shares, the buy translated to 40 at $100. */
+    private HoldingResponse heldThroughASplit() {
+        TradeResponse buy = new TradeResponse(11, LocalDate.of(2026, 1, 5), TradeSide.BUY, new BigDecimal("10"),
+                new BigDecimal("400"), null, new BigDecimal("5"), ACCOUNT_OWNER_ID);
+        return new HoldingResponse("WXYZ", "STK", "USD", 40.0, 100.125, 110.0, 4400.0, 395.0, 0.0, ACCOUNT,
+                4005.0, 9.863, 9, 123456, null, HoldingStatus.OPEN, LocalDate.of(2026, 1, 5), null, 64L, List.of(buy),
+                List.of(), List.of(), null, null, null, new AnalystTargetResponse(null, null, false, 0, List.of()),
+                null, null, List.of(new StockSplitResponse(LocalDate.of(2026, 3, 10), 1, 4)),
+                List.of(new TranslatedTradeResponse(11, new BigDecimal("40"), new BigDecimal("100"))));
+    }
+
     /** IB sent a position but no cost or price figures for it, no sector and no trades entered. */
     private HoldingResponse withoutCostData() {
         HoldingWarning noTrades = new HoldingWarning(HoldingWarningType.NO_TRADES_LOGGED, NO_TRADES_MESSAGE);
         return new HoldingResponse("MSFT", "STK", "USD", 5.0, null, null, null, null, 0.0, ACCOUNT,
                 null, null, 8, 272093, null, HoldingStatus.OPEN, null, null, null, List.of(), List.of(noTrades),
-                List.of(), null, null, null, new AnalystTargetResponse(null, null, false, 0, List.of()), null, null);
+                List.of(), null, null, null, new AnalystTargetResponse(null, null, false, 0, List.of()), null, null, List.of(),
+                List.of());
     }
 
     /** The account owner of INVESTORS_TODO.md's example, with a realized P&amp;L in two currencies. */

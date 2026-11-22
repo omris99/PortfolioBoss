@@ -152,6 +152,28 @@ export interface Holding {
    * the two the other way round — a scanned stock's `industry` is the sector, its `category` this.
    */
   industry: string | null;
+  /** Its splits, the earliest first, from IB's Flex reports (STOCK_SPLITS_TODO.md); empty without one. */
+  stockSplits: StockSplit[];
+  /**
+   * The trades a split translated, as they count after the splits; the figures above already count them so, and
+   * `trades` stay as typed — the edit form shows and sends only those.
+   */
+  translatedTrades: TranslatedTrade[];
+}
+
+/** One split of a holding: "SPLIT 4 FOR 1" is `sharesBeforeTheSplit` 1 and `sharesAfterTheSplit` 4. */
+export interface StockSplit {
+  /** 'yyyy-MM-dd': IB books it after that day's market closed, so a trade of that day was before it. */
+  splitDay: string;
+  sharesBeforeTheSplit: number;
+  sharesAfterTheSplit: number;
+}
+
+/** A trade a split translated: "= 40 at $100 after the split". The trade as typed is the `Trade` of `tradeId`. */
+export interface TranslatedTrade {
+  tradeId: number;
+  quantity: number;
+  price: number;
 }
 
 /** What a momentum score means: `STRONG` 4–5, `NEUTRAL` 2–3, `WEAK` 0–1 (AI_ANALYSIS_TODO.md, decision 5). */

@@ -11,7 +11,7 @@ import java.util.Objects;
  * twin is found by IB's contract id, a manual position's, which has none, by its symbol; a trade without a twin (a date
  * typed wrong, say) gets the estimate of {@link UsSettlementDayEstimate}.
  *
- * <p>From the account's trades after the splits ({@link SplitAdjustedFlexTrades}): a buy made before a reverse split that
+ * <p>From the account's trades after the splits ({@link FlexTradesAfterTheSplits}): a buy made before a reverse split that
  * moved the stock to a new contract is then under the new contract, as the holding is.
  *
  * @param accountStocks the account's trades, stock by stock

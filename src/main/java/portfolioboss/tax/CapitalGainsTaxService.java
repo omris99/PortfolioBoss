@@ -2,10 +2,12 @@ package portfolioboss.tax;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import portfolioboss.calculation.portfolio.TradeFact;
+import portfolioboss.calculation.splits.StoredStockSplits;
 import portfolioboss.calculation.tax.CapitalGainsTaxCalculator;
+import portfolioboss.calculation.tax.FlexTradesAfterTheSplits;
 import portfolioboss.calculation.tax.OurFifoAgainstIbsFifo;
 import portfolioboss.calculation.tax.SaleTaxableGain;
-import portfolioboss.calculation.tax.SplitAdjustedFlexTrades;
 import portfolioboss.calculation.tax.TaxCalculationTrade;
 import portfolioboss.calculation.tax.TaxDeductibleExpense;
 import portfolioboss.calculation.tax.TradesOfOneStock;
@@ -19,6 +21,7 @@ import portfolioboss.db.portfolio.HoldingRepository;
 import portfolioboss.db.portfolio.ManualPositionEntity;
 import portfolioboss.db.portfolio.ManualPositionRepository;
 import portfolioboss.db.portfolio.TradeEntity;
+import portfolioboss.db.splits.StockSplitRepository;
 import portfolioboss.db.tax.ExchangeRateRepository;
 import portfolioboss.db.tax.FlexCashTransactionEntity;
 import portfolioboss.db.tax.FlexCashTransactionRepository;
@@ -43,9 +46,10 @@ import java.util.Optional;
 
 /**
  * Works out the capital gains tax from what is stored (CAPITAL_GAINS_TAX_TODO.md, session 3.5): the account's from IB's
- * Flex reports — every execution, its splits followed ({@link SplitAdjustedFlexTrades}), and IB's fees as expenses —,
- * and each other investor's from the trades typed in for them, each with its Flex twin's settlement day
- * ({@link TypedTradeSettlementDays}); every amount at the Bank of Israel's rate of its settlement day. Nothing is
+ * Flex reports — every execution after the stored splits ({@link FlexTradesAfterTheSplits}), and IB's fees as
+ * expenses —, and each other investor's from the trades typed in for them, after the same splits, each with its Flex
+ * twin's settlement day ({@link TypedTradeSettlementDays}); every amount at the Bank of Israel's rate of its settlement
+ * day. Nothing is
  * stored: the tax is derived on every call, so a trade typed in or corrected applies at once.
  *
  * <p>For now its one caller is the sync, which prints it ({@code sync.SyncService}); the Taxes page's endpoint
@@ -65,13 +69,15 @@ public class CapitalGainsTaxService {
     private final FlexCashTransactionRepository flexCashTransactionRepository;
     private final FlexCorporateActionRepository flexCorporateActionRepository;
     private final ExchangeRateRepository exchangeRateRepository;
+    private final StockSplitRepository stockSplitRepository;
 
     public CapitalGainsTaxService(AccountStateRepository accountStateRepository, HoldingRepository holdingRepository,
                                   ManualPositionRepository manualPositionRepository,
                                   InvestorRepository investorRepository, FlexTradeRepository flexTradeRepository,
                                   FlexCashTransactionRepository flexCashTransactionRepository,
                                   FlexCorporateActionRepository flexCorporateActionRepository,
-                                  ExchangeRateRepository exchangeRateRepository) {
+                                  ExchangeRateRepository exchangeRateRepository,
+                                  StockSplitRepository stockSplitRepository) {
         this.accountStateRepository = accountStateRepository;
         this.holdingRepository = holdingRepository;
         this.manualPositionRepository = manualPositionRepository;
@@ -80,6 +86,7 @@ public class CapitalGainsTaxService {
         this.flexCashTransactionRepository = flexCashTransactionRepository;
         this.flexCorporateActionRepository = flexCorporateActionRepository;
         this.exchangeRateRepository = exchangeRateRepository;
+        this.stockSplitRepository = stockSplitRepository;
     }
 
     /** The console lines of {@link CapitalGainsTaxConsoleLines}; nothing before the first sync. */
@@ -109,12 +116,13 @@ public class CapitalGainsTaxService {
         List<FlexReportCorporateAction> corporateActions = flexCorporateActionRepository.findAll().stream()
                 .map(FlexCorporateActionEntity::toFlexReportCorporateAction)
                 .toList();
+        StoredStockSplits stockSplits = stockSplitRepository.storedStockSplits();
 
         List<TradesOfOneStock> accountStocks =
-                new SplitAdjustedFlexTrades(flexTrades, corporateActions).tradesOfEveryStock();
+                new FlexTradesAfterTheSplits(flexTrades, stockSplits, corporateActions).tradesOfEveryStock();
         CapitalGainsTaxCalculator accountTax = new CapitalGainsTaxCalculator(accountStocks, accountExpenses(),
                 exchangeRatesByCurrency, lastSyncDay);
-        List<InvestorCapitalGainsTax> otherInvestorsTax = otherInvestorsTax(accountState,
+        List<InvestorCapitalGainsTax> otherInvestorsTax = otherInvestorsTax(accountState, stockSplits,
                 new TypedTradeSettlementDays(accountStocks), exchangeRatesByCurrency, lastSyncDay);
         OurFifoAgainstIbsFifo ourFifoAgainstIbsFifo = new OurFifoAgainstIbsFifo(
                 accountTax.sales().stream().map(SaleTaxableGain::fifoSale).toList(), ibsFifoGainByIbTradeId(flexTrades));
@@ -144,6 +152,7 @@ public class CapitalGainsTaxService {
 
     /** In id order; the account owner is left out — their tax is what the account's leaves (decision 6). */
     private List<InvestorCapitalGainsTax> otherInvestorsTax(AccountStateEntity accountState,
+                                                            StoredStockSplits stockSplits,
                                                             TypedTradeSettlementDays typedTradeSettlementDays,
                                                             Map<String, ExchangeRates> exchangeRatesByCurrency,
                                                             LocalDate lastSyncDay) {
@@ -154,33 +163,39 @@ public class CapitalGainsTaxService {
             if (investor.isAccountOwner()) {
                 continue;
             }
-            List<TradesOfOneStock> investorsStocks =
-                    investorsTradesOfEveryStock(investor.id(), holdings, manualPositions, typedTradeSettlementDays);
+            List<TradesOfOneStock> investorsStocks = investorsTradesOfEveryStock(investor.id(), holdings,
+                    manualPositions, stockSplits, typedTradeSettlementDays);
             otherInvestorsTax.add(new InvestorCapitalGainsTax(investor.id(), investor.name(),
                     new CapitalGainsTaxCalculator(investorsStocks, List.of(), exchangeRatesByCurrency, lastSyncDay)));
         }
         return otherInvestorsTax;
     }
 
-    /** One stock for each holding and each manual position the investor has a trade in. */
+    /**
+     * One stock for each holding and each manual position the investor has a trade in: a holding's trades after its
+     * splits, as the account's are; a manual position has none.
+     */
     private List<TradesOfOneStock> investorsTradesOfEveryStock(long investorId, List<HoldingEntity> holdings,
                                                               List<ManualPositionEntity> manualPositions,
+                                                              StoredStockSplits stockSplits,
                                                               TypedTradeSettlementDays typedTradeSettlementDays) {
         List<TradesOfOneStock> investorsStocks = new ArrayList<>();
         for (HoldingEntity holding : holdings) {
-            List<TaxCalculationTrade> trades = investorsTradesInOrder(investorId, holding.trades()).stream()
+            List<TradeFact> tradesAfterTheSplits = holding.tradesAfterTheSplits(stockSplits).allTrades();
+            List<TaxCalculationTrade> trades = investorsTradesInOrder(investorId, tradesAfterTheSplits).stream()
                     .map(trade -> taxCalculationTradeOf(trade, holding.symbol(), holding.currency(),
-                            typedTradeSettlementDays.settlementDayOfAHoldingsTrade(holding.conId(), trade.tradeDate())))
+                            typedTradeSettlementDays.settlementDayOfAHoldingsTrade(holding.conId(), trade.date())))
                     .toList();
             if (!trades.isEmpty()) {
                 investorsStocks.add(new TradesOfOneStock(holding.conId(), trades, null));
             }
         }
         for (ManualPositionEntity manualPosition : manualPositions) {
-            List<TaxCalculationTrade> trades = investorsTradesInOrder(investorId, manualPosition.trades()).stream()
+            List<TradeFact> tradesAsTyped = manualPosition.trades().stream().map(TradeEntity::toTradeFact).toList();
+            List<TaxCalculationTrade> trades = investorsTradesInOrder(investorId, tradesAsTyped).stream()
                     .map(trade -> taxCalculationTradeOf(trade, manualPosition.symbol(), manualPosition.currency(),
                             typedTradeSettlementDays.settlementDayOfAManualPositionsTrade(manualPosition.symbol(),
-                                    trade.tradeDate())))
+                                    trade.date())))
                     .toList();
             if (!trades.isEmpty()) {
                 investorsStocks.add(new TradesOfOneStock(null, trades, null));
@@ -190,21 +205,21 @@ public class CapitalGainsTaxService {
     }
 
     /**
-     * As {@code calculation.portfolio.HoldingHistory} orders them: by day, a buy before a sale of the same day — a typed trade has
-     * no time —, then in the order they were typed in.
+     * As {@code calculation.portfolio.HoldingHistory} orders them: by day, a buy before a sale of the same day — a typed
+     * trade has no time —, then in the order they were typed in.
      */
-    private List<TradeEntity> investorsTradesInOrder(long investorId, List<TradeEntity> trades) {
+    private List<TradeFact> investorsTradesInOrder(long investorId, List<TradeFact> trades) {
         return trades.stream()
                 .filter(trade -> trade.investorId() == investorId)
-                .sorted(Comparator.comparing(TradeEntity::tradeDate)
+                .sorted(Comparator.comparing(TradeFact::date)
                         .thenComparing(trade -> trade.side() == TradeSide.SELL)
-                        .thenComparing(TradeEntity::id))
+                        .thenComparing(TradeFact::id))
                 .toList();
     }
 
-    private TaxCalculationTrade taxCalculationTradeOf(TradeEntity trade, String symbol, String currency,
+    private TaxCalculationTrade taxCalculationTradeOf(TradeFact trade, String symbol, String currency,
                                                       LocalDate settlementDay) {
-        return new TaxCalculationTrade(String.valueOf(trade.id()), symbol, currency, trade.tradeDate(), settlementDay,
+        return new TaxCalculationTrade(String.valueOf(trade.id()), symbol, currency, trade.date(), settlementDay,
                 trade.side(), trade.quantity(), trade.price(), trade.commission());
     }
 }

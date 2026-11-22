@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
  * One row of a Flex report's Corporate Actions section, as IB wrote it (CAPITAL_GAINS_TAX_TODO.md, decision 15) — a split,
  * a reverse split, a change of contract. IB writes one action as several rows sharing an {@code actionID}: a reverse
  * split of 1 for 4 is the old contract's shares leaving ({@code quantity} −2,000) and the new contract's coming in
- * (+500), at the same time. Which of it the tax can follow is {@code SplitAdjustedFlexTrades}'s question, not this
+ * (+500), at the same time. Which of it is a split is {@code SplitsInFlexCorporateActions}'s question, not this
  * record's.
  *
  * @param ibTransactionId IB's {@code transactionID}, unique to the row

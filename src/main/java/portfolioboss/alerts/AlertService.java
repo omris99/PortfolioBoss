@@ -10,6 +10,7 @@ import portfolioboss.calculation.alerts.AlertSettings;
 import portfolioboss.calculation.alerts.HoldingAlertsCalculator;
 import portfolioboss.calculation.marketdata.DailyClosesWithSpy;
 import portfolioboss.calculation.portfolio.PortfolioWeightsCalculator;
+import portfolioboss.calculation.splits.StoredStockSplits;
 import portfolioboss.db.alerts.AlertEntity;
 import portfolioboss.db.alerts.AlertRepository;
 import portfolioboss.db.alerts.AlertSettingEntity;
@@ -23,6 +24,7 @@ import portfolioboss.db.portfolio.AccountStateRepository;
 import portfolioboss.db.portfolio.HoldingEntity;
 import portfolioboss.db.portfolio.HoldingRepository;
 import portfolioboss.db.recommendations.ScanCandidateEntity;
+import portfolioboss.db.splits.StockSplitRepository;
 import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.Holding;
 import portfolioboss.model.alerts.AlertType;
@@ -58,12 +60,13 @@ public class AlertService {
     private final StockRepository stockRepository;
     private final AnalystPriceTargetRepository analystPriceTargetRepository;
     private final ScanListsService scanListsService;
+    private final StockSplitRepository stockSplitRepository;
 
     public AlertService(AlertRepository alertRepository, AlertSettingRepository alertSettingRepository,
                         AccountStateRepository accountStateRepository, HoldingRepository holdingRepository,
                         DailyCloseRepository dailyCloseRepository, StockRepository stockRepository,
                         AnalystPriceTargetRepository analystPriceTargetRepository,
-                        ScanListsService scanListsService) {
+                        ScanListsService scanListsService, StockSplitRepository stockSplitRepository) {
         this.alertRepository = alertRepository;
         this.alertSettingRepository = alertSettingRepository;
         this.accountStateRepository = accountStateRepository;
@@ -72,6 +75,7 @@ public class AlertService {
         this.stockRepository = stockRepository;
         this.analystPriceTargetRepository = analystPriceTargetRepository;
         this.scanListsService = scanListsService;
+        this.stockSplitRepository = stockSplitRepository;
     }
 
     /**
@@ -131,6 +135,7 @@ public class AlertService {
         Map<Integer, StockEntity> stockByConId = stockRepository.stocksByConId(conIds);
         Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId =
                 analystPriceTargetRepository.analystPriceTargetsByConId(conIds);
+        StoredStockSplits stockSplits = stockSplitRepository.storedStockSplits();
         List<Holding> openHoldings = holdings.stream()
                 .filter(holding -> holding.status() == HoldingStatus.OPEN)
                 .map(HoldingEntity::toIbHolding)
@@ -150,7 +155,7 @@ public class AlertService {
                     dailyCloses.momentumOf(holding.conId()),
                     stock == null ? null : stock.finnhubData(),
                     analystPriceTargetsByConId.getOrDefault(holding.conId(), List.of()),
-                    holdingEntity.tradeHistory().warnings(holdingEntity.status(), holding.position()),
+                    holdingEntity.tradeHistory(stockSplits).warnings(holdingEntity.status(), holding.position()),
                     portfolioWeights.percentOfAccountOf(holding),
                     settings,
                     syncDate);

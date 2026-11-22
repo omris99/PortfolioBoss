@@ -28,6 +28,26 @@ class HoldingHistoryTest {
         assertThat(history.holdingDays(HoldingStatus.OPEN, SNAPSHOT_DATE)).isNull();
     }
 
+    /** The trades a split counts (STOCK_SPLITS_TODO.md, decision 7): those of the position still held. */
+    @Test
+    void theOpenPositionsTradesAreThoseSinceNothingWasLastHeld() {
+        TradeFact closedBuy = buy("2025-01-02", 10);
+        TradeFact closedSale = sell("2025-03-03", 10);
+        TradeFact openBuy = buy("2026-01-05", 6);
+        TradeFact openPartSold = sell("2026-02-02", 2);
+
+        HoldingHistory history = HoldingHistory.of(List.of(openPartSold, closedSale, openBuy, closedBuy));
+
+        assertThat(history.openPositionTrades()).containsExactly(openBuy, openPartSold);
+    }
+
+    @Test
+    void thereIsNoOpenPositionOnceEverythingIsSoldOrBeforeAnyBuy() {
+        assertThat(HoldingHistory.of(List.of(buy("2025-01-02", 10), sell("2025-03-03", 10))).openPositionTrades())
+                .isEmpty();
+        assertThat(HoldingHistory.of(List.of()).openPositionTrades()).isEmpty();
+    }
+
     @Test
     void oneBuyGivesAFirstBuyDateAndCountsToTheSnapshotDate() {
         HoldingHistory history = HoldingHistory.of(List.of(buy("2026-01-01", 10)));

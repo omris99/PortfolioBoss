@@ -39,6 +39,9 @@ import java.util.List;
  *                            it is asked about the holdings in dollars only (MY_HOLDINGS_TODO.md, decision 10)
  * @param industry           IB's finer word, "Semiconductors" — what IB, and a scanned stock's {@code category}, call
  *                            category; {@code null} until a sync reads the contract details, and when IB gives none
+ * @param stockSplits         the holding's splits, the earliest first (STOCK_SPLITS_TODO.md); empty without one
+ * @param translatedTrades    the trades a split translated, as they count after the splits — the figures above already
+ *                            count them so; {@code trades} stay as typed
  */
 public record HoldingResponse(
         String symbol,
@@ -68,5 +71,7 @@ public record HoldingResponse(
         HoldingSignal signal,
         AnalystTargetResponse analystTarget,
         CompanyInfoResponse companyInfo,
-        String industry) {
+        String industry,
+        List<StockSplitResponse> stockSplits,
+        List<TranslatedTradeResponse> translatedTrades) {
 }

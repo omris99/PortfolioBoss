@@ -32,9 +32,14 @@ import java.util.List;
  * @param heldCost        what the shares still held in the current position period cost, at average cost and with the
  *                        part of the buy commissions that stays with them — as IB's average cost counts it. 0 when
  *                        nothing is held
+ * @param openPositionTrades the trades of the open position — the current position period, from the last time
+ *                        nothing was held —, in date order; empty once a sell has brought it back to zero, or before
+ *                        any buy. The trades a split counts (STOCK_SPLITS_TODO.md, decision 7:
+ *                        {@code SplitAdjustedTypedTrades})
  */
 public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, BigDecimal netQuantity,
-                             List<ClosedPosition> closedPositions, BigDecimal heldCost) {
+                             List<ClosedPosition> closedPositions, BigDecimal heldCost,
+                             List<TradeFact> openPositionTrades) {
 
     /**
      * Below this, a quantity counts as "flat" (zero). Needed because summed {@code BigDecimal}s rarely
@@ -75,11 +80,12 @@ public record HoldingHistory(LocalDate firstBuyDate, LocalDate lastSellDate, Big
                 .toList();
 
         if (positionPeriods.isEmpty()) {
-            return new HoldingHistory(null, null, netQuantity, closedPositions, BigDecimal.ZERO);
+            return new HoldingHistory(null, null, netQuantity, closedPositions, BigDecimal.ZERO, List.of());
         }
         PositionPeriod currentPeriod = positionPeriods.getLast();
+        List<TradeFact> openPositionTrades = currentPeriod.isClosed() ? List.of() : List.copyOf(currentPeriod.trades());
         return new HoldingHistory(currentPeriod.firstBuyDate(), currentPeriod.lastSellDate(), netQuantity,
-                closedPositions, currentPeriod.heldCost());
+                closedPositions, currentPeriod.heldCost(), openPositionTrades);
     }
 
     /**

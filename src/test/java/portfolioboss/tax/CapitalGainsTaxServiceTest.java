@@ -12,6 +12,7 @@ import portfolioboss.db.investors.InvestorEntity;
 import portfolioboss.flex.FlexReportCorporateAction;
 import portfolioboss.model.portfolio.TradeSide;
 import portfolioboss.sync.PortfolioSyncService;
+import portfolioboss.sync.StockSplitDetectionService;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -32,11 +33,15 @@ import static portfolioboss.tax.TaxTestDataInTheDatabase.STOCK_CON_ID;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
 @Import({CapitalGainsTaxService.class, FlexReportStorageService.class, PortfolioSyncService.class,
-        TaxTestDataInTheDatabase.class})
+        StockSplitDetectionService.class, TaxTestDataInTheDatabase.class})
 class CapitalGainsTaxServiceTest {
 
     @Autowired
     private CapitalGainsTaxService capitalGainsTaxService;
+
+    /** The sync's step that stores the splits of the Flex rows: the tax follows only the splits stored. */
+    @Autowired
+    private StockSplitDetectionService stockSplitDetectionService;
 
     @Autowired
     private TaxTestDataInTheDatabase storedData;
@@ -100,8 +105,62 @@ class CapitalGainsTaxServiceTest {
     }
 
     /**
+     * The account bought 10 at $100, the stock split 2 for 1 in the same contract, and it sold the 20 at $75: IB's $498.
+     * Avi bought 4 at $100 before it and sold 8 at $75 after it: his buy counts as 8 at $50, so his sale is computed —
+     * the same $198 as selling 4 at $150, a tax of 163.23 —, not one of more shares than he bought.
+     */
+    @Test
+    void anInvestorsTradesHeldThroughAStoredSplitAreTranslated() {
+        storedData.syncTheHolding();
+        storedData.storeTheRates();
+        storedData.storeFlexReport(List.of(
+                        storedData.flexTradeOf("1001", STOCK_CON_ID, BUY_DAY.atTime(10, 0), "10", "100",
+                                BigDecimal.ZERO),
+                        storedData.flexTradeOf("1002", STOCK_CON_ID, SALE_DAY.atTime(11, 0), "-20", "75",
+                                new BigDecimal("498"))),
+                List.of(new FlexReportCorporateAction("4001", "5001", "FS", STOCK_CON_ID, "ABCD", "STK",
+                        LocalDateTime.of(2026, 4, 1, 20, 25), new BigDecimal("10"), BigDecimal.ZERO, BigDecimal.ZERO,
+                        "ABCD SPLIT 2 FOR 1")));
+        stockSplitDetectionService.storeNewSplits();
+        InvestorEntity avi = storedData.storeAnInvestor("Avi");
+        storedData.typeInATradeOf(avi, BUY_DAY, TradeSide.BUY, "4", "100");
+        storedData.typeInATradeOf(avi, SALE_DAY, TradeSide.SELL, "8", "75");
+
+        CapitalGainsTaxOfTheAccountAndInvestors capitalGainsTax =
+                capitalGainsTaxService.capitalGainsTaxOfTheAccountAndInvestors().orElseThrow();
+
+        assertThat(capitalGainsTax.accountTax().sales()).singleElement()
+                .satisfies(sale -> assertThat(sale.isComputed()).isTrue());
+        assertThat(capitalGainsTax.ourFifoAgainstIbsFifo().salesWhoseGainDiffersFromIbs()).isEmpty();
+        assertThat(capitalGainsTax.otherInvestorsTax().get(0).tax().taxYears().get(0).balance().taxOfTheYearSoFar())
+                .isEqualByComparingTo("163.23");
+    }
+
+    /** A split the sync hasn't stored is not followed: the sale of the stock is not computed, never guessed. */
+    @Test
+    void aSplitNotStoredLeavesTheStocksSalesNotComputed() {
+        storedData.syncTheHolding();
+        storedData.storeTheRates();
+        storedData.storeFlexReport(List.of(
+                        storedData.flexTradeOf("1001", STOCK_CON_ID, BUY_DAY.atTime(10, 0), "10", "100",
+                                BigDecimal.ZERO),
+                        storedData.flexTradeOf("1002", STOCK_CON_ID, SALE_DAY.atTime(11, 0), "-20", "75",
+                                new BigDecimal("498"))),
+                List.of(new FlexReportCorporateAction("4001", "5001", "FS", STOCK_CON_ID, "ABCD", "STK",
+                        LocalDateTime.of(2026, 4, 1, 20, 25), new BigDecimal("10"), BigDecimal.ZERO, BigDecimal.ZERO,
+                        "ABCD SPLIT 2 FOR 1")));
+
+        CapitalGainsTaxOfTheAccountAndInvestors capitalGainsTax =
+                capitalGainsTaxService.capitalGainsTaxOfTheAccountAndInvestors().orElseThrow();
+
+        assertThat(capitalGainsTax.accountTax().sales()).singleElement()
+                .satisfies(sale -> assertThat(sale.isComputed()).isFalse());
+    }
+
+    /**
      * Bought 20 at $50 under an old contract, a reverse split of 1 for 2 into the stock's contract, then a sale of the 10
-     * at $150: stored and read back, the sale takes the restated buy — 10 at $100 — and is computed, its gain IB's $498.
+     * at $150: stored and read back, the sale takes the translated buy — 10 at $100 — and is computed, its gain IB's
+     * $498.
      */
     @Test
     void aStoredReverseSplitIsFollowed() {
@@ -118,6 +177,7 @@ class CapitalGainsTaxServiceTest {
                                 new BigDecimal("-20"), BigDecimal.ZERO, BigDecimal.ZERO, "ABCD SPLIT 1 FOR 2"),
                         new FlexReportCorporateAction("4002", "5001", "RS", STOCK_CON_ID, "ABCD", "STK", splitTime,
                                 new BigDecimal("10"), BigDecimal.ZERO, BigDecimal.ZERO, "ABCD SPLIT 1 FOR 2")));
+        stockSplitDetectionService.storeNewSplits();
 
         CapitalGainsTaxOfTheAccountAndInvestors capitalGainsTax =
                 capitalGainsTaxService.capitalGainsTaxOfTheAccountAndInvestors().orElseThrow();

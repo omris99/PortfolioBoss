@@ -13,7 +13,9 @@ import portfolioboss.api.marketdata.response.MomentumResponse;
 import portfolioboss.api.portfolio.response.ClosedPositionResponse;
 import portfolioboss.api.portfolio.response.HoldingResponse;
 import portfolioboss.api.portfolio.response.PortfolioResponse;
+import portfolioboss.api.portfolio.response.StockSplitResponse;
 import portfolioboss.api.portfolio.response.TradeResponse;
+import portfolioboss.api.portfolio.response.TranslatedTradeResponse;
 import portfolioboss.calculation.analysis.AnalystTrendCalculator;
 import portfolioboss.calculation.analysis.ConsensusCalculator;
 import portfolioboss.calculation.analysis.SignalCalculator;
@@ -25,6 +27,7 @@ import portfolioboss.calculation.marketdata.DailyClosesWithSpy;
 import portfolioboss.calculation.marketdata.Momentum;
 import portfolioboss.calculation.marketdata.RiskSignsCalculator;
 import portfolioboss.calculation.portfolio.HoldingHistory;
+import portfolioboss.calculation.splits.StoredStockSplits;
 import portfolioboss.db.analysis.StockAnalysisEntity;
 import portfolioboss.db.analysis.StockAnalysisRepository;
 import portfolioboss.db.investors.InvestorEntity;
@@ -39,6 +42,7 @@ import portfolioboss.db.portfolio.HoldingEntity;
 import portfolioboss.db.portfolio.HoldingRepository;
 import portfolioboss.db.portfolio.ManualPositionEntity;
 import portfolioboss.db.portfolio.ManualPositionRepository;
+import portfolioboss.db.splits.StockSplitRepository;
 import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.Holding;
 import portfolioboss.model.analysis.AnalystConsensus;
@@ -75,12 +79,14 @@ public class PortfolioReadService {
     private final StockAnalysisRepository stockAnalysisRepository;
     private final StockRepository stockRepository;
     private final AnalystPriceTargetRepository analystPriceTargetRepository;
+    private final StockSplitRepository stockSplitRepository;
 
     public PortfolioReadService(HoldingRepository holdingRepository, AccountStateRepository accountStateRepository,
                                 ManualPositionRepository manualPositionRepository,
                                 InvestorRepository investorRepository, DailyCloseRepository dailyCloseRepository,
                                 StockAnalysisRepository stockAnalysisRepository, StockRepository stockRepository,
-                                AnalystPriceTargetRepository analystPriceTargetRepository) {
+                                AnalystPriceTargetRepository analystPriceTargetRepository,
+                                StockSplitRepository stockSplitRepository) {
         this.holdingRepository = holdingRepository;
         this.accountStateRepository = accountStateRepository;
         this.manualPositionRepository = manualPositionRepository;
@@ -89,6 +95,7 @@ public class PortfolioReadService {
         this.stockAnalysisRepository = stockAnalysisRepository;
         this.stockRepository = stockRepository;
         this.analystPriceTargetRepository = analystPriceTargetRepository;
+        this.stockSplitRepository = stockSplitRepository;
     }
 
     /**
@@ -111,6 +118,8 @@ public class PortfolioReadService {
         Map<Integer, StockEntity> stocksByConId = stockRepository.stocksByConId(holdingConIds);
         Map<Integer, List<AnalystPriceTarget>> analystPriceTargetsByConId =
                 analystPriceTargetRepository.analystPriceTargetsByConId(holdingConIds);
+        // every holding's trades are counted after its splits, in the holdings, the closed positions and the cards
+        StoredStockSplits stockSplits = stockSplitRepository.storedStockSplits();
         // How far an OPEN holding's day count runs (see HoldingHistory) — the last sync, in the local
         // calendar day, not the instant the API happens to be called.
         LocalDate snapshotDate = accountState.asOf().atZone(ZoneId.systemDefault()).toLocalDate();
@@ -121,13 +130,13 @@ public class PortfolioReadService {
                 accountState.netLiquidation(),
                 accountState.totalCashValue(),
                 storedHoldings.stream()
-                        .map(holding -> holdingResponseOf(holding, snapshotDate, accountOwnerId,
+                        .map(holding -> holdingResponseOf(holding, stockSplits, snapshotDate, accountOwnerId,
                                 dailyCloses.momentumOf(holding.conId()), latestAnalysisByHoldingId.get(holding.id()),
                                 stocksByConId.get(holding.conId()),
                                 analystPriceTargetsByConId.getOrDefault(holding.conId(), List.of())))
                         .toList(),
-                closedPositionsOf(storedHoldings, manualPositions),
-                investorsOf(accountState, storedHoldings, manualPositions, investors, accountOwnerId),
+                closedPositionsOf(storedHoldings, manualPositions, stockSplits),
+                investorsOf(accountState, storedHoldings, manualPositions, investors, accountOwnerId, stockSplits),
                 estimatedAnalysisCostOf(latestAnalysisByHoldingId.values()));
     }
 
@@ -176,11 +185,12 @@ public class PortfolioReadService {
      * (what Finnhub answered, and when) are {@code null} while there are no closes, no analysis, or no answer from
      * Finnhub for the holding.
      */
-    private HoldingResponse holdingResponseOf(HoldingEntity holdingEntity, LocalDate snapshotDate, long accountOwnerId,
-                                              Momentum momentum, StockAnalysisEntity latestAnalysis, StockEntity stock,
+    private HoldingResponse holdingResponseOf(HoldingEntity holdingEntity, StoredStockSplits stockSplits,
+                                              LocalDate snapshotDate, long accountOwnerId, Momentum momentum,
+                                              StockAnalysisEntity latestAnalysis, StockEntity stock,
                                               List<AnalystPriceTarget> analystPriceTargets) {
         Holding holding = holdingEntity.toIbHolding();
-        HoldingHistory holdingHistory = holdingEntity.tradeHistory();
+        HoldingHistory holdingHistory = holdingEntity.tradeHistory(stockSplits);
         MomentumResponse momentumResponse = momentum == null ? null : new MomentumResponse(momentum);
         AnalystTargetCalculator analystTargetCalculator = new AnalystTargetCalculator(analystPriceTargets,
                 Utils.finiteOrNull(holding.marketPrice()), snapshotDate);
@@ -207,13 +217,17 @@ public class PortfolioReadService {
                 holdingHistory.holdingDays(holdingEntity.status(), snapshotDate),
                 holdingEntity.trades().stream().map(TradeResponse::new).toList(),
                 holdingHistory.warnings(holdingEntity.status(), holding.position()),
-                investorQuantitiesOf(holdingEntity, accountOwnerId),
+                investorQuantitiesOf(holdingEntity, accountOwnerId, stockSplits),
                 momentumResponse,
                 analysisResponseOf(latestAnalysis, holding),
                 signalOf(latestAnalysis, momentum),
                 new AnalystTargetResponse(analystTargetCalculator),
                 companyInfoOf(stock, momentum, snapshotDate),
-                holdingEntity.industry());
+                holdingEntity.industry(),
+                stockSplits.splitsOfTheHolding(holdingEntity.conId()).stream().map(StockSplitResponse::new).toList(),
+                holdingEntity.tradesAfterTheSplits(stockSplits).translatedTrades().stream()
+                        .map(TranslatedTradeResponse::new)
+                        .toList());
     }
 
     /**
@@ -253,8 +267,9 @@ public class PortfolioReadService {
         return new SignalCalculator(momentumLabel, analystTrend, result.sentiment()).signal();
     }
 
-    private List<InvestorQuantityResponse> investorQuantitiesOf(HoldingEntity holdingEntity, long accountOwnerId) {
-        return holdingEntity.toPositionTrades().partsByInvestor(accountOwnerId).entrySet().stream()
+    private List<InvestorQuantityResponse> investorQuantitiesOf(HoldingEntity holdingEntity, long accountOwnerId,
+                                                                StoredStockSplits stockSplits) {
+        return holdingEntity.toPositionTrades(stockSplits).partsByInvestor(accountOwnerId).entrySet().stream()
                 .map(investorPart -> new InvestorQuantityResponse(investorPart.getKey(), investorPart.getValue()))
                 .toList();
     }
@@ -263,17 +278,21 @@ public class PortfolioReadService {
 
     /** The holdings' first, then the manual positions'; the UI sorts them by date itself. */
     private List<ClosedPositionResponse> closedPositionsOf(List<HoldingEntity> holdings,
-                                                           List<ManualPositionEntity> manualPositions) {
-        return Stream.concat(holdings.stream().flatMap(this::holdingClosedPositionsOf),
+                                                           List<ManualPositionEntity> manualPositions,
+                                                           StoredStockSplits stockSplits) {
+        return Stream.concat(holdings.stream().flatMap(holding -> holdingClosedPositionsOf(holding, stockSplits)),
                 manualPositions.stream().flatMap(this::manualClosedPositionsOf)).toList();
     }
 
     /**
      * A holding's closed positions, investor by investor (INVESTORS_TODO.md, decision 8) — of open and closed holdings
-     * alike: a holding still open today can have been sold in full and bought again before, or sold in part.
+     * alike: a holding still open today can have been sold in full and bought again before, or sold in part. After its
+     * splits: a position sold in part before a split counts in the shares of after it, one sold in full before it as
+     * it happened (STOCK_SPLITS_TODO.md, decision 7).
      */
-    private Stream<ClosedPositionResponse> holdingClosedPositionsOf(HoldingEntity holding) {
-        PositionTrades positionTrades = holding.toPositionTrades();
+    private Stream<ClosedPositionResponse> holdingClosedPositionsOf(HoldingEntity holding,
+                                                                    StoredStockSplits stockSplits) {
+        PositionTrades positionTrades = holding.toPositionTrades(stockSplits);
         return positionTrades.investorIds().stream()
                 .flatMap(investorId -> positionTrades.historyOf(investorId).closedPositions().stream()
                         .map(closedPosition -> new ClosedPositionResponse(holding, closedPosition, investorId)));
@@ -291,9 +310,10 @@ public class PortfolioReadService {
     /** Every investor's summary card, in the order of {@code investors}. */
     private List<InvestorResponse> investorsOf(AccountStateEntity accountState, List<HoldingEntity> holdings,
                                                List<ManualPositionEntity> manualPositions,
-                                               List<InvestorEntity> investors, long accountOwnerId) {
+                                               List<InvestorEntity> investors, long accountOwnerId,
+                                               StoredStockSplits stockSplits) {
         List<PositionTrades> positions = Stream.concat(
-                holdings.stream().map(HoldingEntity::toPositionTrades),
+                holdings.stream().map(holding -> holding.toPositionTrades(stockSplits)),
                 manualPositions.stream().map(ManualPositionEntity::toPositionTrades)).toList();
         InvestorSummaryCalculator calculator = new InvestorSummaryCalculator(
                 accountOwnerId,

@@ -33,7 +33,8 @@ import java.util.concurrent.Future;
  * Finnhub knows about the holdings in dollars, then all of it stored in one transaction
  * ({@link PortfolioSyncService}), then a {@link PortfolioSyncedEvent} for whoever reacts to a sync — the alerts —, then
  * the days of IB's Flex reports not stored yet ({@link FlexDownloadService}, CAPITAL_GAINS_TAX_TODO.md, session 1), then
- * the Bank of Israel's dollar rates of the settlement days that have none yet ({@link SettlementDayRatesService},
+ * the splits they brought ({@link StockSplitDetectionService}, STOCK_SPLITS_TODO.md), then the Bank of Israel's dollar
+ * rates of the settlement days that have none yet ({@link SettlementDayRatesService},
  * session 2), and last the capital gains tax they make, printed ({@link CapitalGainsTaxService}, session 3).
  *
  * <p>Not {@code @Transactional}: reading TWS, asking Finnhub, waiting for IB to prepare a Flex report and asking the Bank
@@ -58,11 +59,13 @@ public class SyncService {
     private final FlexDownloadService flexDownloadService;
     private final SettlementDayRatesService settlementDayRatesService;
     private final CapitalGainsTaxService capitalGainsTaxService;
+    private final StockSplitDetectionService stockSplitDetectionService;
 
     public SyncService(TwsReader twsReader, PortfolioSyncService portfolioSyncService, FinnhubClient finnhubClient,
                        ApplicationEventPublisher eventPublisher, FlexDownloadService flexDownloadService,
                        SettlementDayRatesService settlementDayRatesService,
-                       CapitalGainsTaxService capitalGainsTaxService) {
+                       CapitalGainsTaxService capitalGainsTaxService,
+                       StockSplitDetectionService stockSplitDetectionService) {
         this.twsReader = twsReader;
         this.portfolioSyncService = portfolioSyncService;
         this.finnhubClient = finnhubClient;
@@ -70,21 +73,25 @@ public class SyncService {
         this.flexDownloadService = flexDownloadService;
         this.settlementDayRatesService = settlementDayRatesService;
         this.capitalGainsTaxService = capitalGainsTaxService;
+        this.stockSplitDetectionService = stockSplitDetectionService;
     }
 
     /**
      * {@code ./run.sh}'s startup. Waits for a reading already running to end. When TWS can't be read, says so and stores
-     * nothing: the API serves whatever the last sync stored. A database failure is thrown — the startup exits on it.
+     * nothing from IB — only the splits in the Flex reports stored before, if any is new: the API serves whatever the
+     * last sync stored. A database failure of the sync is thrown — the startup exits on it.
      */
     public void syncAtStartup() throws InterruptedException {
         TwsReading reading = twsReader.readPortfolio(isScanDue());
         if (reading == null) {
             // TwsReader already printed why.
             System.out.println("[db] TWS unreachable; serving the portfolio from the last sync, if any");
+            storeNewStockSplits();
             return;
         }
         storeWithFinnhubData(reading);
         downloadMissingFlexReports(reading.snapshot());
+        storeNewStockSplits();
         downloadMissingDollarRates(reading.snapshot());
         printCapitalGainsTax();
     }
@@ -100,6 +107,7 @@ public class SyncService {
         TwsReading reading = twsReader.readPortfolioUnlessBusy(isScanDue());
         storeWithFinnhubData(reading);
         downloadMissingFlexReports(reading.snapshot());
+        storeNewStockSplits();
         downloadMissingDollarRates(reading.snapshot());
         printCapitalGainsTax();
         return reading.snapshot();
@@ -134,6 +142,19 @@ public class SyncService {
      */
     private void downloadMissingFlexReports(PortfolioSnapshot snapshot) throws InterruptedException {
         flexDownloadService.downloadWhatIsMissing(syncDateOf(snapshot));
+    }
+
+    /**
+     * The splits the Flex reports brought, stored once ({@link StockSplitDetectionService}) — after the reports, and
+     * before the tax that is translated by them. A failure is printed and the sync, already stored, goes on: the next
+     * sync tries again.
+     */
+    private void storeNewStockSplits() {
+        try {
+            stockSplitDetectionService.storeNewSplits();
+        } catch (RuntimeException e) {
+            System.err.println("[db error] could not store the stock splits: " + e.getMessage());
+        }
     }
 
     /**

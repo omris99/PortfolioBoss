@@ -25,9 +25,14 @@ import portfolioboss.api.portfolio.response.ClosedPositionResponse;
 import portfolioboss.api.portfolio.response.ClosedPositionSource;
 import portfolioboss.api.portfolio.response.HoldingResponse;
 import portfolioboss.api.portfolio.response.PortfolioResponse;
+import portfolioboss.api.portfolio.response.StockSplitResponse;
 import portfolioboss.api.portfolio.response.TradeResponse;
+import portfolioboss.api.portfolio.response.TranslatedTradeResponse;
+import portfolioboss.calculation.splits.StockSplit;
 import portfolioboss.db.analysis.StockAnalysisEntity;
 import portfolioboss.db.analysis.StockAnalysisRepository;
+import portfolioboss.db.splits.StockSplitEntity;
+import portfolioboss.db.splits.StockSplitRepository;
 import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.ib.Benchmark;
 import portfolioboss.ib.DailyClose;
@@ -96,6 +101,9 @@ class PortfolioReadServiceTest {
 
     @Autowired
     private StockAnalysisRepository stockAnalysisRepository;
+
+    @Autowired
+    private StockSplitRepository stockSplitRepository;
 
     @Test
     void hasNothingToServeBeforeTheFirstSync() {
@@ -527,6 +535,44 @@ class PortfolioReadServiceTest {
         assertThat(portfolio.asOf()).isEqualTo(SECOND_RUN);
         assertThat(portfolio.netLiquidation()).isEqualTo(110_000.0);
         assertThat(portfolio.holdings()).extracting(HoldingResponse::position).containsExactly(12.0);
+    }
+
+    /**
+     * STOCK_SPLITS_TODO.md: a split of 4 for 1 on 1 September. The account owner sold 5 in full before it and bought 6
+     * at $400 again, Avi bought 4 at $400: IB's 40 shares are the owner's 24 and Avi's 16, the trades match, and they
+     * stay as typed — their translation beside them. The position sold in full before the split stays as it happened.
+     */
+    @Test
+    void aHoldingsTradesCountAfterItsSplitsAndStayAsTyped() {
+        syncService.sync(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(40, 100.0)));
+        long holdingId = holdingIdOf(APPLE_CON_ID);
+        long aviId = insertInvestor("Avi");
+        insertTrade(holdingId, LocalDate.of(2026, 1, 5), TradeSide.BUY, "5", "300", null);
+        insertTrade(holdingId, LocalDate.of(2026, 2, 2), TradeSide.SELL, "5", "350", null);
+        insertTrade(holdingId, LocalDate.of(2026, 8, 3), TradeSide.BUY, "6", "400", null);
+        insertTrade(holdingId, aviId, LocalDate.of(2026, 8, 4), TradeSide.BUY, "4", "400");
+        stockSplitRepository.save(new StockSplitEntity(new StockSplit("A1", "AAPL", APPLE_CON_ID, APPLE_CON_ID,
+                LocalDateTime.of(2026, 9, 1, 20, 25), 1, 4), FIRST_RUN));
+
+        PortfolioResponse portfolio = readPortfolio().orElseThrow();
+
+        HoldingResponse holding = portfolio.holdings().get(0);
+        assertThat(holding.warnings()).isEmpty();
+        assertThat(holding.investorQuantities())
+                .extracting(InvestorQuantityResponse::investorId, quantity -> quantity.quantity().intValueExact())
+                .containsExactly(tuple(accountOwnerId(), 24), tuple(aviId, 16));
+        assertThat(holding.trades()).extracting(trade -> trade.quantity().intValueExact())
+                .containsExactly(5, 5, 6, 4);
+        assertThat(holding.translatedTrades()).extracting(translated -> translated.quantity().intValueExact(),
+                        translated -> translated.price().intValueExact())
+                .containsExactly(tuple(24, 100), tuple(16, 100));
+        assertThat(holding.translatedTrades()).extracting(TranslatedTradeResponse::tradeId)
+                .containsExactly(holding.trades().get(2).id(), holding.trades().get(3).id());
+        assertThat(holding.stockSplits()).containsExactly(new StockSplitResponse(LocalDate.of(2026, 9, 1), 1, 4));
+        assertThat(portfolio.closedPositions()).singleElement().satisfies(closedPosition -> {
+            assertThat(closedPosition.quantity()).isEqualByComparingTo("5");
+            assertThat(closedPosition.averageBuyPrice()).isEqualByComparingTo("300");
+        });
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────

@@ -12,6 +12,8 @@ import jakarta.persistence.Table;
 import portfolioboss.calculation.investors.PositionTrades;
 import portfolioboss.calculation.portfolio.HoldingHistory;
 import portfolioboss.calculation.portfolio.TradeFact;
+import portfolioboss.calculation.splits.StoredStockSplits;
+import portfolioboss.calculation.splits.TradesAfterTheSplits;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.StockContractDetails;
 import portfolioboss.model.portfolio.HoldingStatus;
@@ -156,19 +158,27 @@ public class HoldingEntity {
     }
 
     /**
-     * What this holding's trades add up to — its dates, closed positions and warnings. Derived on every call, never
-     * stored, and here so that everything that reads it derives it the same way.
+     * Its trades as they count after its splits (STOCK_SPLITS_TODO.md): those held through a split translated into the
+     * shares of after it, the stored ones untouched. What every calculation on its trades starts from.
      */
-    public HoldingHistory tradeHistory() {
-        return HoldingHistory.of(getTradeFacts());
+    public TradesAfterTheSplits tradesAfterTheSplits(StoredStockSplits stockSplits) {
+        return new TradesAfterTheSplits(getTradeFacts(), stockSplits.splitsOfTheHolding(conId));
     }
 
     /**
-     * Its trades with IB's last reading, for what is worked out investor by investor: how its quantity divides between
-     * them, their closed positions, their summary cards.
+     * What this holding's trades add up to — its dates, closed positions and warnings —, after its splits. Derived on
+     * every call, never stored, and here so that everything that reads it derives it the same way.
      */
-    public PositionTrades toPositionTrades() {
-        return new PositionTrades(symbol, currency, toIbHolding(), getTradeFacts());
+    public HoldingHistory tradeHistory(StoredStockSplits stockSplits) {
+        return HoldingHistory.of(tradesAfterTheSplits(stockSplits).allTrades());
+    }
+
+    /**
+     * Its trades after its splits, with IB's last reading, for what is worked out investor by investor: how its quantity
+     * divides between them, their closed positions, their summary cards.
+     */
+    public PositionTrades toPositionTrades(StoredStockSplits stockSplits) {
+        return new PositionTrades(symbol, currency, toIbHolding(), tradesAfterTheSplits(stockSplits).allTrades());
     }
 
     /**

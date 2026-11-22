@@ -14,7 +14,8 @@ import java.util.TreeMap;
  * A holding or a manual position, with every trade entered for it — of every investor. What
  * {@link InvestorSummaryCalculator} works from, and where a holding — its quantity, value and cost — is divided between
  * the investors. Free of JPA: built by
- * {@code HoldingEntity.toPositionTrades()} and {@code ManualPositionEntity.toPositionTrades()}.
+ * {@code HoldingEntity.toPositionTrades(stockSplits)} — a holding's trades after its splits — and
+ * {@code ManualPositionEntity.toPositionTrades()}.
  *
  * <p>Example: IB reports 39 NVDA, and the other investor's trades add up to 24. They hold 24, and the account owner the 15
  * left — whatever the owner's own trades say, since IB is the source of truth for the quantity.

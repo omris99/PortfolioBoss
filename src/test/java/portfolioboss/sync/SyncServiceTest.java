@@ -101,6 +101,10 @@ class SyncServiceTest {
     @MockitoBean
     private CapitalGainsTaxService capitalGainsTaxService;
 
+    /** Its own tests are {@code StockSplitDetectionServiceTest}; here only when, and that it can't fail a sync. */
+    @MockitoBean
+    private StockSplitDetectionService stockSplitDetectionService;
+
     /** The events published during each test: the alerts are checked on {@link PortfolioSyncedEvent}. */
     @Autowired
     private ApplicationEvents applicationEvents;
@@ -250,6 +254,48 @@ class SyncServiceTest {
         ratesThenTax.verify(capitalGainsTaxService).printCapitalGainsTax();
         ratesThenTax.verify(settlementDayRatesService).downloadMissingDollarRates(any());
         ratesThenTax.verify(capitalGainsTaxService).printCapitalGainsTax();
+    }
+
+    /**
+     * STOCK_SPLITS_TODO.md, session 1.3: the splits the Flex reports brought are stored after the reports, and before the
+     * tax that is translated by them.
+     */
+    @Test
+    void aStoredSyncStoresTheNewSplitsAfterTheFlexReportsAndBeforeTheTax() throws InterruptedException {
+        given(twsReader.readPortfolioUnlessBusy(anyBoolean())).willReturn(readingOfTwoHoldings());
+        given(twsReader.readPortfolio(anyBoolean())).willReturn(readingOfTwoHoldings());
+
+        syncService.syncNow();
+        syncService.syncAtStartup();
+
+        InOrder reportsThenSplitsThenTax =
+                inOrder(flexDownloadService, stockSplitDetectionService, capitalGainsTaxService);
+        for (int sync = 0; sync < 2; sync++) {
+            reportsThenSplitsThenTax.verify(flexDownloadService).downloadWhatIsMissing(any());
+            reportsThenSplitsThenTax.verify(stockSplitDetectionService).storeNewSplits();
+            reportsThenSplitsThenTax.verify(capitalGainsTaxService).printCapitalGainsTax();
+        }
+    }
+
+    /** It reads only what is stored: the first run after V20 stores the splits already in the reports, TWS off or not. */
+    @Test
+    void aStartupThatCouldntReadTwsStillStoresTheNewSplits() throws InterruptedException {
+        given(twsReader.readPortfolio(anyBoolean())).willReturn(null);
+
+        syncService.syncAtStartup();
+
+        verify(stockSplitDetectionService).storeNewSplits();
+    }
+
+    @Test
+    void splitsThatCantBeStoredDoNotFailTheSync() throws InterruptedException {
+        given(twsReader.readPortfolioUnlessBusy(anyBoolean())).willReturn(readingOfTwoHoldings());
+        willThrow(new IllegalStateException("a made-up failure")).given(stockSplitDetectionService).storeNewSplits();
+
+        PortfolioSnapshot synced = syncService.syncNow();
+
+        assertThat(synced.holdings()).hasSize(2);
+        verify(capitalGainsTaxService).printCapitalGainsTax();
     }
 
     /** Like the alerts: the sync is already stored, and a tax that can't be computed is only printed. */

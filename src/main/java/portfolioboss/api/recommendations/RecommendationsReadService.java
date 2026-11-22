@@ -20,6 +20,7 @@ import portfolioboss.calculation.recommendations.NewsScoreCalculator;
 import portfolioboss.calculation.recommendations.RecommendationCalculator;
 import portfolioboss.calculation.recommendations.RecommendationCandidate;
 import portfolioboss.calculation.recommendations.ReturnsCorrelation;
+import portfolioboss.calculation.splits.StoredStockSplits;
 import portfolioboss.db.analysis.StockAnalysisEntity;
 import portfolioboss.db.analysis.StockAnalysisRepository;
 import portfolioboss.db.investors.InvestorRepository;
@@ -33,6 +34,7 @@ import portfolioboss.db.recommendations.ScanCandidateEntity;
 import portfolioboss.db.recommendations.ScanCandidateRepository;
 import portfolioboss.db.recommendations.ScanEntity;
 import portfolioboss.db.recommendations.ScanRepository;
+import portfolioboss.db.splits.StockSplitRepository;
 import portfolioboss.ib.DailyClose;
 import portfolioboss.model.analysis.AnalystConsensus;
 import portfolioboss.model.portfolio.HoldingStatus;
@@ -46,6 +48,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +80,7 @@ public class RecommendationsReadService {
     private final ScanCandidateRepository scanCandidateRepository;
     private final InvestmentRecommendationRepository investmentRecommendationRepository;
     private final ScanListsService scanListsService;
+    private final StockSplitRepository stockSplitRepository;
 
     public RecommendationsReadService(ScanRepository scanRepository, AccountStateRepository accountStateRepository,
                                       HoldingRepository holdingRepository, InvestorRepository investorRepository,
@@ -84,7 +88,7 @@ public class RecommendationsReadService {
                                       StockAnalysisRepository stockAnalysisRepository,
                                       ScanCandidateRepository scanCandidateRepository,
                                       InvestmentRecommendationRepository investmentRecommendationRepository,
-                                      ScanListsService scanListsService) {
+                                      ScanListsService scanListsService, StockSplitRepository stockSplitRepository) {
         this.scanRepository = scanRepository;
         this.accountStateRepository = accountStateRepository;
         this.holdingRepository = holdingRepository;
@@ -94,6 +98,7 @@ public class RecommendationsReadService {
         this.scanCandidateRepository = scanCandidateRepository;
         this.investmentRecommendationRepository = investmentRecommendationRepository;
         this.scanListsService = scanListsService;
+        this.stockSplitRepository = stockSplitRepository;
     }
 
     /**
@@ -108,7 +113,8 @@ public class RecommendationsReadService {
     private RecommendationsResponse toResponse(ScanEntity scan) {
         List<HoldingEntity> openHoldings = openHoldings();
         DailyClosesWithSpy dailyCloses = dailyClosesWithSpyOf(scan.candidates(), openHoldings);
-        long accountOwnerId = investorRepository.accountOwner().id();
+        Map<Integer, List<Long>> investorIdsHoldingEachHolding =
+                investorIdsHoldingEachHolding(openHoldings, investorRepository.accountOwner().id());
         Map<Integer, StockAnalysisEntity> latestAnalysisByConId = latestAnalysisByConIdOf(scan.candidates());
         // the day the timing note counts from: the scan's, not the clock's, so the same scan always reads the same
         LocalDate scanDate = dateOf(scan.scannedAt());
@@ -124,7 +130,7 @@ public class RecommendationsReadService {
                         () -> new EnumMap<>(HotStockLabel.class),
                         Collectors.mapping(
                                 candidateWithItsList -> hotStockResponseOf(candidateWithItsList, openHoldings,
-                                        dailyCloses, accountOwnerId,
+                                        dailyCloses, investorIdsHoldingEachHolding,
                                         latestAnalysisByConId.get(candidateWithItsList.candidate().conId()),
                                         scanDate,
                                         shortListCandidateIds.contains(candidateWithItsList.candidate().id())),
@@ -198,14 +204,16 @@ public class RecommendationsReadService {
     }
 
     /**
-     * @param latestAnalysis {@code null} while the stock has never been analyzed
-     * @param scanDate       the day the timing note counts from
-     * @param inShortList    the full run analyzes it
+     * @param investorIdsHoldingEachHolding who holds some of each open holding, by its contract id: the stock's, if it
+     *                                      is one
+     * @param latestAnalysis                {@code null} while the stock has never been analyzed
+     * @param scanDate                      the day the timing note counts from
+     * @param inShortList                   the full run analyzes it
      */
     private HotStockResponse hotStockResponseOf(CandidateWithItsList candidateWithItsList,
                                                 List<HoldingEntity> openHoldings,
                                                 DailyClosesWithSpy dailyCloses,
-                                                long accountOwnerId,
+                                                Map<Integer, List<Long>> investorIdsHoldingEachHolding,
                                                 StockAnalysisEntity latestAnalysis,
                                                 LocalDate scanDate,
                                                 boolean inShortList) {
@@ -237,7 +245,7 @@ public class RecommendationsReadService {
                 hotStock.pulledBack(),
                 hotStock.recovering(),
                 correlationsWithHoldings(candidate, openHoldings, dailyCloses),
-                investorsHolding(candidate, openHoldings, accountOwnerId),
+                investorIdsHoldingEachHolding.getOrDefault(candidate.conId(), List.of()),
                 analysisResponseOf(latestAnalysis, hotStock),
                 companyInfoOf(recommendationCandidate, latestAnalysis, scanDate),
                 newsScore == null ? null : newsScore.score(),
@@ -308,12 +316,18 @@ public class RecommendationsReadService {
         return new CorrelationResponse(holding.id(), holding.symbol(), coefficient, correlation.movesTogether());
     }
 
-    /** The investors who hold some of the stock, when it is an open holding already; empty otherwise. */
-    private List<Long> investorsHolding(ScanCandidateEntity candidate, List<HoldingEntity> openHoldings,
-                                        long accountOwnerId) {
-        return openHoldings.stream()
-                .filter(holding -> holding.conId() == candidate.conId())
-                .flatMap(holding -> holding.toPositionTrades().partsByInvestor(accountOwnerId).keySet().stream())
-                .toList();
+    /**
+     * The investors who hold some of each open holding, by its contract id — from its trades after its splits, as the
+     * investors' cards count them.
+     */
+    private Map<Integer, List<Long>> investorIdsHoldingEachHolding(List<HoldingEntity> openHoldings,
+                                                                   long accountOwnerId) {
+        StoredStockSplits stockSplits = stockSplitRepository.storedStockSplits();
+        Map<Integer, List<Long>> investorIdsByConId = new HashMap<>();
+        for (HoldingEntity holding : openHoldings) {
+            Set<Long> investorIds = holding.toPositionTrades(stockSplits).partsByInvestor(accountOwnerId).keySet();
+            investorIdsByConId.put(holding.conId(), List.copyOf(investorIds));
+        }
+        return investorIdsByConId;
     }
 }
