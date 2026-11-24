@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.37.0";
+    public static final String VERSION = "0.39.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,25 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.39.0: [Stock splits in the trades]
+ * StockSplitRow added: a holding's trades show each split at its date as a grey line, "Split 4 for 1 · from IB's report", after the trades of its own day, its meaning on hover.
+ * TradesPanel: a trade a split translated shows its quantity and price after the split, as IB's quantity counts them, with what was typed under it: "= 10 at 400.00 before the split".
+ * The delete confirm shows both; the pencil still opens the form with what was typed, the only numbers ever sent back, so no trade is translated twice.
+ * Closed page: a holding's sold period shows its translated trades the same way, without the split's line, since a period sold in full before a split wasn't touched by it.
+ * TradeModal: a date on or before a split brings a note under the fields: type the shares and price as they were then.
+ * TradeModal: a holding without trades starts with IB's position and average cost in the shares of the date chosen, so a backfilled buy before a split isn't counted twice.
+ *
+ * VERSION 0.38.0: [Stock splits]
+ * StockSplitDetectionService added: after the Flex reports of every sync, and at a startup without TWS, each split IB reports is stored once, by IB's action id, in stock_split (V20).
+ * SplitsInFlexCorporateActions added: a split in the same contract (one row adding shares) or into a new contract (two rows) is understood only when IB's "SPLIT n FOR m" and the shares agree.
+ * A split not understood is printed on every sync with its reason and never stored — nothing is guessed; "[db] stored a stock split: …" names each new one.
+ * TradesAfterTheSplits added: the trades typed in stay as typed, and each investor's open position at a split counts in the shares of after it; a position sold in full before it stays as it happened.
+ * A holding that split no longer shows the trades-don't-match-IB triangle: its dates, investors' parts, closed positions, the investors' cards, the alert and who holds a scanned stock count the trades so.
+ * HoldingResponse: stockSplits and translatedTrades added — the holding's splits, and the trades a split translated with their quantity and price after it, by trade id.
+ * FlexTradesAfterTheSplits (was SplitAdjustedFlexTrades): the tax follows the stored splits; a split in the same contract, one row in IB's report, had left every sale of the stock not computed.
+ * FlexTradesAfterTheSplits: only the account's open position at a split is translated, so an older sale keeps the quantities of the broker's statement; an investor's typed trades go through the same splits.
+ * ArchitectureTest added: the packages — layers by kind, a folder per feature in each — are checked on every mvn test, so a class in the wrong place fails the build with its file and line.
+ *
  * VERSION 0.37.0: [The Taxes page]
  * TaxesPage added (/taxes, the seventh page): each year's capital gains tax in shekels, as the broker withholds it — a tab for Portfolio and for each investor besides the account owner.
  * TaxYearCard added: the year's tax so far, what the broker paid and refunded at each month's end, what the current month will settle, and how far the checking off has come.

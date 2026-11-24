@@ -9,7 +9,7 @@ import {
   formatSignedPercent,
   profitLossColorClass,
 } from '../lib/format';
-import type { ClosedPosition } from '../types/portfolio';
+import type { ClosedPosition, TranslatedTrade } from '../types/portfolio';
 import { ClosedPositionTags } from './ClosedPositionsTable';
 import { DrawerFrame, KeyFigure, KeyFigureExtra, KeyFigures, type DrawerTab } from './DrawerFrame';
 import { hasSeveralInvestors, investorNameOf, useInvestors } from './InvestorsContext';
@@ -75,11 +75,13 @@ function ClosedKeyFigures({ closedPosition }: { closedPosition: ClosedPosition }
  * A closed position's details over the Closed table, on the same frame as a holding's drawer with only the tabs that
  * apply. A holding's sold period has one: its trades, read-only, with a link to correct them in Positions. A manual
  * position has Details (editable, and Delete position), Trades (add, correct, delete) and, when shared, By investor.
- * `closedPositions` are every closed position, for the manual position's split by investor.
+ * `closedPositions` are every closed position, for the manual position's split by investor. `translatedTradesOfItsHolding`
+ * are the trades of its holding a split translated (`holding.translatedTrades`); none for a manual position.
  */
 export function ClosedDrawer({
   closedPosition,
   closedPositions,
+  translatedTradesOfItsHolding,
   previousLabel,
   nextLabel,
   onPrevious,
@@ -89,6 +91,7 @@ export function ClosedDrawer({
 }: {
   closedPosition: ClosedPosition;
   closedPositions: ClosedPosition[];
+  translatedTradesOfItsHolding: TranslatedTrade[];
   previousLabel: string;
   nextLabel: string;
   onPrevious: () => void;
@@ -120,7 +123,12 @@ export function ClosedDrawer({
     if (manualPositionId === null) {
       return (
         holdingId !== null && (
-          <ReadOnlyTradesPanel trades={closedPosition.trades} symbol={closedPosition.symbol} holdingId={holdingId} />
+          <ReadOnlyTradesPanel
+            trades={closedPosition.trades}
+            translatedTrades={translatedTradesOfItsHolding}
+            symbol={closedPosition.symbol}
+            holdingId={holdingId}
+          />
         )
       );
     }

@@ -179,6 +179,22 @@ so that each one, the account owner too, pays by their own trades —, so the ow
 it. The API only gained keys for it: each day's status, worked out in Java, a sale's FIFO cost against the average cost,
 and whether IB's report is connected and stored up to which day.
 
+[STOCK_SPLITS_TODO.md](implementation-plans/STOCK_SPLITS_TODO.md) (2026-11-22) is the current plan: a holding that split
+showed the warning triangle — IB's quantity after the split, the trades typed in before it. The design is the user's: a
+**split is stored once**, by IB's `actionID`, in V20's `stock_split`, when the sync finds it in the Flex reports' Corporate
+Actions and IB's words ("SPLIT 4 FOR 1") and the shares agree; the **trades typed in stay as typed**, and on every read
+each investor's open position at the split is **translated** (his word) into the shares of after it — a position sold in
+full before the split stays as it happened (IB reports no split of a stock no longer held). Rejected: the sync rewriting
+the stored trades (a back-dated trade typed later, whole shares in a reverse split, the sync never writes typed trades).
+Session 1 (the backend, 765 tests) is built and checked live on 2026-11-22: V20 on the real database after
+`portfolioboss-2026-11-22.sql.gz` (22 of 22 tables equal), the run stored both splits already in the reports. It also
+fixed the tax: it knew only a reverse split into a new contract, and a split in the same contract — one row in IB's
+report — had left every sale of the stock not computed. Session 2 (2026-11-23, UI only, browser-checked by the user) shows
+them: the split's grey line in the drawer's trades at its date, a translated trade's row in the shares of after the split
+with what was typed under it ("= 10 at 400.00 before the split" — the user's pick over the plan's "= 40 at $100 after the
+split", so that the table agrees with IB's quantity), the trade form's note for a date on or before a split, and the
+backfill's prefill turned into the date's shares.
+
 ## Hard invariant: read-only
 
 PortfolioBoss reads the account and **never places, modifies, or cancels an order**. `IbGateway`
@@ -199,7 +215,7 @@ through `ManualPositionWriteController`, the investors with their deposits and w
 `InvestorWriteController`, the stock analyses (`stock_analysis` rows), through `AnalysisController` and
 `RecommendationAnalysisController` — the second also the recommendations (`investment_recommendation` rows) —, and a new
 scan (`scan` / `scan_candidate` rows and its stocks' daily closes), through `ScanController`, a sync (what the startup
-writes), through `SyncController`, the alerts' "seen" and their settings (`alert`, `alert_setting`), through
+writes, the splits it finds in the Flex reports among it — `stock_split`), through `SyncController`, the alerts' "seen" and their settings (`alert`, `alert_setting`), through
 `alerts.AlertController`, and the confirmations of the capital gains tax (`tax_confirmation`), through
 `tax.TaxController` — and never creates or deletes a holding (only the sync does). `AnalysisController` and `RecommendationAnalysisController` are the two
 endpoints that reach outside the machine: they send each stock's symbol to Tavily, and the symbol, currency, the price
@@ -231,8 +247,8 @@ only as text or a form (415 here), while JSON, PUT and DELETE need a CORS prefli
 other site can start a paid run, and `POST /api/scans`, `POST /api/syncs` and `POST /api/alerts/seen` take `{}`
 (`ScanRequest`, `SyncRequest`, `AlertsSeenRequest`, records with nothing in them) for the same reason. Don't add CORS
 configuration, don't add an endpoint that writes anything other than PortfolioBoss's own data (what the user enters, the
-analyses, the recommendations, the scans, a sync — the Flex reports and the exchange rates it downloads too —, and the
-alerts with their settings), and don't expose the API beyond localhost (the connection to TWS and the API are both
+analyses, the recommendations, the scans, a sync — the Flex reports and the exchange rates it downloads, and the splits
+it stores, too —, and the alerts with their settings), and don't expose the API beyond localhost (the connection to TWS and the API are both
 unencrypted, which is fine only while local).
 
 ## Build & run
@@ -252,8 +268,9 @@ day: only when the market has closed since the last scan, `calculation.ScanSched
 …`), reads the holdings' contract details (their sector and industry) and Dow Jones targets, asks Finnhub about the
 holdings in USD once TWS is disconnected, syncs it all into PostgreSQL, checks the alerts (`[alerts] checked: 2 new
 (ABCD, WXYZ), 1 no longer true`), downloads the days of IB's Flex reports not stored yet (`[tax] Flex: 41 trades, 6 cash
-transactions, 0 corporate actions (2026-11-03 – 2026-11-13)`, or `[tax] Flex skipped: already read up to 13.11`), then
-the Bank of Israel's dollar rates of the settlement days that have none yet (`[exchangerates] Bank of Israel: stored 3 USD
+transactions, 0 corporate actions (2026-11-03 – 2026-11-13)`, or `[tax] Flex skipped: already read up to 13.11`), stores
+the splits they brought (`[db] stored a stock split: ABCD 4 for 1 on 2026-03-10`; nothing when none is new — this step
+runs at a startup without TWS too), then the Bank of Israel's dollar rates of the settlement days that have none yet (`[exchangerates] Bank of Israel: stored 3 USD
 rates (2026-11-12 – 2026-11-16)`, or `[exchangerates] Bank of Israel skipped: every settlement day up to 16.11 has its USD
 rate`), prints the capital gains tax of every year and our FIFO against IB's (`[tax] capital gains tax 2026: 1,234.56 ILS
 on a taxable gain of 4,938.24 ILS (12 sales)`, `[tax] our FIFO against IB's: 75 of 75 sales match`), and then keeps
@@ -421,15 +438,32 @@ together, the month of the last sync not settled), `TaxYearCalculatorTest` (the 
 year's taxable gain, its sales in order),
 `CapitalGainsTaxCalculatorTest` (the plan's example 1: the account 2,000, the investor 2,500; the account's FIFO over every
 investor's trades; a partial sale in 2025 and the rest in 2026 two years; a sale of 31 December settled in January the
-new year's; a fee on a day without a sale), `SplitAdjustedFlexTradesTest` (a reverse split into a new contract restating
-the earlier trades, IB's signs turned into the calculation's, a trade after it untouched, two splits in a row, an action
-with money or with other shares than the trades add up to not followed, conversions left out, executions of one second in
-the order of IB's ids as numbers, a commission in another currency), `OurFifoAgainstIbsFifoTest` (within a cent, more
+new year's; a fee on a day without a sale), `FlexTradesAfterTheSplitsTest` (`SplitAdjustedFlexTradesTest` until
+2026-11-22: a reverse split into a new contract translating the earlier trades, a split in the same contract translating
+the open position, a position sold in full before the split untouched, a part of the open position sold before it
+translated with it, IB's signs turned into the calculation's, a trade after it untouched, two splits in a row, an action
+not stored as a split not followed, the shares held just before a moment, conversions left out, executions of one second
+in the order of IB's ids as numbers, a commission in another currency), `SplitsInFlexCorporateActionsTest` (one row
+adding the shares, two rows into a new contract, the words and the shares disagreeing, a trade missing, a stock not held,
+words without "SPLIT n FOR m", money in the action, rows of another kind, a spin-off neither understood nor reported, a
+later split checked against the shares an earlier one left), `OurFifoAgainstIbsFifoTest` (within a cent, more
 than a cent, no gain of IB's, only sales), `CapitalGainsTaxConsoleLinesTest` (the lines of the account's years, an
 investor's and the comparison, a sale that differs) and `CapitalGainsTaxServiceTest` (`@DataJpaTest`: nothing before the
 first sync, the account's tax with a fee, another investor's at their Flex twins' settlement days, a typed trade without
-a twin estimated, a stored reverse split followed); `SyncServiceTest` has `CapitalGainsTaxService` as a `@MockitoBean`
-(printed after the rates, a failure not failing the sync, none when TWS wasn't read). The confirmations (session 4):
+a twin estimated, a stored reverse split followed — stored through `StockSplitDetectionService` —, an investor's trades
+held through a stored split translated, a split not stored not followed); `SyncServiceTest` has `CapitalGainsTaxService`
+as a `@MockitoBean` (printed after the rates, a failure not failing the sync, none when TWS wasn't read). The splits
+(STOCK_SPLITS_TODO.md, session 1; made-up splits of 4 for 1 and 1 for 10): `StockSplitTest` (the arithmetic, a sale's
+sign, 1 for 3 kept to 16 digits, a trade of the split's day before it and of the next day not, IB's time, the ratio in
+IB's words), `StoredStockSplitsTest` (in time order; a holding's only those that kept its contract; `isStored`),
+`TradesAfterTheSplitsTest` (before, on and after the split's day, a position sold in full before it untouched even when
+bought again, a part sold before it translated, two investors, two splits, the commission as it was, no split nothing),
+`HoldingHistoryTest` (`openPositionTrades`), `StockSplitDetectionServiceTest` (`@DataJpaTest`: stored, not stored again,
+one not understood not stored, nothing without an action), `SyncServiceTest` (`StockSplitDetectionService` a
+`@MockitoBean`: after the Flex reports and before the tax, at a startup without TWS too, a failure not failing the sync),
+`PortfolioReadServiceTest` (no triangle after a split, each investor's quantity, the trades as typed with their
+translation beside them, a position sold in full before it as it happened), `AlertServiceTest` (no `TRADES_DONT_MATCH_IB`)
+and `PortfolioControllerTest` (`stockSplits`, `translatedTrades`). The confirmations (session 4):
 `SettlementDayWithItsConfirmationTest` (waiting counts its calculated amount, confirmed its confirmed one — another
 amount, a shield; the status the entry's while waiting, `CONFIRMED` once confirmed — an HKD day too), `TaxYearWithItsConfirmationsTest` (each day with its confirmation, example 2 with April confirmed as
 −300 — the recorded balance moves, the calculated doesn't —, a confirmation whose day is no longer calculated kept as a
@@ -527,12 +561,15 @@ Main (Spring Boot: brings the web server up, then Spring runs the runner)
         ├──then──> tax.FlexDownloadService ──> FlexClient ──HTTPS──> IB's Flex Web Service (the days not stored yet)
         │                                  └──> FlexReportStorageService ──writes──> Postgres (flex_trade ·
         │                                                 flex_cash_transaction · flex_corporate_action · flex_report)
+        ├──then──> sync.StockSplitDetectionService ──reads── flex_corporate_action · flex_trade
+        │            (calculation/tax: SplitsInFlexCorporateActions) ──writes──> Postgres (stock_split: each new split once)
         ├──then──> tax.SettlementDayRatesService (the settlement days in USD: Flex's, and the typed trades' estimated)
         │            └──> exchangerates.ExchangeRateDownloadService ──asks ExchangeRateDownloadSchedule which days are
         │                   missing, then──> BankOfIsraelClient ──HTTPS──> the Bank of Israel (only those days)
         │                   └──writes──> Postgres (exchange_rate)
-        ├──then──> tax.CapitalGainsTaxService ──reads── Postgres (flex_* · exchange_rate · holding · trade · investor)
-        │            (SplitAdjustedFlexTrades, CapitalGainsTaxCalculator, OurFifoAgainstIbsFifo) ──prints── [tax] lines
+        ├──then──> tax.CapitalGainsTaxService ──reads── Postgres (flex_* · exchange_rate · holding · trade · investor ·
+        │            stock_split) (FlexTradesAfterTheSplits, CapitalGainsTaxCalculator, OurFifoAgainstIbsFifo)
+        │            ──prints── [tax] lines
         └──────────> UiLauncher ──starts──> ui/'s `npm run dev`, then opens the browser (the runner, after the sync)
 
 SyncController ──> SyncService.syncNow() ──> TwsReader.readPortfolioUnlessBusy() — the same sync as above, then the
@@ -824,7 +861,14 @@ decision 7, 2026-11-16; on the real database since that day, after `portfoliobos
 equal) added `tax_confirmation` (`settlement_day` `DATE` `UNIQUE` — one confirmation for a day, as Phoenix nets a day into
 one entry —, `tax_amount` `NUMERIC(20,2)` — shekels to the agora, positive tax to pay, negative a shield —, `confirmed_at` —
 when confirmed or last corrected —, `note` `VARCHAR(500)`): only what the user entered; the calculated amount is never
-stored. Its entity and repository live in the `tax` package too.
+stored. Its entity and repository live in the `tax` package too. `V20__stock_splits.sql` (STOCK_SPLITS_TODO.md session 1,
+2026-11-22; on the real database since that day, after `portfolioboss-2026-11-22.sql.gz`, 22 of 22 tables equal) added
+`stock_split` (`ib_action_id` `UNIQUE` — a split stored once, whatever number of reports bring it —, `symbol`,
+`con_id_before_the_split` / `con_id_after_the_split` — equal for a split in the same contract —, `split_time` — IB's,
+New York's time —, `shares_before_the_split` / `shares_after_the_split` — IB's "SPLIT 4 FOR 1" as 1 and 4, two whole
+numbers since 1 for 3 has no exact decimal, each `CHECK > 0` —, `stored_at`): written only by
+`sync.StockSplitDetectionService`, never changed. `StockSplitEntity` and `StockSplitRepository` (its default method
+`storedStockSplits()`, a `calculation.splits.StoredStockSplits`) live in `db/splits`.
 `HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
@@ -847,7 +891,7 @@ analysis or a pick of an earlier scan was of), `InvestmentRecommendationReposito
 `deleteForContracts`) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V20__….sql`.
+  checksum): a schema change is a new `V21__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -870,12 +914,13 @@ Things that are easy to break:
   `RecommendationsReadServiceTest`, `RecommendationAnalysisServiceTest`, `ScanServiceTest`, `SyncServiceTest`,
   `alerts.AlertServiceTest`, `tax.FlexReportStorageServiceTest`, `tax.FlexDownloadServiceTest`,
   `tax.SettlementDayRatesServiceTest`, `tax.CapitalGainsTaxServiceTest`, `tax.TaxConfirmationServiceTest`,
-  `tax.TaxesReadServiceTest`, `exchangerates.ExchangeRateDownloadServiceTest`) are `@DataJpaTest`s
+  `tax.TaxesReadServiceTest`, `exchangerates.ExchangeRateDownloadServiceTest`, `sync.StockSplitDetectionServiceTest`)
+  are `@DataJpaTest`s
   against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
   database and compared table by table first). One that only adds a table or a column (V5, V6, V7, V9, V10, V11, V12,
-  V13, V14, V15, V16, V17, V18, V19) or
+  V13, V14, V15, V16, V17, V18, V19, V20) or
   a constraint (V8, after counting the rows it would refuse: none; V10's, which every stored row met) still gets the
   backup first, checked for the same row counts as the database (V12's: each table's `COPY` rows in the dump against a
   `count(*)`, 12 of 12 equal, 2026-10-29). `backup-db.sh` names a backup by the day, so a second backup
@@ -1405,14 +1450,16 @@ understand; "lot" appears nowhere in the code):
 - `TaxCalculationTrade(tradeId, symbol, currency, tradeDate, settlementDay, side, quantity, price, commission)`: a buy or
   a sale in one shape for both sources, the quantity and commission positive. `TradesOfOneStock(conId, tradesInOrder,
   notComputedReasonOfEverySale)`: each source groups and orders its own trades.
-- `SplitAdjustedFlexTrades(flexTrades, corporateActions).tradesOfEveryStock()` (decision 15): the account's stock
-  executions (conversions, `CASH`, left out), by contract, ordered by IB's time and then IB's trade id as a number; an
-  action's rows grouped by `actionID`, and every trade of the old contract made before it restated — the quantity times
-  the ratio (the shares added ÷ the shares taken away), the price divided by it, under the new contract —, in memory
-  only. Followed only in the shape seen: two rows, one negative and one positive, `RS` or `FS`, no `proceeds` or `amount`,
-  and the old contract's trades adding up, just before it, to the shares it takes away; any other action makes every sale
-  of its contracts `CORPORATE_ACTION_NOT_SUPPORTED`. A commission in another currency than the trade's makes the stock's
-  sales `COMMISSION_IN_ANOTHER_CURRENCY`.
+- `FlexTradesAfterTheSplits(flexTrades, stockSplits, corporateActions).tradesOfEveryStock()` (decision 15;
+  `SplitAdjustedFlexTrades` until 2026-11-22, when it began following the **stored** splits — STOCK_SPLITS_TODO.md, below):
+  the account's stock executions (conversions, `CASH`, left out), by contract, ordered by IB's time and then IB's trade id
+  as a number; at each stored split the trades of the account's open position — since it last held none of the stock —
+  translated, the quantity times the split and the price divided by it, under the contract of after it; a position sold
+  in full before it stays as IB wrote it, as on the broker's statement of its day. In memory only. A corporate action not
+  stored as a split makes every sale of its contracts `CORPORATE_ACTION_NOT_SUPPORTED`. A commission in another currency
+  than the trade's makes the stock's sales `COMMISSION_IN_ANOTHER_CURRENCY`. `sharesHeldJustBefore(conId, moment)` is
+  what the account's trades before a moment add up to, after the splits given — the check of
+  `SplitsInFlexCorporateActions`.
 - `TypedTradeSettlementDays(accountStocks)`: a typed trade's settlement day is its Flex twin's — a holding's by contract
   and day, a manual position's by symbol and day, after the splits —, else `UsSettlementDayEstimate`.
 - `FifoSalesCalculator(tradesInOrder).sales()` (decision 3) → `FifoSale(sale, sharesSoldFromEachBuy,
@@ -1551,6 +1598,66 @@ Things that are easy to break:
   note's limit: change both together.
 - `@radix-ui/react-tooltip` is pinned to 1.2.16, which shares its inner Radix parts with the installed dialog and
   popover; a newer one brings a second copy of the part that knows which open layer is on top (Esc in a drawer).
+
+The stock splits (STOCK_SPLITS_TODO.md, session 1, 2026-11-22; the names are the user's — his word "translated",
+"מתורגמת", for a trade counted in the shares of after a split; "position period" and "split-adjusted" were not clear to
+him): a split is stored once, and the trades typed in stay as typed and are translated on every read. The pieces:
+- `calculation.splits.StockSplit(ibActionId, symbol, conIdBeforeTheSplit, conIdAfterTheSplit, splitTime,
+  sharesBeforeTheSplit, sharesAfterTheSplit)`: `isBeforeTheSplit(tradeDay)` — a trade of the split's day was before it,
+  IB books it at 20:25 after the close —, `isBeforeTheSplit(tradeTime)` for an execution, `quantityAfterTheSplit` /
+  `priceAfterTheSplit` (16 digits), `keepsTheSameContract()`, `ratioInIbsWords()` ("4 for 1"). `StoredStockSplits(splits)`
+  (in time order): `splitsOfTheHolding(conId)` — only those that kept its contract —, `isStored(ibActionId)`.
+- `calculation.tax.SplitsInFlexCorporateActions(corporateActions, flexTrades)`: `splitsUnderstood()` and
+  `splitsNotUnderstood()` (`SplitNotUnderstood`, `WhySplitNotUnderstood`). Only `FS` / `RS` actions, of two kinds — one
+  row in the same contract (the shares it adds, or takes away), or two rows at one time into a new contract —, without
+  money, and only when IB's words ("SPLIT n FOR m", every row the same) and the shares agree: the shares held just before
+  (`FlexTradesAfterTheSplits.sharesHeldJustBefore`, after the splits understood before it) times the split are the shares
+  after. In `calculation/tax`, not `calculation/splits`: it needs the tax's Flex trades, and `splits` can't use `tax`.
+- `sync.StockSplitDetectionService.storeNewSplits()` (`@Transactional`): every split understood and not stored yet is
+  stored and printed; each not understood is printed on every sync. `SyncService` runs it after the Flex reports and
+  before the rates and the tax — and at a startup that couldn't read TWS too, since it reads only what is stored (the
+  first run after V20 stored the two splits already in the reports); a failure is `[db error]`, never the sync's.
+- `HoldingHistory.openPositionTrades`: the trades of the current position period while it is open — the trades a split
+  counts. `calculation.splits.TradesAfterTheSplits(tradesAsTyped, splitsOfTheHolding)`: `allTrades()` — for each split,
+  each investor's `HoldingHistory.of(trades of the split's day or before).openPositionTrades()` translated, the commission
+  as it was — and `translatedTrades()`, only those. A position sold in full before the split stays as it happened (IB
+  reports no split of a stock no longer held); a part of the open position sold before it is translated with it, or the
+  period wouldn't add up to IB's quantity.
+- `HoldingEntity.tradesAfterTheSplits(stockSplits)`, `tradeHistory(stockSplits)` and `toPositionTrades(stockSplits)` take
+  the splits as a required parameter, so that no reader of a holding's trades forgets them: `PortfolioReadService` (the
+  holdings, the closed positions, the investors' cards), `AlertService` (`TRADES_DONT_MATCH_IB`),
+  `RecommendationsReadService` (who holds a scanned stock — worked out once per read) and `CapitalGainsTaxService` (an
+  investor's typed trades). Every reader reads the splits once (`StockSplitRepository.storedStockSplits()`). A manual
+  position is never translated: no contract, sold before the first sync.
+- `HoldingResponse.stockSplits` (`StockSplitResponse(splitDay, sharesBeforeTheSplit, sharesAfterTheSplit)`) and
+  `HoldingResponse.translatedTrades` (`TranslatedTradeResponse(tradeId, quantity, price)`); `ui/src/types/portfolio.ts`
+  mirrors them (`StockSplit`, `TranslatedTrade`).
+- The UI (session 2, 2026-11-23), in `ui/src/components/stockSplits/`: `StockSplitRow` (the grey line in a holding's
+  trades — "Split 4 for 1 · from IB's report", its meaning on hover from `stockSplitTexts.whatTheSplitMeans` —, after the
+  trades of its own day), `TradeBeforeTheSplitRow` (the line under a translated trade: "= 10 at 400.00 before the split"),
+  `stockSplitTexts.ts` (the words) and `sharesAsTheyWereThen.ts` (`isBeforeTheSplit`, `splitsAfterTheTradeDate`,
+  `quantityAsItWasThen`, `priceAsItWasThen` — the one place the UI works out a split itself). In `TradesPanel.tsx`
+  `tradesAndSplitsInDateOrder` places the splits among the trades, and a translated trade's row shows
+  `quantityAndPriceAfterTheSplits` — the numbers IB's quantity and every figure above the table count —, the delete
+  confirm both. The Closed page's read-only trades of a holding show the translation too (`ClosedPositionsPage` gets
+  `holdings` for it), but no split line: a period sold in full before a split wasn't touched by it. `TradeModal`:
+  `SplitsAfterTheDateNote` under the fields (`InfoBand`'s `placement="below"`) for a date on or before a split, and the
+  backfill's prefill (`prefilledQuantityAndPrice`) follows the date (`updateTradeDate`) while the quantity and price are
+  still what it filled in.
+Things that are easy to break:
+- **`TradeResponse` stays what was typed.** The edit form shows and sends only it; a translated number sent back would be
+  stored, and the next read would translate it again. The translation is beside it, on the holding, by `tradeId` — not in
+  `TradeResponse`, since a write endpoint answers with one trade and a trade's translation depends on the others. So the
+  pencil of a row showing 40 at 100.00 opens the form with the 10 at 400.00 typed, and the note under the fields says why.
+- The trade form's prefill of a holding without trades (IB's quantity and average cost) is in the shares of after the
+  splits: a buy dated before a split typed from it would count twice, so `prefilledQuantityAndPrice` turns it into the
+  date's shares. Never exercised in the browser — no real holding has a split and no trades.
+- `sharesAsTheyWereThen.isBeforeTheSplit` copies `StockSplit.isBeforeTheSplit(tradeDay)` (the split's own day counts as
+  before it): change both together.
+- The alerts are checked on `PortfolioSyncedEvent`, before the Flex reports: on the sync that brings a split,
+  `TRADES_DONT_MATCH_IB` may open once and end on the next sync.
+- A reverse split that moves an **open holding** to a new contract isn't followed for the holdings: the sync closes the old
+  holding and opens a new one without trades (out of the plan's scope); the tax follows it.
 
 The exchange rates are a package of their own, `portfolioboss.exchangerates` (console `[exchangerates]` /
 `[exchangerates error]`; the user's ask, 2026-11-15): a source of data, like `stocks` — it downloads, stores and answers
@@ -1879,6 +1986,10 @@ Things that are easy to break:
   2026-11-16)` or `[exchangerates] Bank of Israel: no USD rate published in 2026-11-14 – 2026-11-16`; `[exchangerates]
   Bank of Israel skipped: every settlement day up to 16.11 has its USD rate` (or `another download is running`); and
   `[exchangerates error] no answer from the Bank of Israel (Read timed out)` when it fails (the sync stays stored).
+  The splits print, after the Flex reports, `[db] stored a stock split: ABCD 4 for 1 on 2026-03-10` per new split (with
+  `, into a new contract` when it moved the stock), `[db] a stock split not understood: ABCD on 2026-03-10: …` per split
+  not understood, on every sync, and `[db error] could not store the stock splits: …` when the step fails (the sync stays
+  stored).
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
   `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`, `stocks` / `[stocks]`, `alerts` /
   `[alerts]`, `tax` / `[tax]`, `exchangerates` / `[exchangerates]`. `calculation`, `model`, `utils` and `exceptions`
@@ -1990,6 +2101,8 @@ Things that are easy to break:
   yearly balance, the corporate actions (V18) —, checked live against IB's FIFO and the 867s of 2024 and 2025, and so is
   session 4, the confirmations and the page's endpoints (V19, `/api/taxes`, checked live), and so is session 5, the Taxes
   page (browser-checked), built before the session still to plan — the Flex trades not typed in, offered and split between
-  investors (the user's idea), which brings the owner's tab and the "day trade" tag. HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
+  investors (the user's idea), which brings the owner's tab and the "day trade" tag. STOCK_SPLITS_TODO.md is the current
+  plan: session 1, the splits stored from the Flex reports (V20) and the trades translated on every read, is built and
+  checked live (2026-11-22); session 2, its UI, is built and browser-checked (2026-11-23). HOLDING_DETAILS_TODO.md's sessions 8–9 (detected-change trade drafts, a stale-data banner) are optional
   ideas. There is **no written thesis per holding** (decided 2026-10-06: data, not text): the product is the data on
   each holding that helps decide whether to stay in it — not the IB reader.

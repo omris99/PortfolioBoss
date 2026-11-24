@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { CARD_CLASS, SECONDARY_BUTTON_CLASS } from '../lib/styles';
-import type { ClosedPosition } from '../types/portfolio';
+import type { ClosedPosition, Holding, TranslatedTrade } from '../types/portfolio';
 import { ClosedDrawer } from '../components/ClosedDrawer';
 import {
   ClosedPositionsTable,
@@ -19,16 +19,25 @@ function neighbourOf(rows: ClosedPosition[], closedPositionKey: string, step: nu
   return rows[(index + step + rows.length) % rows.length];
 }
 
+/** The trades a split translated in the holding a closed position is of; none for a manual position. */
+function translatedTradesOfItsHolding(closedPosition: ClosedPosition, holdings: Holding[]): TranslatedTrade[] {
+  const itsHolding = holdings.find((holding) => holding.id === closedPosition.holdingId);
+  return itsHolding?.translatedTrades ?? [];
+}
+
 /**
  * The Closed page (/closed): every stretch of owning a stock that has had a sale, at average cost — of closed holdings
  * and open ones alike, and of the manual positions added here by hand — with its realized P&L at the top. A row opens
- * its drawer, where a manual position is corrected; every change reloads the whole portfolio.
+ * its drawer, where a manual position is corrected; every change reloads the whole portfolio. `holdings` are for a
+ * holding's trades a split translated, shown in its closed position's trades.
  */
 export function ClosedPositionsPage({
   closedPositions,
+  holdings,
   onDataChanged,
 }: {
   closedPositions: ClosedPosition[];
+  holdings: Holding[];
   onDataChanged: () => Promise<void>;
 }) {
   const [isAdding, setIsAdding] = useState(false);
@@ -62,6 +71,7 @@ export function ClosedPositionsPage({
           key={openKey}
           closedPosition={openClosedPosition}
           closedPositions={closedPositions}
+          translatedTradesOfItsHolding={translatedTradesOfItsHolding(openClosedPosition, holdings)}
           previousLabel={neighbourOf(rows, openKey, -1).symbol}
           nextLabel={neighbourOf(rows, openKey, 1).symbol}
           onPrevious={() => setOpenKey(closedPositionKeyOf(neighbourOf(rows, openKey, -1)))}

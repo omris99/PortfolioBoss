@@ -110,6 +110,11 @@ export const INNER_TABLE_CLASS = 'w-full border-collapse text-[13px]';
 export const INNER_HEADER_CELL_CLASS =
   'h-9 whitespace-nowrap border-b bg-subtle px-1.5 text-left text-label text-muted first:pl-3 last:pr-3';
 export const INNER_CELL_CLASS = 'h-10 border-b px-1.5 first:pl-3 last:pr-3 [tr:last-child_&]:border-b-0';
+/** A row with a line of its own under it (a trade a split translated): no rule between the two. */
+export const INNER_CELL_ABOVE_ITS_LINE_CLASS = 'h-8 px-1.5 pt-2 first:pl-3 last:pr-3';
+/** That line's cells: close under its row, with the row's rule under them — none under the table's last row. */
+export const INNER_LINE_UNDER_A_ROW_CELL_CLASS =
+  'border-b px-1.5 pb-2 first:pl-3 last:pr-3 [tr:last-child_&]:border-b-0';
 
 // ── forms ───────────────────────────────────────────────────────────────────────────────────────
 

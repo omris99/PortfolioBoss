@@ -72,7 +72,11 @@ function App() {
           <Route
             path="closed"
             element={pageOnceLoaded((loaded) => (
-              <ClosedPositionsPage closedPositions={loaded.closedPositions} onDataChanged={reload} />
+              <ClosedPositionsPage
+                closedPositions={loaded.closedPositions}
+                holdings={loaded.holdings}
+                onDataChanged={reload}
+              />
             ))}
           />
           <Route

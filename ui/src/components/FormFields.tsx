@@ -166,10 +166,14 @@ export function FormError({ children }: { children: ReactNode }) {
   );
 }
 
-/** A grey band that explains something about what follows: a backfill, a read-only list. */
-export function InfoBand({ children }: { children: ReactNode }) {
+/**
+ * A grey band that explains something: a backfill, a read-only list. It sits above what it is about (the default), or
+ * below it — under a form's fields, where it doesn't push them down as it appears.
+ */
+export function InfoBand({ children, placement = 'above' }: { children: ReactNode; placement?: 'above' | 'below' }) {
+  const marginClass = placement === 'above' ? 'mb-4' : 'mt-4';
   return (
-    <div className="mb-4 flex items-start gap-2 rounded-md bg-subtle px-3 py-2 text-ink">
+    <div className={`${marginClass} flex items-start gap-2 rounded-md bg-subtle px-3 py-2 text-ink`}>
       <Info size={16} className="mt-0.5 shrink-0 text-muted" />
       <span>{children}</span>
     </div>

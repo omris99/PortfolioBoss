@@ -13,11 +13,13 @@ import {
   trimmedOrNull,
 } from '../lib/formInput';
 import { NUMBER_INPUT_CLASS } from '../lib/styles';
-import type { Holding, Trade, TradeRequest, TradeSide } from '../types/portfolio';
+import type { Holding, StockSplit, Trade, TradeRequest, TradeSide } from '../types/portfolio';
 import { DateInput, Field, InfoBand, Toggle } from './FormFields';
 import { InvestorSelect } from './InvestorSelect';
 import { accountOwnerOf, hasSeveralInvestors, useInvestors } from './InvestorsContext';
 import { Modal } from './Modal';
+import { priceAsItWasThen, quantityAsItWasThen, splitsAfterTheTradeDate } from './stockSplits/sharesAsTheyWereThen';
+import { splitWithItsDay, typeTheTradeAsItWasThen } from './stockSplits/stockSplitTexts';
 
 /**
  * Whose trades a form or panel works on: a holding's, or a manual position's — one PortfolioBoss never saw as a
@@ -29,6 +31,11 @@ export type TradeOwner =
 
 export function symbolOf(owner: TradeOwner): string {
   return owner.kind === 'holding' ? owner.holding.symbol : owner.symbol;
+}
+
+/** A holding's splits, the earliest first; a manual position has none — no contract, sold before the first sync. */
+export function stockSplitsOf(owner: TradeOwner): StockSplit[] {
+  return owner.kind === 'holding' ? owner.holding.stockSplits : [];
 }
 
 const NOTE_MAX_LENGTH = 500;   // the trade.note column
@@ -56,6 +63,30 @@ const PREFILLED_PRICE_DECIMAL_PLACES = 4;
 
 function prefilledPriceText(averageCost: number): string {
   return String(Number(averageCost.toFixed(PREFILLED_PRICE_DECIMAL_PLACES)));
+}
+
+/** What the quantity and price fields hold, as typed text. */
+interface QuantityAndPriceTexts {
+  quantityText: string;
+  priceText: string;
+}
+
+const NOTHING_PREFILLED: QuantityAndPriceTexts = { quantityText: '', priceText: '' };
+
+/**
+ * IB's whole position and average cost — in the shares of today — as they were on `tradeDate`: 40 at 100.00 after a
+ * 4-for-1 split were 10 at 400.00 before it. Typed in today's shares, a trade dated before the split would be
+ * translated again and count 160.
+ */
+function prefilledQuantityAndPrice(holding: Holding, tradeDate: string): QuantityAndPriceTexts {
+  const splitsAfterTheDate = splitsAfterTheTradeDate(holding.stockSplits, tradeDate);
+  return {
+    quantityText: String(quantityAsItWasThen(holding.position, splitsAfterTheDate)),
+    priceText:
+      holding.averageCost === null
+        ? ''
+        : prefilledPriceText(priceAsItWasThen(holding.averageCost, splitsAfterTheDate)),
+  };
 }
 
 /**
@@ -98,11 +129,7 @@ function initialFormValues(
   return {
     tradeDate: todayIsoDate,
     side: 'BUY',
-    quantityText: backfilledHolding === null ? '' : String(backfilledHolding.position),
-    priceText:
-      backfilledHolding === null || backfilledHolding.averageCost === null
-        ? ''
-        : prefilledPriceText(backfilledHolding.averageCost),
+    ...(backfilledHolding === null ? NOTHING_PREFILLED : prefilledQuantityAndPrice(backfilledHolding, todayIsoDate)),
     commissionText: '',
     note: '',
     investorId: accountOwnerId,
@@ -133,14 +160,50 @@ function toTradeRequest(formValues: TradeFormValues): TradeRequest {
   };
 }
 
-/** "No trades entered yet, so this starts as a BUY of the whole position (40) at IB's average cost, 412.30." */
-function BackfillNote({ holding }: { holding: Holding }) {
+/**
+ * "No trades entered yet, so this starts as a BUY of the whole position (40) at IB's average cost, 100.00." — and, for a
+ * date before a split, what that position was then: "…before the 4-for-1 split of 2026-03-10, that is 10 shares at
+ * 400.00", or that it isn't a whole number of shares, so some of them were bought after the split.
+ */
+function BackfillNote({ holding, tradeDate }: { holding: Holding; tradeDate: string }) {
+  const splitsAfterTheDate = splitsAfterTheTradeDate(holding.stockSplits, tradeDate);
+  const quantityThen = quantityAsItWasThen(holding.position, splitsAfterTheDate);
+  const priceThen = holding.averageCost === null ? null : priceAsItWasThen(holding.averageCost, splitsAfterTheDate);
+  const splitsInWords = splitsAfterTheDate.map(splitWithItsDay).join(' and ');
   return (
     <InfoBand>
       No trades entered yet, so this starts as a BUY of the whole position (
       <b className="font-semibold">{formatQuantity(holding.position)}</b>) at IB’s average cost,{' '}
       <b className="font-semibold">{formatMoney(holding.averageCost)}</b>, which includes commissions. Set the date it
       was bought, and change the price to the execution price if you know it.
+      {splitsAfterTheDate.length > 0 && Number.isInteger(quantityThen) && (
+        <>
+          {' '}
+          On this date, before {splitsInWords}, that is <b className="font-semibold">{formatQuantity(quantityThen)}</b>{' '}
+          shares{priceThen !== null && <> at <b className="font-semibold">{formatMoney(priceThen)}</b></>}.
+        </>
+      )}
+      {splitsAfterTheDate.length > 0 && !Number.isInteger(quantityThen) && (
+        <>
+          {' '}
+          On this date, before {splitsInWords}, that is {formatQuantity(quantityThen)} shares: not a whole number, so some
+          of them were bought after the split. Enter each buy on its own date.
+        </>
+      )}
+    </InfoBand>
+  );
+}
+
+/** Under the fields, a line for each split the date is before: type the trade in the shares and price of then. */
+function SplitsAfterTheDateNote({ splitsAfterTheDate }: { splitsAfterTheDate: StockSplit[] }) {
+  if (splitsAfterTheDate.length === 0) return null;
+  return (
+    <InfoBand placement="below">
+      {splitsAfterTheDate.map((stockSplit) => (
+        <span key={stockSplit.splitDay} className="block">
+          {typeTheTradeAsItWasThen(stockSplit)}
+        </span>
+      ))}
     </InfoBand>
   );
 }
@@ -173,6 +236,23 @@ export function TradeModal({
   const updateFormValue = <Field extends keyof TradeFormValues>(field: Field, value: TradeFormValues[Field]) =>
     setFormValues((currentValues) => ({ ...currentValues, [field]: value }));
 
+  /**
+   * A new date. While a backfill's quantity and price are still what the form filled in for the previous date, they
+   * follow the date — into the shares of then, before a split; once either is typed over, both stay as typed.
+   */
+  const updateTradeDate = (tradeDate: string) =>
+    setFormValues((currentValues) => {
+      if (backfilledHolding === null) return { ...currentValues, tradeDate };
+      const prefilledForThePreviousDate = prefilledQuantityAndPrice(backfilledHolding, currentValues.tradeDate);
+      const quantityAndPriceStillAsPrefilled =
+        currentValues.quantityText === prefilledForThePreviousDate.quantityText &&
+        currentValues.priceText === prefilledForThePreviousDate.priceText;
+      return quantityAndPriceStillAsPrefilled
+        ? { ...currentValues, tradeDate, ...prefilledQuantityAndPrice(backfilledHolding, tradeDate) }
+        : { ...currentValues, tradeDate };
+    });
+  const splitsAfterTheDate = splitsAfterTheTradeDate(stockSplitsOf(owner), formValues.tradeDate);
+
   const handleSubmit = async () => {
     const problem = problemWithForm(formValues, todayIsoDate);
     if (problem !== null) {
@@ -201,7 +281,7 @@ export function TradeModal({
       onSubmit={() => void handleSubmit()}
       onClose={onClose}
     >
-      {backfilledHolding !== null && <BackfillNote holding={backfilledHolding} />}
+      {backfilledHolding !== null && <BackfillNote holding={backfilledHolding} tradeDate={formValues.tradeDate} />}
       <div className="grid grid-cols-2 gap-4">
         {hasSeveralInvestors(investors) && (
           <Field label="Investor" span={2}>
@@ -215,7 +295,7 @@ export function TradeModal({
           <DateInput
             value={formValues.tradeDate}
             max={todayIsoDate}
-            onChange={(tradeDate) => updateFormValue('tradeDate', tradeDate)}
+            onChange={updateTradeDate}
           />
         </Field>
         <Field label="Side" isGroup>
@@ -265,6 +345,7 @@ export function TradeModal({
           />
         </Field>
       </div>
+      <SplitsAfterTheDateNote splitsAfterTheDate={splitsAfterTheDate} />
     </Modal>
   );
 }
