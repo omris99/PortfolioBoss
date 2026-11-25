@@ -186,7 +186,7 @@ class AlertServiceTest {
                 .containsEntry("con_id", 9001)
                 .containsEntry("symbol", "HOTA")
                 .containsEntry("subject", null)
-                .containsEntry("message", "Entered the short list: hot, the analysts' target 30.0% above the price");
+                .containsEntry("message", "Entered the short list: hot, target 30.0% above the price");
     }
 
     /**

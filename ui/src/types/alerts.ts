@@ -15,6 +15,12 @@ export type AlertType =
   | 'TRADES_DONT_MATCH_IB'
   | 'ENTERED_SHORT_LIST';
 
+/**
+ * The bell's two groups, as `model.alerts.AlertGroup` names them; which one an alert is in is the server's
+ * (`AlertGroupCalculator`): a stock held now is first of all a holding.
+ */
+export type AlertGroup = 'YOUR_HOLDINGS' | 'SHORT_LIST';
+
 export interface Alert {
   id: number;
   alertType: AlertType;
@@ -28,6 +34,8 @@ export interface Alert {
   createdAt: string;
   /** `null` while the bell hasn't been opened after it — the bell counts these. */
   seenAt: string | null;
+  /** The group of the bell's panel it is shown in. */
+  group: AlertGroup;
 }
 
 /** One line of the settings drawer: as saved, or the type's default. */

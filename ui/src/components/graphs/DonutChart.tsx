@@ -113,3 +113,12 @@ export function DonutChart({
     </div>
   );
 }
+
+/** The ring during the first load: the whole ring in grey, in the place and at the size of the real one. */
+export function DonutChartSkeleton() {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} aria-hidden="true" className="shrink-0">
+      <path d={fullRingPath()} fillRule="evenodd" className="fill-subtle" />
+    </svg>
+  );
+}

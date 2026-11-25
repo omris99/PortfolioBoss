@@ -72,16 +72,17 @@
   --color-chart-3: #db6898;
   --color-chart-4: #6250d6;
   --color-chart-rest: #868b94;
-
-  --color-status-loading: var(--color-signal-yellow);
-  --color-status-ready: var(--color-signal-green);
-  --color-status-error: var(--color-signal-red);
 }
 
 html,
 body,
 #root {
   height: 100%;
+}
+
+/* The top bar stays on screen: what the browser scrolls into view (a row reached with the keyboard) stops under it. */
+html {
+  scroll-padding-top: calc(theme('spacing.topbar') + 8px);
 }
 
 /* IBM Plex Sans has tabular figures already; saying so keeps columns of figures aligned with the fallback fonts too. */
@@ -96,4 +97,138 @@ body {
   box-shadow:
     0 0 0 2px var(--color-surface),
     0 0 0 4px var(--color-accent);
+}
+
+/*
+ * Motion (round 6, the design system's Motion card): how things come and go — short and calm, nothing flashes or
+ * bounces. Leaving takes about two thirds of coming. Radix's dialog, popover, menu and tooltip mark their element
+ * data-state="closed" while it leaves and remove it once the animation ends, so each exit is a rule on that state; the
+ * drawer and the modal stay on the page until then through `useCloseAfterExitAnimation`.
+ *
+ * Nothing else moves: figures changing, rows sorting, the signal dot, the bell's count, a tab's underline (it jumps).
+ */
+:root {
+  --motion-quick: 120ms; /* hints, popovers, menus, a tab's content, the data after a skeleton */
+  --motion-base: 180ms; /* a modal and its veil */
+  --motion-slow: 240ms; /* the drawer and its veil */
+  --motion-quick-exit: 80ms;
+  --motion-base-exit: 120ms;
+  --motion-slow-exit: 160ms;
+  --ease-enter: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes drawer-out {
+  to {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+@keyframes modal-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes turning {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The drawer: in 24px from the right and a fade; its veil only fades. */
+.drawer-motion {
+  animation: drawer-in var(--motion-slow) var(--ease-enter);
+}
+.drawer-motion[data-state='closed'] {
+  animation: drawer-out var(--motion-slow-exit) var(--ease-exit) forwards;
+}
+.drawer-veil-motion {
+  animation: fade-in var(--motion-slow) linear;
+}
+.drawer-veil-motion[data-state='closed'] {
+  animation: fade-out var(--motion-slow-exit) linear forwards;
+}
+
+/* A modal: a fade, rising 8px and growing from 98%; it leaves shrinking back to 98%. */
+.modal-motion {
+  animation: modal-in var(--motion-base) var(--ease-enter);
+}
+.modal-motion[data-state='closed'] {
+  animation: modal-out var(--motion-base-exit) var(--ease-exit) forwards;
+}
+.modal-veil-motion {
+  animation: fade-in var(--motion-base) linear;
+}
+.modal-veil-motion[data-state='closed'] {
+  animation: fade-out var(--motion-base-exit) linear forwards;
+}
+
+/* A popover, a menu, the alerts: a fade and 4px down. */
+.popover-motion {
+  animation: popover-in var(--motion-quick) var(--ease-enter);
+}
+.popover-motion[data-state='closed'] {
+  animation: fade-out var(--motion-quick-exit) linear forwards;
+}
+
+/* A hint fades in once its delay is over, and goes at once: no rule for its closed state. */
+.hint-motion[data-state='delayed-open'],
+.hint-motion[data-state='instant-open'] {
+  animation: fade-in var(--motion-quick) linear;
+}
+
+/* A tab's new content, the next holding of ‹ ›, the data after the first load's skeleton: a fade in place. */
+.fade-in-motion {
+  animation: fade-in var(--motion-quick) linear;
+}
+
+/* An icon that turns while something runs: Sync now's and Scan again's ↻, a button's spinner. */
+.turning-icon {
+  animation: turning 1.2s linear infinite;
+}
+
+/* Reduce motion: nothing slides, scales or turns — drawers, modals and popovers only fade, and the icons stand still. */
+@media (prefers-reduced-motion: reduce) {
+  .drawer-motion,
+  .modal-motion,
+  .popover-motion {
+    animation: fade-in var(--motion-quick) linear;
+  }
+  .drawer-motion[data-state='closed'],
+  .modal-motion[data-state='closed'],
+  .popover-motion[data-state='closed'] {
+    animation: fade-out var(--motion-quick-exit) linear forwards;
+  }
+  .turning-icon {
+    animation: none;
+  }
 }

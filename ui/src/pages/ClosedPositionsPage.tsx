@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { CARD_CLASS, SECONDARY_BUTTON_CLASS } from '../lib/styles';
 import type { ClosedPosition, Holding, TranslatedTrade } from '../types/portfolio';
-import { ClosedDrawer } from '../components/ClosedDrawer';
+import { ClosedDrawer, closedDrawerLabelOf } from '../components/ClosedDrawer';
+import { DrawerShell } from '../components/DrawerShell';
 import {
   ClosedPositionsTable,
   ClosedSummary,
@@ -45,10 +47,11 @@ export function ClosedPositionsPage({
   const rows = newestSaleFirst(closedPositions);
   // Gone after a reload — a manual position deleted from its own drawer — the drawer closes with it.
   const openClosedPosition = rows.find((closedPosition) => closedPositionKeyOf(closedPosition) === openKey) ?? null;
+  useDocumentTitle('Closed', openClosedPosition?.symbol ?? null);
 
   return (
     <>
-      <PageHeader title="Closed">
+      <PageHeader title="Closed" description="Positions already sold, and what each one earned.">
         <button type="button" onClick={() => setIsAdding(true)} className={SECONDARY_BUTTON_CLASS}>
           <Plus size={16} />
           Add closed position
@@ -66,19 +69,23 @@ export function ClosedPositionsPage({
         </div>
       )}
 
+      {/* One shell while a drawer is open, a new drawer in it per position: ‹ › fade the next one in. */}
       {openClosedPosition !== null && openKey !== null && (
-        <ClosedDrawer
-          key={openKey}
-          closedPosition={openClosedPosition}
-          closedPositions={closedPositions}
-          translatedTradesOfItsHolding={translatedTradesOfItsHolding(openClosedPosition, holdings)}
-          previousLabel={neighbourOf(rows, openKey, -1).symbol}
-          nextLabel={neighbourOf(rows, openKey, 1).symbol}
-          onPrevious={() => setOpenKey(closedPositionKeyOf(neighbourOf(rows, openKey, -1)))}
-          onNext={() => setOpenKey(closedPositionKeyOf(neighbourOf(rows, openKey, 1)))}
-          onClose={() => setOpenKey(null)}
-          onDataChanged={onDataChanged}
-        />
+        <DrawerShell ariaLabel={closedDrawerLabelOf(openClosedPosition)} onClose={() => setOpenKey(null)}>
+          <ClosedDrawer
+            key={openKey}
+            closedPosition={openClosedPosition}
+            closedPositions={closedPositions}
+            translatedTradesOfItsHolding={translatedTradesOfItsHolding(openClosedPosition, holdings)}
+            navigation={{
+              previousLabel: neighbourOf(rows, openKey, -1).symbol,
+              nextLabel: neighbourOf(rows, openKey, 1).symbol,
+              onPrevious: () => setOpenKey(closedPositionKeyOf(neighbourOf(rows, openKey, -1))),
+              onNext: () => setOpenKey(closedPositionKeyOf(neighbourOf(rows, openKey, 1))),
+            }}
+            onDataChanged={onDataChanged}
+          />
+        </DrawerShell>
       )}
       {isAdding && <ClosedPositionModal onSaved={onDataChanged} onClose={() => setIsAdding(false)} />}
     </>

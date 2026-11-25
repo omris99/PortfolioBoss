@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Info } from 'lucide-react';
 import { formatMoney } from '../../lib/format';
 import { CARD_CLASS } from '../../lib/styles';
-import { HoldingWeightsCard } from './HoldingWeightsCard';
+import { SkeletonBar } from '../firstLoad/SkeletonBar';
+import { HoldingWeightsCard, HoldingWeightsCardSkeleton } from './HoldingWeightsCard';
 import { weightsTabOf, type InvestmentsAndCash } from './investmentsAndCash';
 import { portfolioWeightsOf, type LeftOutHolding, type PortfolioWeights } from './portfolioWeights';
 import { InvestorTabs } from '../InvestorTabs';
-import { SectorWeightsCard } from './SectorWeightsCard';
+import { SectorWeightsCard, SectorWeightsCardSkeleton } from './SectorWeightsCard';
 
 /** "Not in the graphs: TCEHY (in HKD)." — nothing while every open holding is weighed. */
 function LeftOutNote({ leftOut }: { leftOut: LeftOutHolding[] }) {
@@ -32,10 +33,16 @@ function NothingToWeigh({ tab }: { tab: InvestmentsAndCash }) {
   );
 }
 
-/** The two graphs as the card's two halves, each as tall as the other, with a line between them. */
+const CARD_TITLE = 'Weights';
+/** The card's title row, with the tabs beside the title. */
+const HEADING_ROW_CLASS = 'flex items-center gap-4 border-b px-5 pb-3 pt-4';
+/** The two halves side by side, each as tall as the other, with a line between them. */
+const HALVES_CLASS = 'grid grid-cols-2 items-stretch divide-x';
+
+/** The two graphs as the card's two halves. */
 function SectorAndHoldingHalves({ tab, portfolioWeights }: { tab: InvestmentsAndCash; portfolioWeights: PortfolioWeights }) {
   return (
-    <div className="grid grid-cols-2 items-stretch divide-x">
+    <div className={HALVES_CLASS}>
       <SectorWeightsCard tab={tab} sectorWeights={portfolioWeights.bySector} noSectorWeight={portfolioWeights.noSector} />
       <HoldingWeightsCard tab={tab} holdingWeights={portfolioWeights.byHolding} cashWeight={portfolioWeights.cash} />
     </div>
@@ -57,9 +64,9 @@ export function WeightGraphs({ tabs }: { tabs: InvestmentsAndCash[] }) {
   const portfolioWeights = portfolioWeightsOf(selectedTab);
 
   return (
-    <section aria-label="Weights" className={CARD_CLASS}>
-      <div className="flex items-center gap-4 border-b px-5 pb-3 pt-4">
-        <h2 className="text-section-title">Weights</h2>
+    <section aria-label={CARD_TITLE} className={CARD_CLASS}>
+      <div className={HEADING_ROW_CLASS}>
+        <h2 className="text-section-title">{CARD_TITLE}</h2>
         <InvestorTabs
           tabs={tabs}
           selectedInvestorId={selectedTab.investorId}
@@ -73,6 +80,25 @@ export function WeightGraphs({ tabs }: { tabs: InvestmentsAndCash[] }) {
         <SectorAndHoldingHalves tab={selectedTab} portfolioWeights={portfolioWeights} />
       )}
       <LeftOutNote leftOut={portfolioWeights.leftOut} />
+    </section>
+  );
+}
+
+/**
+ * The same card during the first load: its title, a grey bar for the tabs (the investors' names come with the data),
+ * and the two halves with their titles — the ring in grey and eight grey bars.
+ */
+export function WeightGraphsSkeleton() {
+  return (
+    <section aria-label={CARD_TITLE} aria-busy="true" className={CARD_CLASS}>
+      <div className={HEADING_ROW_CLASS}>
+        <h2 className="text-section-title">{CARD_TITLE}</h2>
+        <SkeletonBar width={220} height={32} />
+      </div>
+      <div className={HALVES_CLASS}>
+        <SectorWeightsCardSkeleton />
+        <HoldingWeightsCardSkeleton />
+      </div>
     </section>
   );
 }

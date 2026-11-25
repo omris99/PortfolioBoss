@@ -44,6 +44,9 @@ export interface InvestmentsAndCash {
 }
 
 export const PORTFOLIO_TAB_NAME = 'Portfolio';
+/** Portfolio's names for the whole and for the stocks — what the weights' captions say, the first load's too. */
+export const PORTFOLIO_WHOLE_NAME = 'the whole account';
+export const PORTFOLIO_STOCKS_NAME = 'the money in stocks';
 
 function portfolioInvestmentOf(holding: Holding): Investment {
   return { holding, quantity: holding.position, marketValue: holding.marketValue, averageCost: holding.averageCost };
@@ -56,9 +59,9 @@ function portfolioInvestmentsAndCashOf(openHoldings: Holding[], ibCash: number |
     investorId: null,
     investments: openHoldings.map(portfolioInvestmentOf),
     cash: ibCash,
-    wholeName: 'the whole account',
+    wholeName: PORTFOLIO_WHOLE_NAME,
     wholeParts: 'the stocks plus the cash',
-    stocksName: 'the money in stocks',
+    stocksName: PORTFOLIO_STOCKS_NAME,
     cashHint: 'The cash in the account, as IB reported it',
     averageCostName: 'IB’s average cost',
   };

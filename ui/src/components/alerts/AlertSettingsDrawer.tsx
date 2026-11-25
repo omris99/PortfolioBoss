@@ -1,18 +1,18 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useSaveAction } from '../../hooks/useSaveAction';
-import { numberOrNull } from '../../lib/formInput';
-import { SECONDARY_BUTTON_CLASS } from '../../lib/styles';
+import { INPUT_FRAME_CLASS, numberOrNull } from '../../lib/formInput';
+import { NUMBER_INPUT_CLASS, SECONDARY_BUTTON_CLASS } from '../../lib/styles';
 import type { AlertSetting, AlertType } from '../../types/alerts';
-import { DrawerCloseButton, DrawerShell, DrawerTitle } from '../DrawerShell';
+import { DrawerCloseButton, DrawerShell, DrawerTitle, useCloseDrawer } from '../DrawerShell';
 import { FormError, SaveButton } from '../FormFields';
-import { Switch } from '../Switch';
-import { NumberInputWithUnit } from '../weightCalculator/WeightCalculatorPanel';
+import { SwitchNamedBy } from '../Switch';
 import {
   ALERT_SETTING_GROUPS,
   ALERT_SETTING_LINES,
   allowedThresholdText,
+  defaultThresholdText,
   isAllowedThreshold,
-  type ThresholdRange,
+  type AlertSettingLine,
 } from './alertTexts';
 
 /** What is on screen for one type while the drawer is open: the switch, and the number as typed. */
@@ -60,18 +60,44 @@ function firstUnusableNumberOf(typedSettings: TypedSettings): string | null {
   return null;
 }
 
-/** "default 15%", beside a field whose number isn't the default any more. */
-function DefaultThresholdHint({ setting, range }: { setting: AlertSetting; range: ThresholdRange }) {
+/** How many types are on, as the switches stand now. */
+function enabledCountOf(typedSettings: TypedSettings): number {
+  return Object.values(typedSettings).filter((typedSetting) => typedSetting.enabled).length;
+}
+
+/**
+ * The number inside a sentence (round 6): small, its figure on the right, red when the server wouldn't take it. A type
+ * turned off keeps its number in a disabled field, for when it is on again.
+ */
+function ThresholdField({
+  line,
+  typedSetting,
+  onTypedThresholdChange,
+}: {
+  line: Extract<AlertSettingLine, { kind: 'withNumber' }>;
+  typedSetting: TypedSetting;
+  onTypedThresholdChange: (typedThreshold: string) => void;
+}) {
   return (
-    <span className="text-caption text-faint">
-      default {setting.defaultThreshold}
-      {range.unit === '%' ? '%' : ` ${range.unit}`}
-    </span>
+    <input
+      type="text"
+      inputMode="decimal"
+      value={typedSetting.typedThreshold}
+      disabled={!typedSetting.enabled}
+      aria-label={`${line.textBeforeNumber} … ${line.textAfterNumber}`}
+      aria-invalid={!isAllowedThreshold(numberOrNull(typedSetting.typedThreshold), line.range)}
+      onChange={(event) => onTypedThresholdChange(event.target.value)}
+      className={`${INPUT_FRAME_CLASS} ${NUMBER_INPUT_CLASS} mx-1 h-[26px] w-[52px] aria-[invalid=true]:border-negative disabled:border-line disabled:bg-subtle disabled:text-muted`}
+    />
   );
 }
 
-/** One type's line: the switch with its words, and for a type with a number the field between its words. */
-function AlertSettingRow({
+/**
+ * One kind (round 6, the design system's AlertSettings): the switch in its column, then the sentence — with its number's
+ * field inside it — and, while the number isn't the default, a note naming the default. A kind turned off: its sentence
+ * muted, its note faint.
+ */
+function AlertKindRow({
   setting,
   typedSetting,
   onTypedSettingChange,
@@ -80,50 +106,59 @@ function AlertSettingRow({
   typedSetting: TypedSetting;
   onTypedSettingChange: (typedSetting: TypedSetting) => void;
 }) {
+  const sentenceId = useId();
   const line = ALERT_SETTING_LINES[setting.alertType];
-  const toggle = (enabled: boolean) => onTypedSettingChange({ ...typedSetting, enabled });
-  if (line.kind === 'plain') {
-    return (
-      <Switch checked={typedSetting.enabled} onChange={toggle}>
-        {line.text}
-      </Switch>
-    );
-  }
-  const typedNumber = numberOrNull(typedSetting.typedThreshold);
-  const isDefault = typedNumber === setting.defaultThreshold;
+  const isOff = !typedSetting.enabled;
+  const isDefaultNumber = numberOrNull(typedSetting.typedThreshold) === setting.defaultThreshold;
+  const defaultNote =
+    line.kind === 'withNumber' && setting.defaultThreshold !== null && !isDefaultNumber
+      ? defaultThresholdText(setting.defaultThreshold, line.range)
+      : null;
+
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <Switch checked={typedSetting.enabled} onChange={toggle}>
-        {line.textBeforeNumber}
-      </Switch>
-      <NumberInputWithUnit
-        typedText={typedSetting.typedThreshold}
-        unit={line.range.unit}
-        isUnusable={!isAllowedThreshold(typedNumber, line.range)}
-        onTypedTextChange={(typedThreshold) => onTypedSettingChange({ ...typedSetting, typedThreshold })}
-        widthClass="w-16"
-        ariaLabel={`${line.textBeforeNumber} … ${line.range.unit} ${line.textAfterNumber}`.trim()}
+    <li className="grid grid-cols-[36px_minmax(0,1fr)] items-center gap-x-3 py-3">
+      <SwitchNamedBy
+        checked={typedSetting.enabled}
+        onChange={(enabled) => onTypedSettingChange({ ...typedSetting, enabled })}
+        labelId={sentenceId}
       />
-      {line.textAfterNumber !== '' && <span className="text-ink">{line.textAfterNumber}</span>}
-      {!isDefault && <DefaultThresholdHint setting={setting} range={line.range} />}
-    </div>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span id={sentenceId} className={`font-medium leading-[26px] ${isOff ? 'text-muted' : 'text-ink'}`}>
+          {line.kind === 'plain' ? (
+            line.text
+          ) : (
+            <>
+              {line.textBeforeNumber}
+              <ThresholdField
+                line={line}
+                typedSetting={typedSetting}
+                onTypedThresholdChange={(typedThreshold) => onTypedSettingChange({ ...typedSetting, typedThreshold })}
+              />
+              {line.textAfterNumber}
+            </>
+          )}
+        </span>
+        {defaultNote !== null && (
+          <span className={`text-[13px] leading-[18px] ${isOff ? 'text-faint' : 'text-muted'}`}>{defaultNote}</span>
+        )}
+      </div>
+    </li>
   );
 }
 
 /**
- * The alerts' settings (MY_HOLDINGS_TODO.md, decision 17), from the ⚙ of the bell's list: each type on or off, and the
- * number of the four that have one. Save sends every line together; the server checks the alerts again with them at
- * once, and the drawer closes. A type turned off is neither checked nor shown in the bell.
+ * The drawer's inside: its head — "Checked on every sync · 7 of 9 on", counted as the switches stand —, the kinds in
+ * their five groups, and Cancel · Save. Save checks every number first, sends every line together, and the drawer leaves
+ * once it is saved; Cancel leaves without saving.
  */
-export function AlertSettingsDrawer({
+function AlertSettingsForm({
   settings,
   onSave,
-  onClose,
 }: {
   settings: AlertSetting[];
   onSave: (settings: AlertSetting[]) => Promise<void>;
-  onClose: () => void;
 }) {
+  const closeDrawer = useCloseDrawer();
   const [typedSettings, setTypedSettings] = useState<TypedSettings>(() => typedSettingsOf(settings));
   const { isSaving, errorMessage, setErrorMessage, runSave } = useSaveAction();
   const settingOf = (type: AlertType) => settings.find((setting) => setting.alertType === type);
@@ -137,56 +172,78 @@ export function AlertSettingsDrawer({
       setErrorMessage(unusableNumber);
       return;
     }
-    if (await runSave(() => onSave(settingsToSave(settings, typedSettings)))) onClose();
+    if (await runSave(() => onSave(settingsToSave(settings, typedSettings)))) closeDrawer();
   };
 
   return (
-    <DrawerShell ariaLabel="Alert settings" onClose={onClose}>
-      <form
-        className="flex min-h-0 flex-1 flex-col"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void save();
-        }}
-      >
-        <div className="flex items-center gap-2 border-b px-6 py-4">
+    <form
+      className="flex min-h-0 flex-1 flex-col"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <div className="flex flex-col gap-1 border-b px-6 pb-4 pt-5">
+        <div className="flex items-center gap-2">
           <DrawerTitle>Alert settings</DrawerTitle>
           <span className="ml-auto">
             <DrawerCloseButton />
           </span>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 pb-6 pt-4">
-          <p className="mb-4 text-muted">Checked on every sync. A type turned off is neither checked nor shown.</p>
-          {ALERT_SETTING_GROUPS.map((group) => (
-            <section key={group.heading} className="mb-5">
-              <h3 className="mb-1 text-caption font-semibold uppercase tracking-[0.04em] text-faint">{group.heading}</h3>
-              <ul className="flex flex-col gap-1">
-                {group.types.map((type) => {
-                  const setting = settingOf(type);
-                  return (
-                    setting !== undefined && (
-                      <li key={type}>
-                        <AlertSettingRow
-                          setting={setting}
-                          typedSetting={typedSettings[type]}
-                          onTypedSettingChange={(typedSetting) => changeTypedSetting(type, typedSetting)}
-                        />
-                      </li>
-                    )
-                  );
-                })}
-              </ul>
-            </section>
-          ))}
-          {errorMessage && <FormError>{errorMessage}</FormError>}
-        </div>
-        <div className="flex items-center justify-end gap-2 border-t bg-page px-6 py-4">
-          <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
-            Cancel
-          </button>
-          <SaveButton isSaving={isSaving} label="Save" />
-        </div>
-      </form>
+        <p className="text-muted">
+          Checked on every sync · {enabledCountOf(typedSettings)} of {settings.length} on
+        </p>
+      </div>
+      <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-6 pb-6 pt-5">
+        {ALERT_SETTING_GROUPS.map((group) => (
+          <section key={group.heading} aria-label={group.heading}>
+            <h3 className="pb-2 text-caption font-semibold text-muted">{group.heading}</h3>
+            <ul className="divide-y border-y">
+              {group.types.map((type) => {
+                const setting = settingOf(type);
+                return (
+                  setting !== undefined && (
+                    <AlertKindRow
+                      key={type}
+                      setting={setting}
+                      typedSetting={typedSettings[type]}
+                      onTypedSettingChange={(typedSetting) => changeTypedSetting(type, typedSetting)}
+                    />
+                  )
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+        {errorMessage && <FormError>{errorMessage}</FormError>}
+      </div>
+      <div className="flex items-center justify-end gap-2 border-t bg-page px-6 py-4">
+        <button type="button" onClick={closeDrawer} className={SECONDARY_BUTTON_CLASS}>
+          Cancel
+        </button>
+        <SaveButton isSaving={isSaving} label="Save" />
+      </div>
+    </form>
+  );
+}
+
+/**
+ * The alerts' settings (MY_HOLDINGS_TODO.md, decision 17; round 6's design), from the ⚙ of the bell's panel: each kind
+ * on or off, and the number of the four that have one. A narrow drawer (440px). The server checks the alerts again with
+ * them at once; a kind turned off is neither checked nor shown in the bell.
+ */
+export function AlertSettingsDrawer({
+  settings,
+  onSave,
+  onClose,
+}: {
+  settings: AlertSetting[];
+  onSave: (settings: AlertSetting[]) => Promise<void>;
+  onClose: () => void;
+}) {
+  return (
+    <DrawerShell ariaLabel="Alert settings" width="narrow" onClose={onClose}>
+      <AlertSettingsForm settings={settings} onSave={onSave} />
     </DrawerShell>
   );
 }

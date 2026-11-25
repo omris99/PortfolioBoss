@@ -179,8 +179,9 @@ public class AlertService {
 
     private AlertCondition shortListConditionOf(CandidateWithItsList candidateWithItsList) {
         ScanCandidateEntity candidate = candidateWithItsList.candidate();
+        // Short enough for one line of the bell's panel (round 6's AlertsPanel); the target is the analysts' median.
         String message = String.format(Locale.ROOT,
-                "Entered the short list: hot, the analysts' target %.1f%% above the price",
+                "Entered the short list: hot, target %.1f%% above the price",
                 candidateWithItsList.analystTarget().upsidePercent());
         return new AlertCondition(new AlertKey(AlertType.ENTERED_SHORT_LIST, candidate.conId(), null),
                 candidate.symbol(), message);

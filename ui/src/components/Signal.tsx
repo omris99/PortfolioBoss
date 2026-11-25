@@ -1,8 +1,7 @@
 import { formatDateTime } from '../lib/format';
-import { dotClassOf, MOMENTUM_TONES, textClassOf } from '../lib/signalColors';
-import { WARNING_SIGN_TAG_CLASS } from '../lib/styles';
+import { dotClassOf } from '../lib/signalColors';
 import type { Holding, HoldingSignal, StockAnalysis } from '../types/portfolio';
-import { momentumScoreText, momentumText } from './Momentum';
+import { momentumText } from './Momentum';
 
 const SIGNAL_DESCRIPTIONS: Record<HoldingSignal, string> = {
   GREEN: 'no warning sign',
@@ -36,21 +35,16 @@ export function warningSignsOf(holding: Holding): string[] {
   return warningSigns;
 }
 
-/** The dot's warning signs as tags, for a row of warning signs that holds the risk signs too; nothing without any. */
-export function SignalWarningSignTags({ holding }: { holding: Holding }) {
-  return (
-    <>
-      {warningSignsOf(holding).map((warningSign) => (
-        <span
-          key={warningSign}
-          title={`${warningSign} · a warning sign of the Signal dot`}
-          className={WARNING_SIGN_TAG_CLASS}
-        >
-          {warningSign}
-        </span>
-      ))}
-    </>
-  );
+/**
+ * The signal in words, the one form every page uses (round 6) — the Positions table, the Overview's Needs attention, the
+ * drawer, the Averaging calculator: the warning signs it found, "Momentum weak · Analysts down", in the text's own color —
+ * the dot beside it carries the red —; "No warning signs" when it found none; "Not analyzed" before the first analysis.
+ */
+export function SignalWords({ holding }: { holding: Holding }) {
+  if (holding.analysis === null) return <span className="text-faint">Not analyzed</span>;
+  const warningSigns = warningSignsOf(holding);
+  if (warningSigns.length === 0) return <span className="text-muted">No warning signs</span>;
+  return <span className="text-ink">{warningSigns.join(' · ')}</span>;
 }
 
 /** A dot of one colour, `label` said on hover and to screen readers; an empty ring for `null`. */
@@ -114,8 +108,8 @@ export function SignalCellLegend() {
         until the first analysis.
       </p>
       <p className="mt-2">
-        Next to it: the warning signs it found (weak momentum, analysts down, negative news), then the momentum score
-        out of 5. Hover for all three parts.
+        Next to it: the warning signs it found (weak momentum, analysts down, negative news). The momentum has a column
+        of its own. Hover for all three parts.
       </p>
     </>
   );
@@ -146,27 +140,18 @@ function signalSummaryText(holding: Holding): string {
   return parts.join(' · ');
 }
 
-/** What the cell says after the dot: the warning signs found, or that there are none, or that it isn't analyzed. */
-function WarningSignsText({ holding }: { holding: Holding }) {
-  if (holding.analysis === null) return <span className="text-unknown">Not analyzed</span>;
-  const warningSigns = warningSignsOf(holding);
-  if (warningSigns.length === 0) return <span className="text-faint">No warning signs</span>;
-  return <span className="text-negative">{warningSigns.join(' · ')}</span>;
-}
-
 /**
- * The Signal column: the dot, the warning signs it found in words ("Momentum weak · Analysts down"), and the momentum
- * score at the right in its tone. It says why the dot has its colour; hovering gives all three parts.
+ * The Signal column: the dot and the warning signs it found in words ("Momentum weak · Analysts down"), wrapping inside
+ * 132–160px so that the table fits its card (round 6); the momentum has a column of its own. It says why the dot has its
+ * colour; hovering gives all three parts.
  */
 export function SignalCell({ holding }: { holding: Holding }) {
-  const scoreClass = textClassOf(holding.momentum?.label ?? null, MOMENTUM_TONES);
   return (
-    <span title={signalSummaryText(holding)} className="flex w-full min-w-[200px] items-center gap-1.5">
-      <SignalColorDot signal={holding.signal} label={signalHint(holding)} />
-      <WarningSignsText holding={holding} />
-      <span className={`ml-auto pl-2 text-caption font-semibold ${scoreClass}`}>
-        {momentumScoreText(holding.momentum)}
+    <span title={signalSummaryText(holding)} className="flex min-w-[132px] max-w-[160px] items-start gap-1.5 whitespace-normal">
+      <span className="mt-[5px] flex shrink-0">
+        <SignalColorDot signal={holding.signal} label={signalHint(holding)} />
       </span>
+      <SignalWords holding={holding} />
     </span>
   );
 }

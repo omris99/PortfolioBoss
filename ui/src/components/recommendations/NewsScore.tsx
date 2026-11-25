@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { formatDate } from '../../lib/format';
 import type { NewsEventType } from '../../types/portfolio';
 import type { HotStock, WeighedAnalystMove, WeighedNewsEvent } from '../../types/recommendations';
 import { ratingChangeOf, siteOf, SourceLink, SubHeading, targetChangeOf } from '../AnalysisPanel';
@@ -79,7 +80,7 @@ function AnalystMovePart({ weighedMove }: { weighedMove: WeighedAnalystMove }) {
       <span className="font-medium">
         {action.action === 'UPGRADE' ? 'Upgraded' : 'Downgraded'} by {action.firm}
       </span>
-      , {action.date}
+      , {formatDate(action.date)}
       {details !== '' && `: ${details}`}{' '}
       <SourceLink url={action.url}>{siteOf(action.url)}</SourceLink>
     </>

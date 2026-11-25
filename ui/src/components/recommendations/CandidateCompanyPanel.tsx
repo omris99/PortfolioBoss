@@ -13,7 +13,7 @@ import { NotPickableReasons } from './NotPickableReasons';
 
 /** "No: analysts' target +4.2%; a pick needs +15% · …", or yes — every reason the API gives, in its order. */
 function CanItBePicked({ stock }: { stock: HotStock }) {
-  if (stock.canBePicked) return <>Yes: its target and its risk signs pass the rule</>;
+  if (stock.canBePicked) return <>Yes: its target and its company risks pass the rule</>;
   return (
     <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
       No: <NotPickableReasons stock={stock} />
@@ -31,7 +31,7 @@ function ForTheRecommendation({ stock }: { stock: HotStock }) {
           <TargetUpside analystTarget={stock.analystTarget} />
         </CompanyRow>
         {stock.riskWeight !== null && (
-          <CompanyRow label="Risk signs">
+          <CompanyRow label="Company risks">
             <CandidateRiskSigns stock={stock} showFigures={false} />
             <span className="text-muted">weigh {stock.riskWeight}</span>
           </CompanyRow>

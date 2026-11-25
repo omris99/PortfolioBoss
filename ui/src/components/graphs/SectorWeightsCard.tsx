@@ -1,8 +1,9 @@
 import { useId, useState } from 'react';
 import { formatMoney, formatPercent } from '../../lib/format';
+import { SkeletonBar } from '../firstLoad/SkeletonBar';
 import { Tip } from '../Tip';
-import { DonutChart, type DonutSlice } from './DonutChart';
-import type { InvestmentsAndCash } from './investmentsAndCash';
+import { DonutChart, DonutChartSkeleton, type DonutSlice } from './DonutChart';
+import { PORTFOLIO_STOCKS_NAME, type InvestmentsAndCash } from './investmentsAndCash';
 import { heaviestWeightsOf, type NoSectorWeight, type SectorWeight, type Weight } from './portfolioWeights';
 import { WeightsCard, accountShareText, countText, hintOf } from './WeightsCard';
 
@@ -159,6 +160,10 @@ function LegendRow({
   );
 }
 
+const CARD_TITLE = 'By sector';
+/** The ring, and the legend beside it. */
+const RING_AND_LEGEND_CLASS = 'flex items-start gap-6';
+
 /**
  * The money in stocks by sector — the tab's: an investor's own on their tab —: a ring, and beside it a legend naming every
  * slice with its percent and value. Pointing at a slice or at its row highlights both and opens the row's Tip.
@@ -177,8 +182,8 @@ export function SectorWeightsCard({
   const highlightedSlice = slices.find((slice) => slice.key === highlightedKey) ?? null;
 
   return (
-    <WeightsCard title="By sector" caption={`Share of ${tab.stocksName}`}>
-      <div className="flex items-start gap-6">
+    <WeightsCard title={CARD_TITLE} caption={`Share of ${tab.stocksName}`}>
+      <div className={RING_AND_LEGEND_CLASS}>
         <DonutChart slices={slices.map(donutSliceOf)} highlightedKey={highlightedKey} onHighlight={setHighlightedKey}>
           <RingCenter highlightedSlice={highlightedSlice} sectorCount={sectorWeights.length} />
         </DonutChart>
@@ -192,6 +197,25 @@ export function SectorWeightsCard({
             />
           ))}
         </ul>
+      </div>
+    </WeightsCard>
+  );
+}
+
+/** How wide each of the legend's three grey lines is. */
+const SKELETON_LEGEND_WIDTHS = ['60%', '72%', '52%'];
+
+/** The same half during the first load (Portfolio's words): its title, the ring in grey and three grey legend lines. */
+export function SectorWeightsCardSkeleton() {
+  return (
+    <WeightsCard title={CARD_TITLE} caption={`Share of ${PORTFOLIO_STOCKS_NAME}`}>
+      <div className={RING_AND_LEGEND_CLASS}>
+        <DonutChartSkeleton />
+        <div className="flex min-w-0 flex-1 flex-col gap-[18px] pt-1">
+          {SKELETON_LEGEND_WIDTHS.map((width) => (
+            <SkeletonBar key={width} width={width} height={12} />
+          ))}
+        </div>
       </div>
     </WeightsCard>
   );

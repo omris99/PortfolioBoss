@@ -138,7 +138,7 @@ function initialFormValues(
 
 /** The same rules the API enforces, checked first so the common mistakes don't need a round trip. */
 function problemWithForm(formValues: TradeFormValues, todayIsoDate: string): string | null {
-  if (!isIsoDate(formValues.tradeDate)) return 'Enter the trade date as yyyy-MM-dd.';
+  if (!isIsoDate(formValues.tradeDate)) return 'Enter the trade date as dd/mm/yyyy.';
   if (formValues.tradeDate > todayIsoDate) return 'The trade date cannot be in the future.';
   if (!isPositiveWholeNumber(formValues.quantityText)) return 'Enter a whole quantity greater than 0.';
   if (!isZeroOrMore(formValues.priceText)) return 'Enter the price the trade was executed at (0 or more).';
@@ -253,14 +253,15 @@ export function TradeModal({
     });
   const splitsAfterTheDate = splitsAfterTheTradeDate(stockSplitsOf(owner), formValues.tradeDate);
 
-  const handleSubmit = async () => {
+  /** Whether it saved: the modal then closes itself. */
+  const handleSubmit = async (): Promise<boolean> => {
     const problem = problemWithForm(formValues, todayIsoDate);
     if (problem !== null) {
       setErrorMessage(problem);
-      return;
+      return false;
     }
     const tradeRequest = toTradeRequest(formValues);
-    const isSaved = await runSave(async () => {
+    return runSave(async () => {
       if (tradeBeingEdited === null) {
         await addTradeTo(owner, tradeRequest);
       } else {
@@ -268,7 +269,6 @@ export function TradeModal({
       }
       await onSaved();
     });
-    if (isSaved) onClose();
   };
 
   return (
@@ -278,7 +278,7 @@ export function TradeModal({
       errorMessage={errorMessage}
       isSaving={isSaving}
       saveLabel={isEditing ? 'Save changes' : 'Save'}
-      onSubmit={() => void handleSubmit()}
+      onSubmit={handleSubmit}
       onClose={onClose}
     >
       {backfilledHolding !== null && <BackfillNote holding={backfilledHolding} tradeDate={formValues.tradeDate} />}

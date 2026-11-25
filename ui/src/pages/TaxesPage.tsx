@@ -8,9 +8,11 @@ import { SettlementDaysTable } from '../components/taxes/SettlementDaysTable';
 import { TaxSetupCard } from '../components/taxes/TaxSetupCard';
 import { TaxYearCard } from '../components/taxes/TaxYearCard';
 import { tabsOf, taxYearsOfTab, yearOfTheLastSync, yearsToChooseFrom } from '../components/taxes/taxYears';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useSaveAction } from '../hooks/useSaveAction';
 import { useTaxes } from '../hooks/useTaxes';
 import { confirmTaxDays } from '../lib/apiClient';
+import { formatDate } from '../lib/format';
 import type { SettlementDay } from '../types/taxes';
 
 /** The set with the key added, or without it when it was there. */
@@ -50,6 +52,7 @@ const PAGE_DESCRIPTION = (
  */
 export function TaxesPage({ portfolioSyncedAt }: { portfolioSyncedAt: string }) {
   const { taxes, hasNoSyncYet, errorMessage, isLoading, reload } = useTaxes(portfolioSyncedAt);
+  useDocumentTitle('Taxes');
   // `null`: the year of the last sync.
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   // `null`: Portfolio.
@@ -166,7 +169,7 @@ export function TaxesPage({ portfolioSyncedAt }: { portfolioSyncedAt: string }) 
           </>
         )}
         <p className="mt-2 flex items-center gap-1 text-caption text-faint">
-          IB’s report up to {taxes.flexReportsStoredUpTo}
+          IB’s report up to {formatDate(taxes.flexReportsStoredUpTo)}
           <HelpOnHover label="Where the figures come from">
             Rates: the Bank of Israel’s representative rate of each settlement day. Nothing is paid or sent: the broker
             withholds the tax itself.

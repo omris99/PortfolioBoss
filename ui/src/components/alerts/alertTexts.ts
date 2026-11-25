@@ -16,38 +16,39 @@ const DAYS: ThresholdRange = { unit: 'days', smallest: 1, largest: 60, wholeNumb
 const PERCENT: ThresholdRange = { unit: '%', smallest: 1, largest: 100, wholeNumbersOnly: false };
 
 /**
- * A type's line in the settings drawer: its words — and, for a type with a number, the words before the field and after
- * it: "Reports within [7] days".
+ * A type's sentence in the settings drawer — and, for a type with a number, the words before its field and after it,
+ * the unit among them (round 6: the field sits inside its sentence): "Reports within [7] days".
  */
 export type AlertSettingLine =
   | { kind: 'plain'; text: string }
   | { kind: 'withNumber'; textBeforeNumber: string; range: ThresholdRange; textAfterNumber: string };
 
 export const ALERT_SETTING_LINES: Record<AlertType, AlertSettingLine> = {
-  MOMENTUM_TURNED_WEAK: { kind: 'plain', text: 'Momentum turned WEAK' },
+  MOMENTUM_TURNED_WEAK: { kind: 'plain', text: 'Momentum turned weak' },
   CLOSED_BELOW_SMA50: { kind: 'plain', text: 'Closed below its 50-day average' },
   CLOSED_BELOW_SMA200: { kind: 'plain', text: 'Closed below its 200-day average' },
-  EARNINGS_SOON: { kind: 'withNumber', textBeforeNumber: 'Reports within', range: DAYS, textAfterNumber: '' },
+  EARNINGS_SOON: { kind: 'withNumber', textBeforeNumber: 'Reports within', range: DAYS, textAfterNumber: 'days' },
   ANALYST_CUT_TARGET: {
     kind: 'withNumber',
     textBeforeNumber: 'An analyst cut the target in the last',
     range: DAYS,
-    textAfterNumber: '',
+    textAfterNumber: 'days',
   },
   FAR_BELOW_AVERAGE_COST: {
     kind: 'withNumber',
     textBeforeNumber: 'The price',
     range: PERCENT,
-    textAfterNumber: 'or more below the average cost',
+    textAfterNumber: '% or more below the average cost',
   },
   ABOVE_WEIGHT_LIMIT: {
     kind: 'withNumber',
     textBeforeNumber: 'More than',
     range: PERCENT,
-    textAfterNumber: 'of the whole account',
+    textAfterNumber: '% of the whole account',
   },
-  TRADES_DONT_MATCH_IB: { kind: 'plain', text: "The trades entered don't match IB" },
-  ENTERED_SHORT_LIST: { kind: 'plain', text: 'A stock entered the short list of Recommendations' },
+  TRADES_DONT_MATCH_IB: { kind: 'plain', text: 'The trades entered don’t match IB' },
+  // Its group's heading says Recommendations already.
+  ENTERED_SHORT_LIST: { kind: 'plain', text: 'A stock entered the short list' },
 };
 
 /** The drawer's sections, in the order of `alerts.AlertType`. */
@@ -70,4 +71,10 @@ export function isAllowedThreshold(threshold: number | null, range: ThresholdRan
 export function allowedThresholdText(range: ThresholdRange): string {
   const what = range.wholeNumbersOnly ? `a whole number of ${range.unit}` : 'a percent';
   return `${what}, ${range.smallest}–${range.largest}`;
+}
+
+/** "Default: 7 days" / "Default: 15%" — under a sentence whose number isn't the default any more. */
+export function defaultThresholdText(defaultThreshold: number, range: ThresholdRange): string {
+  const unitText = range.unit === '%' ? '%' : ` ${range.unit}`;
+  return `Default: ${defaultThreshold}${unitText}`;
 }

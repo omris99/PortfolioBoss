@@ -1,6 +1,6 @@
 import { Check, CircleDashed, X } from 'lucide-react';
-import { EMPTY_VALUE, formatMoney, formatSignedPercent } from '../lib/format';
-import { labelClassOf, MOMENTUM_TONES } from '../lib/signalColors';
+import { EMPTY_VALUE, formatDate, formatMoney, formatSignedPercent } from '../lib/format';
+import { fillClassOf, labelClassOf, MOMENTUM_TONES } from '../lib/signalColors';
 import { CHIP_CLASS } from '../lib/styles';
 import type { Momentum, MomentumLabel } from '../types/portfolio';
 import { HelpPopover } from './HelpPopover';
@@ -17,11 +17,46 @@ export function momentumText(momentum: Momentum | null): string {
   return momentum.label === null ? momentumScoreText(momentum) : `${momentum.label} ${momentumScoreText(momentum)}`;
 }
 
-/** The label and score in the label's tone: "STRONG 5/5". */
-export function MomentumChip({ momentum }: { momentum: Momentum | null }) {
+/** The five bars' heights, rising like a signal-strength mark. */
+const BAR_HEIGHTS = [4, 6, 8, 10, 12];
+
+/** Five rising bars, the score's number of them filled in the momentum's tone, the rest a hairline grey. */
+function MomentumGlyph({ momentum }: { momentum: Momentum }) {
+  const filledClass = fillClassOf(momentum.label, MOMENTUM_TONES);
+  const filledBarCount = momentum.score ?? 0;
   return (
-    <span className={`${CHIP_CLASS} ${labelClassOf(momentum?.label ?? null, MOMENTUM_TONES)}`}>
-      {momentum === null ? EMPTY_VALUE : `${momentum.label ?? 'UNKNOWN'} ${momentumScoreText(momentum)}`}
+    <svg width={24} height={12} viewBox="0 0 24 12" aria-hidden="true" className="block shrink-0">
+      {BAR_HEIGHTS.map((barHeight, barIndex) => (
+        <rect
+          key={barHeight}
+          x={barIndex * 5}
+          y={12 - barHeight}
+          width={3}
+          height={barHeight}
+          rx={0.75}
+          className={barIndex < filledBarCount ? filledClass : 'fill-line'}
+        />
+      ))}
+    </svg>
+  );
+}
+
+/**
+ * The momentum (round 6, DESIGN_BRIEF.md §11.6 — in place of the "WEAK 1/5" tag): a glyph made for the score, the label
+ * as a word in its tone ("Weak"), and with `showScore` the score after it ("1/5"); "—" without a single stored close.
+ */
+export function MomentumMark({ momentum, showScore = false }: { momentum: Momentum | null; showScore?: boolean }) {
+  if (momentum === null) return <span className="text-faint">{EMPTY_VALUE}</span>;
+  const labelWord = momentum.label ?? 'UNKNOWN';
+  return (
+    <span
+      role="img"
+      aria-label={`Momentum ${labelWord.toLowerCase()}, ${momentum.score ?? '?'} of 5 checks pass`}
+      className="inline-flex items-center gap-1.5 whitespace-nowrap align-middle"
+    >
+      <MomentumGlyph momentum={momentum} />
+      <span className={`${CHIP_CLASS} ${labelClassOf(momentum.label, MOMENTUM_TONES)}`}>{labelWord}</span>
+      {showScore && <span className="text-caption text-muted">{momentumScoreText(momentum)}</span>}
     </span>
   );
 }
@@ -166,8 +201,8 @@ export function MomentumPanel({ momentum }: { momentum: Momentum | null }) {
   return (
     <div>
       <div className="mb-4 flex min-h-7 items-center gap-2">
-        <MomentumChip momentum={momentum} />
-        <span className="text-muted">daily closes as of {momentum.asOf}</span>
+        <MomentumMark momentum={momentum} showScore />
+        <span className="text-muted">daily closes as of {formatDate(momentum.asOf)}</span>
         <span className="ml-auto">
           <LabelMeaningsHelp />
         </span>

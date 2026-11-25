@@ -37,7 +37,7 @@ export function ConfirmWholeMonthButton({
           align="end"
           sideOffset={6}
           aria-label="Confirm the whole month"
-          className="z-30 w-[320px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] leading-[18px] text-ink shadow-raised"
+          className="popover-motion z-30 w-[320px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] leading-[18px] text-ink shadow-raised"
         >
           <p className="text-body font-semibold">
             Confirm {formatDayCount(settlementDaysToConfirm.length)} of {monthName} at the amounts PortfolioBoss

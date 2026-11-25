@@ -1,4 +1,4 @@
-import { formatMoney, formatQuantity } from '../../lib/format';
+import { formatDate, formatMoney, formatQuantity } from '../../lib/format';
 import type { StockSplit, Trade } from '../../types/portfolio';
 
 /** "4 for 1", as IB writes it ("SPLIT 4 FOR 1"): the shares after the split, for the shares before it. */
@@ -6,9 +6,9 @@ export function ratioInIbsWords(stockSplit: StockSplit): string {
   return `${stockSplit.sharesAfterTheSplit} for ${stockSplit.sharesBeforeTheSplit}`;
 }
 
-/** "the 4-for-1 split of 2026-03-10", inside a sentence. */
+/** "the 4-for-1 split of 10/03/2026", inside a sentence. */
 export function splitWithItsDay(stockSplit: StockSplit): string {
-  return `the ${stockSplit.sharesAfterTheSplit}-for-${stockSplit.sharesBeforeTheSplit} split of ${stockSplit.splitDay}`;
+  return `the ${stockSplit.sharesAfterTheSplit}-for-${stockSplit.sharesBeforeTheSplit} split of ${formatDate(stockSplit.splitDay)}`;
 }
 
 function sharesWord(shareCount: number): string {
@@ -19,7 +19,7 @@ function sharesWord(shareCount: number): string {
 export function whatTheSplitMeans(stockSplit: StockSplit): string {
   const { splitDay, sharesBeforeTheSplit, sharesAfterTheSplit } = stockSplit;
   return (
-    `Since ${splitDay} IB counts ${sharesAfterTheSplit} ${sharesWord(sharesAfterTheSplit)} for every ` +
+    `Since ${formatDate(splitDay)} IB counts ${sharesAfterTheSplit} ${sharesWord(sharesAfterTheSplit)} for every ` +
     `${sharesBeforeTheSplit} held before. The shares held then count that way here; a position sold in full before ` +
     'it stays as it was.'
   );

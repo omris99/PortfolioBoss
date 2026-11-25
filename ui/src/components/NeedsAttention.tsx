@@ -3,14 +3,15 @@ import { Link } from 'react-router';
 import { CARD_CLASS, COUNT_CHIP_CLASS, TAG_CLASS } from '../lib/styles';
 import type { Holding } from '../types/portfolio';
 import { CardHeading } from './CardHeading';
+import { SkeletonBar, SkeletonDot } from './firstLoad/SkeletonBar';
 import { firstRealWarningOf, hasOnlyMinorWarnings } from './HoldingWarnings';
-import { SignalDot, warningSignsOf } from './Signal';
+import { SignalDot, SignalWords } from './Signal';
 import { WarnMark } from './WarnMark';
 
 /** Why a holding is on the list, the most pressing first: a real warning, a RED dot, no analysis yet. */
 type AttentionReason =
   | { kind: 'warning'; message: string }
-  | { kind: 'red'; warningSigns: string[] }
+  | { kind: 'red' }
   | { kind: 'notAnalyzed' };
 
 interface AttentionItem {
@@ -28,9 +29,7 @@ function reasonOf(holding: Holding): AttentionReason | null {
   const realWarning = firstRealWarningOf(holding);
   if (realWarning !== null) return { kind: 'warning', message: realWarning.message };
   if (holding.status !== 'OPEN') return null;
-  if (holding.signal === 'RED') {
-    return { kind: 'red', warningSigns: warningSignsOf(holding).map((warningSign) => warningSign.toLowerCase()) };
-  }
+  if (holding.signal === 'RED') return { kind: 'red' };
   if (holding.analysis === null) return { kind: 'notAnalyzed' };
   return null;
 }
@@ -49,7 +48,8 @@ function attentionItemsOf(holdings: Holding[]): AttentionItem[] {
     );
 }
 
-function ReasonText({ reason }: { reason: AttentionReason }) {
+/** A RED dot and a missing analysis are the signal in words, as every page writes it (round 6): the dot carries the red. */
+function ReasonText({ holding, reason }: { holding: Holding; reason: AttentionReason }) {
   switch (reason.kind) {
     case 'warning':
       return (
@@ -61,16 +61,19 @@ function ReasonText({ reason }: { reason: AttentionReason }) {
         </span>
       );
     case 'red':
+    case 'notAnalyzed':
       return (
-        <span className="min-w-0 text-muted">
-          <b className="font-semibold text-negative">Signal RED</b>
-          {reason.warningSigns.length > 0 && `: ${reason.warningSigns.join(', ')}`}
+        <span className="min-w-0">
+          <SignalWords holding={holding} />
         </span>
       );
-    case 'notAnalyzed':
-      return <span className="text-unknown">Not analyzed yet</span>;
   }
 }
+
+/** A row's columns — the dot, the symbol, the reason, the arrow —, the same while the list loads. */
+const ROW_GRID_CLASS = 'grid grid-cols-[12px_88px_1fr_16px] items-center gap-x-3 border-t px-5 py-3';
+
+const CARD_TITLE = 'Needs attention';
 
 /** One row, all of it a link to the holding's row in Positions. */
 function AttentionRow({ item }: { item: AttentionItem }) {
@@ -79,14 +82,14 @@ function AttentionRow({ item }: { item: AttentionItem }) {
     <li>
       <Link
         to={`/positions/${holding.id}`}
-        className="group grid grid-cols-[12px_88px_1fr_16px] items-center gap-x-3 border-t px-5 py-3 transition-colors hover:bg-subtle"
+        className={`group ${ROW_GRID_CLASS} transition-colors hover:bg-subtle`}
       >
         <SignalDot holding={holding} />
         <span className="flex items-center gap-2 font-semibold">
           {holding.symbol}
           {holding.status === 'CLOSED' && <span className={TAG_CLASS}>closed</span>}
         </span>
-        <ReasonText reason={reason} />
+        <ReasonText holding={holding} reason={reason} />
         <ChevronRight size={16} className="text-faint group-hover:text-ink" />
       </Link>
     </li>
@@ -128,8 +131,8 @@ export function NeedsAttention({ holdings }: { holdings: Holding[] }) {
   ).length;
 
   return (
-    <section aria-label="Needs attention" className={`flex flex-col ${CARD_CLASS}`}>
-      <CardHeading title="Needs attention">
+    <section aria-label={CARD_TITLE} className={`flex flex-col ${CARD_CLASS}`}>
+      <CardHeading title={CARD_TITLE}>
         {items.length > 0 && (
           <span className={COUNT_CHIP_CLASS}>{items.length}</span>
         )}
@@ -144,6 +147,32 @@ export function NeedsAttention({ holdings }: { holdings: Holding[] }) {
         </ul>
       )}
       <MinorWarningsStrip count={minorWarningCount} />
+    </section>
+  );
+}
+
+/** How wide each of the three grey rows' reason is, so that they don't read as one block. */
+const SKELETON_REASON_WIDTHS = [320, 220, 320];
+
+/** The same card during the first load: its title, and three rows of grey bars in the rows' own columns. */
+export function NeedsAttentionSkeleton() {
+  return (
+    <section aria-label={CARD_TITLE} aria-busy="true" className={`flex flex-col ${CARD_CLASS}`}>
+      <CardHeading title={CARD_TITLE} />
+      <ul>
+        {SKELETON_REASON_WIDTHS.map((reasonWidth, rowIndex) => (
+          <li key={rowIndex} className={ROW_GRID_CLASS}>
+            <SkeletonDot size={10} />
+            <span>
+              <SkeletonBar width={48} height={12} />
+            </span>
+            <span>
+              <SkeletonBar width={reasonWidth} height={12} />
+            </span>
+            <span />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

@@ -84,7 +84,7 @@ export function AnalysisDetailLine({ stock }: { stock: HotStock }) {
     <div className="flex flex-col gap-1 text-caption">
       <NamedParts
         parts={[
-          { name: 'Risk signs', value: <CandidateRiskSigns stock={stock} showFigures={false} /> },
+          { name: 'Company risks', value: <CandidateRiskSigns stock={stock} showFigures={false} /> },
           { name: 'Analysts', value: <AnalystsPart stock={stock} /> },
           { name: 'Earnings', value: <NextEarningsDate companyInfo={stock.companyInfo} markPlacement="beside" /> },
           { name: 'News', value: <NewsPart stock={stock} /> },

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { CARD_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from '../lib/styles';
 import type { Investor } from '../types/portfolio';
 import { INVESTOR_EXPLANATION, InvestorCard, InvestorModal } from '../components/InvestorCard';
@@ -42,12 +43,13 @@ export function InvestorsPage({
 }) {
   const [isAdding, setIsAdding] = useState(false);
   const showsCards = hasSeveralInvestors(investors);
+  useDocumentTitle('Investors');
 
   return (
     <>
       <PageHeader
         title="Investors"
-        description={showsCards ? 'Together they always add up to IB’s figures.' : undefined}
+        description={showsCards ? 'Together they always add up to IB’s figures.' : 'Only the account owner so far.'}
       >
         {showsCards && (
           <button type="button" onClick={() => setIsAdding(true)} className={SECONDARY_BUTTON_CLASS}>

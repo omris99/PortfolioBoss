@@ -235,7 +235,7 @@ function ClosedPositionRows({
     <>
       <tr
         tabIndex={0}
-        aria-label={`${closedPosition.symbol}, sold ${closedPosition.closeDate}, open details`}
+        aria-label={`${closedPosition.symbol}, sold ${formatDate(closedPosition.closeDate)}, open details`}
         onClick={onOpen}
         onKeyDown={openOnEnter}
         className={tableRowClass(isSelected)}

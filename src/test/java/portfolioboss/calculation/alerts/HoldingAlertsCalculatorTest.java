@@ -41,7 +41,7 @@ class HoldingAlertsCalculatorTest {
         List<AlertCondition> conditions = conditionsOf(calculatorWith(fallingMomentum));
 
         assertThat(conditions).extracting(AlertCondition::message).containsExactly(
-                "Momentum turned WEAK: 0 of 5",
+                "Momentum turned weak: 0 of 5",
                 "Closed below its 50-day average: 80.00 against 100.00",
                 "Closed below its 200-day average: 80.00 against 110.00");
         assertThat(conditions).extracting(condition -> condition.key().subject()).containsOnlyNulls();
@@ -71,7 +71,7 @@ class HoldingAlertsCalculatorTest {
 
         assertThat(conditions).singleElement().satisfies(condition -> {
             assertThat(condition.key()).isEqualTo(new AlertKey(AlertType.EARNINGS_SOON, ABCD_CON_ID, "2026-11-18"));
-            assertThat(condition.message()).isEqualTo("Reports on 2026-11-18, in 7 days");
+            assertThat(condition.message()).isEqualTo("Reports on 18/11/2026, in 7 days");
         });
     }
 
@@ -83,7 +83,7 @@ class HoldingAlertsCalculatorTest {
     @Test
     void aReportTodayCountsAndOneAlreadyPastDoesNot() {
         assertThat(conditionsOf(calculatorWithReportOn(SYNC_DATE, DEFAULT_SETTINGS))).extracting(AlertCondition::message)
-                .containsExactly("Reports on 2026-11-11, today");
+                .containsExactly("Reports on 11/11/2026, today");
         assertThat(conditionsOf(calculatorWithReportOn(SYNC_DATE.minusDays(1), DEFAULT_SETTINGS))).isEmpty();
     }
 

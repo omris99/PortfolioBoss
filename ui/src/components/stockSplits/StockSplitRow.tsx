@@ -1,3 +1,4 @@
+import { formatDate } from '../../lib/format';
 import { INNER_CELL_CLASS } from '../../lib/styles';
 import type { StockSplit } from '../../types/portfolio';
 import { ratioInIbsWords, whatTheSplitMeans } from './stockSplitTexts';
@@ -9,7 +10,7 @@ import { ratioInIbsWords, whatTheSplitMeans } from './stockSplitTexts';
 export function StockSplitRow({ stockSplit, columnCount }: { stockSplit: StockSplit; columnCount: number }) {
   return (
     <tr title={whatTheSplitMeans(stockSplit)} className="bg-subtle">
-      <td className={INNER_CELL_CLASS}>{stockSplit.splitDay}</td>
+      <td className={INNER_CELL_CLASS}>{formatDate(stockSplit.splitDay)}</td>
       <td colSpan={columnCount - 1} className={INNER_CELL_CLASS}>
         <span className="font-medium">Split {ratioInIbsWords(stockSplit)}</span>
         <span className="text-muted"> · from IB’s report</span>

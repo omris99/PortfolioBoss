@@ -176,7 +176,7 @@ function rowHintOf(
 function RowAnalyzeIcon({ isRunning, failure }: { isRunning: boolean; failure: string | null }) {
   if (isRunning) {
     return (
-      <LoaderCircle size={16} className="animate-spin text-accent motion-reduce:animate-none" aria-hidden="true" />
+      <LoaderCircle size={16} className="turning-icon text-accent" aria-hidden="true" />
     );
   }
   if (failure !== null) return <TriangleAlert size={16} className="text-negative" aria-hidden="true" />;

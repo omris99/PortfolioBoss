@@ -11,7 +11,22 @@ export function localTodayIsoDate(): string {
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
-/** A date typed as the API takes it, 'yyyy-MM-dd', and a real day of the calendar. */
+/** A day typed as the user reads dates, "24/11/2026" (or "1/2/2026"). */
+const TYPED_DATE_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+
+/**
+ * A day typed as dd/mm/yyyy as the API takes it, 'yyyy-MM-dd' — `null` when the text isn't a whole date in that form, or
+ * not a real day of the calendar.
+ */
+export function isoDateFromTypedDate(typedText: string): string | null {
+  const parts = TYPED_DATE_PATTERN.exec(typedText.trim());
+  if (parts === null) return null;
+  const [, day, month, year] = parts;
+  const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  return isIsoDate(isoDate) ? isoDate : null;
+}
+
+/** A date as the API takes it, 'yyyy-MM-dd', and a real day of the calendar. */
 export function isIsoDate(typedText: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(typedText)) return false;
   const [year, month, day] = typedText.split('-').map(Number);
@@ -47,5 +62,7 @@ export function trimmedOrNull(typedText: string): string | null {
   return trimmedText === '' ? null : trimmedText;
 }
 
-export const INPUT_CLASS =
-  'h-8 rounded-md border border-strong bg-surface px-2 text-body text-ink placeholder:text-faint';
+/** A field's frame and text, without its height: the alert settings' small number field is 26px tall. */
+export const INPUT_FRAME_CLASS = 'rounded-md border border-strong bg-surface px-2 text-body text-ink placeholder:text-faint';
+
+export const INPUT_CLASS = `h-8 ${INPUT_FRAME_CLASS}`;

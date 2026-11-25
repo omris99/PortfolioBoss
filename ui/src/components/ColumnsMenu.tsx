@@ -12,8 +12,11 @@ export interface ColumnChoice {
   isAlwaysShown?: boolean;
 }
 
-/** Where this browser remembers the columns chosen; nothing else reads it. */
-const STORAGE_KEY = 'portfolioboss.positions.visibleColumns';
+/**
+ * Where this browser remembers the columns chosen; nothing else reads it. ".v2" since round 6 changed the columns (a
+ * Momentum column, two figures in one): a choice made before starts again from the defaults.
+ */
+const STORAGE_KEY = 'portfolioboss.positions.visibleColumns.v2';
 
 function defaultKeysOf(columns: ColumnChoice[]): string[] {
   return columns.filter((column) => column.isShownByDefault).map((column) => column.key);
@@ -127,7 +130,7 @@ export function ColumnsMenu({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="z-30 w-[220px] rounded-md border bg-surface-raised py-1 shadow-raised"
+          className="popover-motion z-30 w-[220px] rounded-md border bg-surface-raised py-1 shadow-raised"
         >
           <GroupLabel>Shown by default</GroupLabel>
           {columns.filter((column) => column.isShownByDefault).map(itemOf)}

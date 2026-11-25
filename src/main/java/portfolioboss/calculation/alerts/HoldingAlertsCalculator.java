@@ -10,6 +10,7 @@ import portfolioboss.model.portfolio.HoldingWarning;
 import portfolioboss.stocks.Stock;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +39,9 @@ public record HoldingAlertsCalculator(Holding holding, HoldingStatus status, Mom
     /** So that exactly 15% counts as it should despite floating-point rounding, as in {@code HotStockCalculator}. */
     private static final double ROUNDING_TOLERANCE = 1e-9;
 
+    /** A date in a message as every screen writes one (round 6): "30/11/2026". */
+    private static final DateTimeFormatter DATE_AS_THE_SCREENS_WRITE_IT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
     public List<AlertCondition> conditionsTrueNow() {
         List<AlertCondition> conditions = new ArrayList<>();
         tradesDontMatchIbCondition().ifPresent(conditions::add);
@@ -52,7 +56,10 @@ public record HoldingAlertsCalculator(Holding holding, HoldingStatus status, Mom
         return conditions;
     }
 
-    /** א: the momentum turned WEAK, and the last close under the 50-day and the 200-day averages, each on its own. */
+    /**
+     * א: the momentum turned weak, and the last close under the 50-day and the 200-day averages, each on its own. The
+     * label in the message is a word, as every screen writes it (round 6), not the enum's capitals.
+     */
     private List<AlertCondition> trendConditions() {
         if (momentum == null) {
             return List.of();
@@ -60,7 +67,7 @@ public record HoldingAlertsCalculator(Holding holding, HoldingStatus status, Mom
         List<AlertCondition> conditions = new ArrayList<>();
         if (settings.isEnabled(AlertType.MOMENTUM_TURNED_WEAK) && momentum.label() == MomentumLabel.WEAK) {
             conditions.add(conditionOf(AlertType.MOMENTUM_TURNED_WEAK, null,
-                    "Momentum turned WEAK: " + momentum.score() + " of 5"));
+                    "Momentum turned weak: " + momentum.score() + " of 5"));
         }
         if (settings.isEnabled(AlertType.CLOSED_BELOW_SMA50) && Boolean.FALSE.equals(momentum.aboveSma50())) {
             conditions.add(conditionOf(AlertType.CLOSED_BELOW_SMA50, null, "Closed below its 50-day average: "
@@ -73,7 +80,10 @@ public record HoldingAlertsCalculator(Holding holding, HoldingStatus status, Mom
         return conditions;
     }
 
-    /** ב: the next report today, or within the drawer's number of days. Its date is the subject: each report once. */
+    /**
+     * ב: the next report today, or within the drawer's number of days. Its date is the subject — each report once —, as
+     * {@code LocalDate} writes it: the key of an open alert, so it never changes with the message's wording.
+     */
     private Optional<AlertCondition> earningsSoonCondition() {
         if (!settings.isEnabled(AlertType.EARNINGS_SOON) || finnhubData == null
                 || finnhubData.nextEarningsDate() == null) {
@@ -85,7 +95,7 @@ public record HoldingAlertsCalculator(Holding holding, HoldingStatus status, Mom
             return Optional.empty();
         }
         return Optional.of(conditionOf(AlertType.EARNINGS_SOON, reportDate.toString(),
-                "Reports on " + reportDate + ", " + whenText(daysUntilReport)));
+                "Reports on " + reportDate.format(DATE_AS_THE_SCREENS_WRITE_IT) + ", " + whenText(daysUntilReport)));
     }
 
     /**

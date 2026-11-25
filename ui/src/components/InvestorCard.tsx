@@ -45,12 +45,13 @@ export function InvestorModal({
   const { isSaving, errorMessage, setErrorMessage, runSave } = useSaveAction();
   const isRenaming = investorBeingRenamed !== null;
 
-  const handleSubmit = async () => {
+  /** Whether it saved: the modal then closes itself. */
+  const handleSubmit = async (): Promise<boolean> => {
     if (isBlank(name)) {
       setErrorMessage('Enter a name.');
-      return;
+      return false;
     }
-    const isSaved = await runSave(async () => {
+    return runSave(async () => {
       if (investorBeingRenamed === null) {
         await addInvestor(name.trim());
       } else {
@@ -58,7 +59,6 @@ export function InvestorModal({
       }
       await onSaved();
     });
-    if (isSaved) onClose();
   };
 
   return (
@@ -69,7 +69,7 @@ export function InvestorModal({
       errorMessage={errorMessage}
       isSaving={isSaving}
       saveLabel={isRenaming ? 'Rename' : 'Add investor'}
-      onSubmit={() => void handleSubmit()}
+      onSubmit={handleSubmit}
       onClose={onClose}
     >
       <Field label="Name">

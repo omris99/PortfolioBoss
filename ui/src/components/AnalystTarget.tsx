@@ -1,4 +1,4 @@
-import { EMPTY_VALUE, formatDate, formatMoney, formatSignedPercentOneDecimal, profitLossColorClass } from '../lib/format';
+import { EMPTY_VALUE, formatDate, formatMoney, formatSignedPercentOneDecimal } from '../lib/format';
 import { EXPLAINED_CLASS } from '../lib/styles';
 import type { AnalystPriceTarget, AnalystTarget } from '../types/portfolio';
 import { SubHeading } from './AnalysisPanel';
@@ -28,12 +28,14 @@ function analystTargetHint(analystTarget: AnalystTarget): string {
   );
 }
 
-/** "+27.1%" in its tone, or "—" without a target; the hint says what it is. */
+/**
+ * "+27.1%", or "—" without a target; the hint says what it is. Grey, never green or red (round 6, the user's OK): the
+ * analysts' upside is no profit, and green was one of the five marks counted on a Hot row.
+ */
 export function TargetUpside({ analystTarget }: { analystTarget: AnalystTarget }) {
   const upsidePercent = analystTarget.upsidePercent;
-  const toneClass = profitLossColorClass(upsidePercent);
   return (
-    <span title={analystTargetHint(analystTarget)} className={`${EXPLAINED_CLASS} ${toneClass}`}>
+    <span title={analystTargetHint(analystTarget)} className={`${EXPLAINED_CLASS} text-muted`}>
       {upsidePercent === null ? EMPTY_VALUE : formatSignedPercentOneDecimal(upsidePercent)}
     </span>
   );

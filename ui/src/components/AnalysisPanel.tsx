@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 import { ExternalLink } from 'lucide-react';
-import { formatDateTime, formatMoney, formatSignedPercent, profitLossColorClass } from '../lib/format';
+import { formatDate, formatDateTime, formatMoney, formatSignedPercent } from '../lib/format';
 import { ACTION_TONES, labelClassOf, RATING_TONES, SENTIMENT_TONES, TREND_TONES } from '../lib/signalColors';
 import { CHIP_CLASS, EXPLAINED_CLASS } from '../lib/styles';
 import type {
@@ -63,7 +63,8 @@ export function TargetWithUpside({ consensus }: { consensus: AnalystConsensus })
     <span>
       target {formatMoney(consensus.averageTarget)}
       {consensus.targetUpsidePercent !== null && (
-        <span className={profitLossColorClass(consensus.targetUpsidePercent)}>
+        // The analysts' upside is no profit: grey, never green or red (round 6, the user's OK).
+        <span className="text-muted">
           {' '}
           ({formatSignedPercent(consensus.targetUpsidePercent)})
         </span>
@@ -121,11 +122,11 @@ const COPY_DATE_HINT =
   'The date the search engine gives its copy of this page, which is what was read — not always exact. The page may ' +
   'have changed since: newer analyst actions may be missing, and older rows may have dropped off it.';
 
-/** "copy of 2026-09-18": how old the search engine's copy of a source may be (AI_ANALYSIS_TODO.md, decision 20). */
+/** "copy of 18/09/2026": how old the search engine's copy of a source may be (AI_ANALYSIS_TODO.md, decision 20). */
 function CopyDate({ date }: { date: string | null }) {
   return (
     <span title={COPY_DATE_HINT} className={`text-caption text-faint ${EXPLAINED_CLASS}`}>
-      {date === null ? 'copy date unknown' : `copy of ${date}`}
+      {date === null ? 'copy date unknown' : `copy of ${formatDate(date)}`}
     </span>
   );
 }
@@ -183,7 +184,7 @@ function sourceSummaryOf(source: SourceConsensus): string {
     source.analystCount === null ? null : `${source.analystCount} analysts`,
     source.averageTarget === null ? null : `target ${formatMoney(source.averageTarget)}`,
   ].filter((figure) => figure !== null);
-  const copyDate = source.publishedDate === null ? 'copy date unknown' : `copy of ${source.publishedDate}`;
+  const copyDate = source.publishedDate === null ? 'copy date unknown' : `copy of ${formatDate(source.publishedDate)}`;
   return `${siteOf(source.sourceUrl)} (${copyDate}): ${figures.length === 0 ? 'no figures' : figures.join(', ')}`;
 }
 
@@ -245,7 +246,7 @@ function ActionRow({ action }: { action: AnalystAction }) {
   return (
     <li className="border-b py-2.5">
       <div className="flex items-center gap-3">
-        <span className="text-muted">{action.date}</span>
+        <span className="text-muted">{formatDate(action.date)}</span>
         <span className="min-w-0 flex-1 font-medium">{action.firm}</span>
         <span className={`${CHIP_CLASS} ${labelClassOf(action.action, ACTION_TONES)}`}>{ACTION_NAMES[action.action]}</span>
       </div>
@@ -322,7 +323,7 @@ function HeadlineRow({ headline }: { headline: Headline }) {
   const webAddress = webAddressOrNull(headline.url);
   return (
     <li className="grid grid-cols-[84px_104px_1fr] gap-2 border-t py-2 text-[13px]">
-      <span className="text-muted">{headline.date ?? ''}</span>
+      <span className="text-muted">{headline.date === null ? '' : formatDate(headline.date)}</span>
       <span className="text-muted">{headline.source}</span>
       {webAddress === null ? (
         <span>{headline.title}</span>

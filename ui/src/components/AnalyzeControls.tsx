@@ -129,7 +129,7 @@ export function RunOutcome({
 
 export function RunningIcon({ isRunning, size }: { isRunning: boolean; size: number }) {
   return isRunning ? (
-    <LoaderCircle size={size} className="animate-spin motion-reduce:animate-none" />
+    <LoaderCircle size={size} className="turning-icon" />
   ) : (
     <ScanSearch size={size} />
   );
@@ -168,7 +168,7 @@ export function ConfirmBeforeRun({
           align={align}
           sideOffset={6}
           aria-label="Confirm the analysis"
-          className="z-30 w-[320px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] leading-[18px] text-ink shadow-raised"
+          className="popover-motion z-30 w-[320px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] leading-[18px] text-ink shadow-raised"
         >
           {children}
           <div className="mt-3 flex gap-2">

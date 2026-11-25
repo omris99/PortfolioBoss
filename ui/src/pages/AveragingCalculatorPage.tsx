@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Info, Wallet } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { investorIdToOpenOn } from '../components/averagingCalculator/AveragingCalculatorLink';
 import { AveragingCashCard } from '../components/averagingCalculator/AveragingCashCard';
 import {
@@ -130,6 +131,7 @@ function TabPlan({
  */
 export function AveragingCalculatorPage({ snapshot }: { snapshot: PortfolioSnapshot }) {
   const location = useLocation();
+  useDocumentTitle('Averaging calculator');
   const tabs = weightsTabsOf(openHoldingsOf(snapshot.holdings), snapshot.totalCashValue, snapshot.investors);
   const [selectedInvestorId, setSelectedInvestorId] = useState<number | null>(() => investorIdToOpenOn(location.state));
   const [typedTextsByPlanKey, setTypedTextsByPlanKey] = useState<Record<string, TypedTextsByHoldingId>>({});

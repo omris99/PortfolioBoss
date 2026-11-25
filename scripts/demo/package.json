@@ -1,0 +1,9 @@
+{
+  "name": "portfolioboss-demo-tools",
+  "private": true,
+  "description": "Screenshots and checks of the demo app (playwright-core drives the installed Chrome); see implementation-plans/UI_POLISH_TODO.md",
+  "type": "module",
+  "dependencies": {
+    "playwright-core": "1.65.1"
+  }
+}

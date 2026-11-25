@@ -1,7 +1,17 @@
+import type { ReactNode } from 'react';
 import { formatMoney, formatSignedMoney, profitLossColorClass } from '../lib/format';
 import { CARD_CLASS } from '../lib/styles';
 import type { Holding, PortfolioSnapshot } from '../types/portfolio';
-import { StocksAndCashBar } from './graphs/StocksAndCashBar';
+import { SkeletonBar } from './firstLoad/SkeletonBar';
+import { StocksAndCashBar, StocksAndCashBarSkeleton } from './graphs/StocksAndCashBar';
+
+/** The four figures' labels, the same while the figures load. */
+const FIGURE_LABELS = {
+  netLiquidation: 'Net liquidation',
+  cash: 'Cash',
+  positionsValue: 'Positions value',
+  unrealizedPnl: 'Unrealized P&L',
+} as const;
 
 function SummaryFigure({
   label,
@@ -9,7 +19,7 @@ function SummaryFigure({
   valueColorClass = 'text-ink',
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   valueColorClass?: string;
 }) {
   return (
@@ -36,16 +46,30 @@ export function AccountSummary({ snapshot, openHoldings }: { snapshot: Portfolio
   return (
     <section className={CARD_CLASS} aria-label="Account summary">
       <div className="grid grid-cols-4 divide-x">
-        <SummaryFigure label="Net liquidation" value={formatMoney(snapshot.netLiquidation)} />
-        <SummaryFigure label="Cash" value={formatMoney(snapshot.totalCashValue)} />
-        <SummaryFigure label="Positions value" value={formatMoney(totalPositionsValue)} />
+        <SummaryFigure label={FIGURE_LABELS.netLiquidation} value={formatMoney(snapshot.netLiquidation)} />
+        <SummaryFigure label={FIGURE_LABELS.cash} value={formatMoney(snapshot.totalCashValue)} />
+        <SummaryFigure label={FIGURE_LABELS.positionsValue} value={formatMoney(totalPositionsValue)} />
         <SummaryFigure
-          label="Unrealized P&L"
+          label={FIGURE_LABELS.unrealizedPnl}
           value={formatSignedMoney(totalUnrealizedPnl)}
           valueColorClass={profitLossColorClass(totalUnrealizedPnl)}
         />
       </div>
       <StocksAndCashBar positionsValue={totalPositionsValue} cash={snapshot.totalCashValue} />
+    </section>
+  );
+}
+
+/** The same card during the first load: the four labels, a grey bar for each figure, and the stocks and cash bar grey. */
+export function AccountSummarySkeleton() {
+  return (
+    <section className={CARD_CLASS} aria-label="Account summary" aria-busy="true">
+      <div className="grid grid-cols-4 divide-x">
+        {Object.values(FIGURE_LABELS).map((label) => (
+          <SummaryFigure key={label} label={label} value={<SkeletonBar width={140} height={24} />} />
+        ))}
+      </div>
+      <StocksAndCashBarSkeleton />
     </section>
   );
 }

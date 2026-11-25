@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useSaveAction } from '../hooks/useSaveAction';
 import { addCashMovement, changeCashMovement, deleteCashMovement } from '../lib/apiClient';
-import { EMPTY_VALUE, formatMoney } from '../lib/format';
+import { EMPTY_VALUE, formatDate, formatMoney } from '../lib/format';
 import { INPUT_CLASS, isBlank, isIsoDate, localTodayIsoDate, trimmedOrNull } from '../lib/formInput';
 import {
   DELETE_ICON_BUTTON_CLASS,
@@ -47,7 +47,7 @@ function initialFormValues(movementBeingEdited: CashMovement | null, todayIsoDat
 
 /** The same rules the API enforces, checked first so the common mistakes don't need a round trip. */
 function problemWithForm(formValues: CashMovementFormValues, todayIsoDate: string): string | null {
-  if (!isIsoDate(formValues.movementDate)) return 'Enter the date as yyyy-MM-dd.';
+  if (!isIsoDate(formValues.movementDate)) return 'Enter the date as dd/mm/yyyy.';
   if (formValues.movementDate > todayIsoDate) return 'The date cannot be in the future.';
   if (isBlank(formValues.amountText) || !(Number(formValues.amountText) > 0)) {
     return 'Enter an amount greater than 0.';
@@ -94,14 +94,15 @@ function CashMovementModal({
     value: CashMovementFormValues[Field],
   ) => setFormValues((currentValues) => ({ ...currentValues, [field]: value }));
 
-  const handleSubmit = async () => {
+  /** Whether it saved: the modal then closes itself. */
+  const handleSubmit = async (): Promise<boolean> => {
     const problem = problemWithForm(formValues, todayIsoDate);
     if (problem !== null) {
       setErrorMessage(problem);
-      return;
+      return false;
     }
     const cashMovementRequest = toCashMovementRequest(formValues);
-    const isSaved = await runSave(async () => {
+    return runSave(async () => {
       if (movementBeingEdited === null) {
         await addCashMovement(investor.id, cashMovementRequest);
       } else {
@@ -109,7 +110,6 @@ function CashMovementModal({
       }
       await onSaved();
     });
-    if (isSaved) onClose();
   };
 
   return (
@@ -120,7 +120,7 @@ function CashMovementModal({
       errorMessage={errorMessage}
       isSaving={isSaving}
       saveLabel={isEditing ? 'Save changes' : 'Save'}
-      onSubmit={() => void handleSubmit()}
+      onSubmit={handleSubmit}
       onClose={onClose}
     >
       <div className="grid grid-cols-2 gap-4">
@@ -175,7 +175,7 @@ function CashMovementRow({
 }) {
   return (
     <tr>
-      <td className={INNER_CELL_CLASS}>{cashMovement.movementDate}</td>
+      <td className={INNER_CELL_CLASS}>{formatDate(cashMovement.movementDate)}</td>
       <td className={INNER_CELL_CLASS}>
         <span className={sideTextClass(cashMovement.type === 'WITHDRAWAL')}>{cashMovement.type}</span>
       </td>
@@ -265,7 +265,7 @@ export function CashMovementsList({ investor, onDataChanged }: { investor: Inves
       {movementToDelete !== null && (
         <ConfirmDialog
           title={`Delete this ${typeWordOf(movementToDelete.type)}?`}
-          item={`${movementToDelete.movementDate} · ${movementToDelete.type} ${formatMoney(movementToDelete.amount)} · ${investor.name}`}
+          item={`${formatDate(movementToDelete.movementDate)} ·${movementToDelete.type} ${formatMoney(movementToDelete.amount)} · ${investor.name}`}
           onConfirm={() => deleteAndReload(movementToDelete)}
           onClose={() => setMovementToDelete(null)}
         >

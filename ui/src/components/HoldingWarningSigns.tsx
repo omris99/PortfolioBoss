@@ -1,47 +1,48 @@
-import { EMPTY_VALUE } from '../lib/format';
 import type { Holding } from '../types/portfolio';
-import { notCheckedHintOf, RiskSignTagList, type NotCheckedHints } from './companyInfo/RiskSigns';
-import { SignalWarningSignTags, warningSignsOf } from './Signal';
+import { RiskSigns, type NotCheckedHints } from './companyInfo/RiskSigns';
+import { LabeledValue } from './LabeledValue';
+import { SignalWords } from './Signal';
 
 /**
- * Why a holding's risk signs are unknown: Finnhub is asked on every run that reaches TWS, about the holdings in dollars
- * only (MY_HOLDINGS_TODO.md, decision 10).
+ * Why a holding's company risks are unknown: Finnhub is asked on every run that reaches TWS, about the holdings in
+ * dollars only (MY_HOLDINGS_TODO.md, decision 10).
  */
 export const HOLDING_NOT_CHECKED_HINTS: NotCheckedHints = {
   finnhubDidNotAnswer:
     'No answer from Finnhub: it is asked on every run that reaches TWS, about the holdings in dollars only — on ' +
     'another exchange IB’s symbol isn’t Finnhub’s —, and only when its key is set.',
-  finnhubHadNoFigures: 'Finnhub has none of the company’s four figures, so the risk signs could not be checked.',
+  finnhubHadNoFigures: 'Finnhub has none of the company’s four figures, so the company risks could not be checked.',
 };
 
-const NO_WARNING_SIGN_HINT = 'No warning signs: none of the Signal dot’s, and none of the five risk signs';
+/**
+ * An open holding's company risks with their figures ("Expensive, P/E 52"), "No company risks", or "Not checked" when
+ * Finnhub couldn't check them.
+ */
+export function HoldingCompanyRisks({ holding }: { holding: Holding }) {
+  return (
+    <RiskSigns
+      companyInfo={holding.companyInfo}
+      yearReturnPercent={holding.momentum?.yearReturnPercent ?? null}
+      showFigures
+      notCheckedHints={HOLDING_NOT_CHECKED_HINTS}
+    />
+  );
+}
 
 /**
- * An open holding's warning signs as red tags: the Signal dot's three, then the risk signs with their figures
- * ("Expensive · P/E 52"); "—" when there are none, and "risk signs not checked" when Finnhub couldn't check them. Shown
- * together only: the dot still counts its own three. The drawer's line under the key figures and the Averaging
- * calculator's line under each holding.
+ * An open holding's signs in two labeled groups that can't be confused (round 6, the user's names): "Signal" — the three
+ * warning signs the dot counts — and "Company risks" — Finnhub's figures and the year's return. The drawer's line under
+ * the key figures.
  */
-export function HoldingWarningSigns({ holding }: { holding: Holding }) {
-  const companyInfo = holding.companyInfo;
-  const riskSignsNotCheckedHint = notCheckedHintOf(companyInfo, HOLDING_NOT_CHECKED_HINTS);
-  const warningSignCount = warningSignsOf(holding).length + (companyInfo?.riskSigns ?? []).length;
+export function HoldingSignsAndRisks({ holding }: { holding: Holding }) {
   return (
     <>
-      <SignalWarningSignTags holding={holding} />
-      <RiskSignTagList
-        companyInfo={companyInfo}
-        yearReturnPercent={holding.momentum?.yearReturnPercent ?? null}
-        showFigures
-      />
-      {warningSignCount === 0 && riskSignsNotCheckedHint === null && (
-        <span title={NO_WARNING_SIGN_HINT}>{EMPTY_VALUE}</span>
-      )}
-      {riskSignsNotCheckedHint !== null && (
-        <span title={riskSignsNotCheckedHint} className="text-muted">
-          risk signs not checked
-        </span>
-      )}
+      <LabeledValue label="Signal">
+        <SignalWords holding={holding} />
+      </LabeledValue>
+      <LabeledValue label="Company risks">
+        <HoldingCompanyRisks holding={holding} />
+      </LabeledValue>
     </>
   );
 }

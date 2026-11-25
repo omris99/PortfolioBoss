@@ -1,6 +1,7 @@
-import { useId, useRef, type ReactNode, type SelectHTMLAttributes } from 'react';
+import { useId, useRef, useState, type ReactNode, type SelectHTMLAttributes } from 'react';
 import { Calendar, ChevronDown, Info, LoaderCircle, TriangleAlert } from 'lucide-react';
-import { INPUT_CLASS, isIsoDate } from '../lib/formInput';
+import { formatDate } from '../lib/format';
+import { INPUT_CLASS, isIsoDate, isoDateFromTypedDate } from '../lib/formInput';
 import { PRIMARY_BUTTON_CLASS, TOGGLE_GROUP_CLASS, toggleOptionClass } from '../lib/styles';
 
 /** The columns a field takes in its form's grid. */
@@ -84,9 +85,21 @@ export function Toggle<Option extends string>({
   );
 }
 
+/** What the form keeps for a typed text: the API's 'yyyy-MM-dd' once it is a whole date, else the text as typed. */
+function formValueOf(typedText: string): string {
+  return isoDateFromTypedDate(typedText) ?? typedText;
+}
+
+/** What the field shows for the form's value: a whole date as dd/mm/yyyy, anything else as it was typed. */
+function shownTextOf(formValue: string): string {
+  return isIsoDate(formValue) ? formatDate(formValue) : formValue;
+}
+
 /**
- * A date typed as yyyy-MM-dd — never the browser's own format, which follows the computer's language — with a calendar
- * button that opens the browser's date picker on a hidden date field. `max`: the latest date the picker offers.
+ * A date typed as dd/mm/yyyy, the app's way of writing a date since round 6 — never the browser's own format, which
+ * follows the computer's language — with a calendar button that opens the browser's date picker on a hidden date field.
+ * The form gets the API's 'yyyy-MM-dd' once a whole date is typed (or picked), and the text as typed until then, so that
+ * its own check names what is missing. `max`: the latest date the picker offers.
  */
 export function DateInput({
   value,
@@ -102,6 +115,18 @@ export function DateInput({
   ariaLabel?: string;
 }) {
   const pickerRef = useRef<HTMLInputElement>(null);
+  const [typedText, setTypedText] = useState(() => shownTextOf(value));
+  const [previousValue, setPreviousValue] = useState(value);
+  // A value set from outside — the calendar, a prefill, a reset — replaces what was typed; one that is what was typed
+  // leaves it alone, so that "1/2/2026" isn't rewritten as "01/02/2026" under the cursor.
+  if (value !== previousValue) {
+    setPreviousValue(value);
+    if (value !== formValueOf(typedText)) setTypedText(shownTextOf(value));
+  }
+  const updateTypedText = (text: string) => {
+    setTypedText(text);
+    onChange(formValueOf(text));
+  };
   const openPicker = () => {
     try {
       pickerRef.current?.showPicker();
@@ -114,17 +139,17 @@ export function DateInput({
       <input
         type="text"
         inputMode="numeric"
-        placeholder="yyyy-MM-dd"
+        placeholder="dd/mm/yyyy"
         aria-label={ariaLabel}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
+        value={typedText}
+        onChange={(event) => updateTypedText(event.target.value)}
         className={`${INPUT_CLASS} w-full pr-9 tabular-nums`}
       />
       <button
         type="button"
         onClick={openPicker}
         aria-label="Pick a date"
-        title={max ? `Pick a date (up to ${max})` : 'Pick a date'}
+        title={max ? `Pick a date (up to ${formatDate(max)})` : 'Pick a date'}
         className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors hover:bg-accent-soft hover:text-accent"
       >
         <Calendar size={16} />
@@ -184,7 +209,7 @@ export function InfoBand({ children, placement = 'above' }: { children: ReactNod
 export function SaveButton({ isSaving, label }: { isSaving: boolean; label: string }) {
   return (
     <button type="submit" disabled={isSaving} className={PRIMARY_BUTTON_CLASS}>
-      {isSaving && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" />}
+      {isSaving && <LoaderCircle size={16} className="turning-icon" />}
       {isSaving ? 'Saving…' : label}
     </button>
   );

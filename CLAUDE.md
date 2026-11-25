@@ -195,6 +195,17 @@ with what was typed under it ("= 10 at 400.00 before the split" — the user's p
 split", so that the table agrees with IB's quantity), the trade form's note for a date on or before a split, and the
 backfill's prefill turned into the date's shares.
 
+[UI_POLISH_TODO.md](implementation-plans/UI_POLISH_TODO.md) (2026-11-24) is the current plan: the UI's small details
+polished for a calmer, clearer experience — **not a redesign**, no new feature —, from Claude Design's sixth round
+(DESIGN_BRIEF.md §11, his rules in §11.6), checked on a **demo database** of made-up positions (`portfolioboss_demo`,
+`scripts/demo/`, run with `SPRING_DATASOURCE_URL=…/portfolioboss_demo ./run.sh 7599`; never real data on screen). Stages
+א (the top bar in `components/topBar/`, `Hint`, dates dd/mm/yyyy), ב (words instead of tags, `MomentumMark`, Positions'
+columns, the drawer), ג (motion — the "Motion" block of `index.css`, `hooks/animation/useCloseAfterExitAnimation.ts` —
+and the first load's skeletons, `components/firstLoad/`) and ד (the alerts panel in two groups and the settings drawer;
+the alerts' words and group in Java; the top bar sticky) are built and browser-checked (2026-11-24/25); ה (`Hint` in
+place of every `title`) and ו (the rest of the findings) come next. Its file is the record
+of each stage's pieces and decisions.
+
 ## Hard invariant: read-only
 
 PortfolioBoss reads the account and **never places, modifies, or cancels an order**. `IbGateway`
@@ -388,7 +399,11 @@ cash; another currency, no market value, 0 or less left out; no cash, nothing), 
 the short list a `@MockitoBean`: nothing before the first sync, the first check, a second check adding nothing, ended
 and back, a holding's warning, a short-list stock without a holding, a type off neither checked nor shown and its open
 alert left open, saving the settings checks again, the newest first with each holding's id, "seen" and a later unseen
-alert) and `AlertControllerTest` (the JSON and `no-store`, 204, a number out of range or for a type without one, days not
+alert), `AlertGroupCalculatorTest` (the bell's two groups: a short-list stock not held, one held, every other kind held or
+not), `AlertsReadServiceTest` (`@DataJpaTest`: the newest first with each holding's id, a stock not held without one, the
+groups — a held stock's short-list alert in Your holdings, a sold one's in The short list, a sold holding's warning still a
+holding's —, a type off not shown, each type's setting) and `AlertControllerTest` (the JSON — `group` too — and
+`no-store`, 204, a number out of range or for a type without one, days not
 whole, a type missing — 400 naming the line —, 415, 405); `FinnhubClientTest` Finnhub's two calls against a fake Finnhub (`MockRestServiceServer`,
 shortened copies of its real answers): the earliest report of a calendar out of order, an hour not known yet, a missing
 figure, an unknown symbol, a refused call, a key of spaces. The Flex reports (package `tax`; **no test calls IB**):
@@ -1359,10 +1374,17 @@ short list itself). Then `AlertChangesCalculator(openAlertKeys, conditionsTrueNo
 `AlertKey(type, conId, subject)` becomes a new `alert` row, an open alert no longer true gets its `ended_at`; the open alerts
 are the previous check's state, so the first check alerts everything already true once (24 alerts on the real data,
 2026-11-11). A type turned off is left out of both sides — not checked, not shown, its open alerts left open. Messages are
-English, written when the condition became true (`Locale.ROOT` numbers: "Down 17.3% from the average cost of 182.40").
+English, written when the condition became true (`Locale.ROOT` numbers: "Down 17.3% from the average cost of 182.40"), in
+the screens' words since UI_POLISH_TODO.md's stage ד (2026-11-25): "Momentum turned weak: 1 of 5", "Reports on
+30/11/2026, in 6 days" (`HoldingAlertsCalculator.DATE_AS_THE_SCREENS_WRITE_IT`; the subject stays the ISO date, an open
+alert's key), "Entered the short list: hot, target 31.8% above the price" — an alert stored earlier keeps its words.
 `AlertController`: `GET /api/alerts` (`no-store`) → `AlertsResponse(alerts, settings)` — `AlertResponse(id, alertType,
-conId, symbol, holdingId, message, createdAt, seenAt)`, the types turned on only, newest first, ended ones too (history),
-`holdingId` from the latest account's holdings by `con_id`, `null` for a stock not held —, `AlertSettingResponse(alertType,
+conId, symbol, holdingId, message, createdAt, seenAt, group)`, the types turned on only, newest first, ended ones too
+(history), `holdingId` from the latest account's holdings by `con_id` (a closed holding's too), `null` for a stock not held,
+`group` the bell panel's (`model.alerts.AlertGroup`: `YOUR_HOLDINGS`, `SHORT_LIST`) from
+`calculation.alerts.AlertGroupCalculator(alertType, stockIsHeldNow).group()` — the user's rule: a stock held now is first
+of all a holding, so only `ENTERED_SHORT_LIST` of a stock with no open holding is `SHORT_LIST` —,
+`AlertSettingResponse(alertType,
 enabled, threshold, defaultThreshold)` per type; `POST /api/alerts/seen` (`{}`, 204: one `UPDATE` of the shown types'
 unseen rows); `PUT /api/alerts/settings` (204, `@Valid AlertSettingsRequest` — every type exactly once,
 `isEveryTypeGivenOnce`, and each `AlertSettingRequest(alertType, enabled, threshold)` with `isThresholdRightForItsType`, both
@@ -1840,23 +1862,39 @@ TWS — Scan again here, Sync now in the top bar: it runs the call then the relo
 runs; size `regular` here, `small` in the top bar). `lib/drawerAddress.ts` (`idFromAddress`, `OPENED_FROM_TABLE`) is
 shared with Positions.
 
-The top bar (`AppShell.tsx`, 2026-11-11): the alerts bell first, **left of the "PortfolioBoss" wordmark** (his place,
-after two tries: right of Sync now, then right of the name), the tabs `gap-4` after them (was `gap-8`: with a tab's 12px
-padding the first tab now sits as far from the name as the tabs from each other — he found the gap too wide; "Averaging
-calculator" wraps to two lines at the 1200px width, as before), and on the right the account, "Synced from TWS …", Sync
-now and the load dot. A Sync now that fails or finds another reading running shows the shared `ErrorBanner` (its sentence
-and button text are parameters now) with the server's words, "The figures below are from the last sync." and Try again.
-`components/alerts/` (no design round, decision 17 — built from the existing pieces): `AlertsBell` (`useAlerts
-(portfolioSyncedAt)` — `GET /api/alerts` on mount and on every new `asOf` —; a Radix popover; the badge is the unseen
-count in the accent blue, `text-on-accent`, not red — red is loss and the signal's tones only, his pick; opening marks
-the shown alerts seen at once (`markAlertsAsSeen`, then a reload), so the badge lasts only until the click — his first
-look missed it, 24 alerts seen 15 seconds after they came — and the ones new at the opening keep a blue dot while the
-list is open), `AlertList` ("Alerts" with ⚙; each row a link to the holding's drawer, `/positions/{holdingId}`, or to
-`/recommendations`; the date under the message) and `AlertSettingsDrawer` (on `DrawerShell`: a `Switch` per type in the
-groups of `alertTexts.ts`, `NumberInputWithUnit` for the four numbers, "default 15%" when changed, Save checks the ranges
-first, then `saveAlertSettings` and a reload). `DrawerShell` (2026-11-11, taken out of `DrawerFrame`) is every drawer's
-frame — the Radix dialog, 640px from the right under the top bar, the veil, Esc not while typing, `DrawerTitle`,
-`DrawerCloseButton` —; `DrawerFrame` (a holding's, a closed position's, a scanned stock's) builds on it.
+The top bar (`components/topBar/TopBar.tsx` since UI_POLISH_TODO.md's stage א; `AppShell.tsx` until then): the alerts
+bell first, **left of the "PortfolioBoss" wordmark** (his place, after two tries: right of Sync now, then right of the
+name), the tabs after them, and on the right the sync in words and Sync now — the stage's file has the rest. Since stage
+ד (2026-11-25, his ask) it is **sticky** (`sticky top-0 z-30`): scrolled down, a drawer opened under a bar that had
+scrolled away "hung in the air"; `html`'s `scroll-padding-top` keeps what the keyboard reaches out from under it, and the
+Averaging cash card sticks 8px under it. A Sync now that fails or finds another reading running shows the shared
+`ErrorBanner` with the server's words, "The figures below are from the last sync." and Try again.
+`components/alerts/` (decision 17; redesigned in Claude Design's sixth round, stage ד): `AlertsBell` (`useAlerts
+(portfolioSyncedAt)` — `GET /api/alerts` on mount and on every new `asOf` —; a Radix popover opening 8px under the bar,
+its left edge on the bell's — `PANEL_OFFSET_UNDER_THE_BELL` —; the badge is the unseen count in the accent blue, not red —
+red is loss and the signal's tones only, his pick; opening marks the shown alerts seen at once (`markAlertsAsSeen`, then a
+reload), and the ones new at the opening stay new while the panel is open), `AlertsPanel` (in place of `AlertList`:
+"Alerts · 36 new · ⚙", then the server's two groups — `alertGroups.ts`: Your holdings, then The short list — each with its
+count, its five newest rows and "Show 22 more" in place, at most `min(600px, 100vh − 80px)` with only the groups
+scrolling; a row is two lines, the symbol and `alertTime.ts`'s "17:15" / "Yesterday" / date, then the message, a link to
+the holding's drawer or to `/recommendations`) and `AlertSettingsDrawer` (`DrawerShell width="narrow"`, 440px, around
+`AlertSettingsForm`: "Checked on every sync · 9 of 9 on", the kinds in the sentence-case groups of `alertTexts.ts` as
+hairline lists, `AlertKindRow` — `SwitchNamedBy` (`Switch.tsx`: named by its sentence, which holds the field) and the
+52 × 26 `ThresholdField` inside the sentence, the unit in the words after it, "Default: 7 days" under a changed number —,
+Save checks the ranges first, then `saveAlertSettings`, a reload and `useCloseDrawer()`).
+`DrawerShell` (2026-11-11, taken out of `DrawerFrame`) is every drawer's frame — the Radix dialog, 640px (or `narrow`)
+from the right under the top bar, the veil, Esc not while typing, `DrawerTitle`, `DrawerCloseButton` —, and since stage ג
+its motion: it leaves with its exit (`useCloseAfterExitAnimation`: `open` turns false, Radix plays the exit, `onClose`
+runs on the element's own `animationend`), and gives what is inside `useCloseDrawer()` for a Cancel or a Save. **The
+pages hold the shell** (Positions, Closed, Recommendations; each drawer exports its label — `holdingDrawerLabelOf`, …)
+and key only the drawer inside it per item, so ‹ › fade the next item in rather than sliding the drawer in again;
+`DrawerFrame` (a holding's, a closed position's, a scanned stock's) is the inside — the header, the tabs
+(`navigation: DrawerNavigation | null`, ‹ › disabled while the first load runs), the panel keyed by its tab. `Modal` does
+the same: its `onSubmit` answers whether the form saved, and the modal then closes itself with its exit — a form never
+calls `onClose` after a save. The first load (stage ג): `OverviewPage` and `PositionsPage` take `snapshot | null` and show
+skeletons beside their cards (`AccountSummarySkeleton`, `PositionsTableSkeleton` with each column's
+`barWidthsWhileLoading`, `HoldingDrawerSkeleton`, …, on `components/firstLoad/SkeletonBar.tsx`), the other pages nothing
+until the data comes; `EmptyBox` is a plain card — dashed means "add".
 
 What a holding and a scanned stock both show (MY_HOLDINGS_TODO.md session 3, 2026-11-05/07) is outside
 `recommendations/`, each piece taking only the part of a stock it shows — never a whole `HotStock` or `Holding`, whose

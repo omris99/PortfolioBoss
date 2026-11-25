@@ -38,7 +38,6 @@ export default {
       'on-warn-real': role('on-warn-real'),
       highlight: role('highlight'),
       signal: { green: role('signal-green'), yellow: role('signal-yellow'), red: role('signal-red'), none: role('signal-none') },
-      status: { loading: role('status-loading'), ready: role('status-ready'), error: role('status-error') },
       // The sector ring's colors, in ring order (`fill-chart-1` for a slice, `bg-chart-1` for its legend swatch).
       chart: { 1: role('chart-1'), 2: role('chart-2'), 3: role('chart-3'), 4: role('chart-4'), rest: role('chart-rest') },
     },
@@ -80,8 +79,10 @@ export default {
       boxShadow: {
         raised: '0 2px 4px #1d20260d, 0 12px 32px -4px #1d202629',
       },
+      // The content column (round 6): 1200px up to a 1500px screen, then 80% of the screen, up to 1536px — a 1920px
+      // screen gives the tables the room instead of 360px of empty page on each side.
       maxWidth: {
-        content: '1200px',
+        content: 'clamp(1200px, 80vw, 1536px)',
       },
       // The top bar's height, as a spacing step: `h-topbar` for the bar, `top-topbar` for the drawer that starts under it.
       spacing: {

@@ -1,4 +1,4 @@
-import { EMPTY_VALUE, formatShekels } from '../../lib/format';
+import { EMPTY_VALUE, formatDate, formatShekels } from '../../lib/format';
 import type { MonthlySettlement, Sale, SaleNotComputedReason, SettlementDay } from '../../types/taxes';
 
 /** The words the Taxes page shares between its parts. "Calculated" is what PortfolioBoss worked out. */
@@ -95,7 +95,7 @@ export function lineUnderTheDayText(settlementDay: SettlementDay, isPortfolioTab
 
 /** The clock's explanation, on a day that waits for the Bank of Israel. */
 export function waitingForARateText(settlementDay: string): string {
-  return `Bank of Israel’s rate for ${settlementDay} isn’t stored yet: it comes with a sync after it is published.`;
+  return `Bank of Israel’s rate for ${formatDate(settlementDay)} isn’t stored yet: it comes with a sync after it is published.`;
 }
 
 /** The "?" of a day calculated as 0. */

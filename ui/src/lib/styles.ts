@@ -65,22 +65,18 @@ export const CARD_CLASS = 'rounded-lg border bg-surface';
 export const TAG_CLASS =
   'inline-flex h-[18px] items-center whitespace-nowrap rounded-sm bg-subtle px-1.5 text-caption font-medium text-muted';
 
-/** A warning sign in a row of them, red: a risk sign ("Expensive · P/E 52"), or one the Signal dot counts. */
-export const WARNING_SIGN_TAG_CLASS =
-  'inline-flex h-[18px] items-center whitespace-nowrap rounded-sm bg-negative-soft px-[5px] text-[11px] font-medium ' +
-  'text-negative';
-
 /** Words run over with a highlighter: the next report 0–14 days away. */
 export const HIGHLIGHTER_CLASS = 'rounded-sm bg-highlight px-1 font-medium text-ink';
 
-/** The number beside a card's title: how many items it lists. */
-export const COUNT_CHIP_CLASS =
-  'inline-flex h-5 min-w-[22px] items-center justify-center rounded-sm bg-subtle px-1.5 text-caption font-semibold';
+/** The number beside a card's title: how many items it lists — a figure, not a box (round 6: fewer boxes). */
+export const COUNT_CHIP_CLASS = 'pl-0.5 text-body font-medium tabular-nums text-faint';
 
-/** A small word in a tone, its colors given with it: a rating, a trend, STRONG 5/5. */
-export const CHIP_CLASS =
-  'inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 text-[11px] font-semibold leading-4 ' +
-  'tracking-[0.03em]';
+/**
+ * A verdict — a rating, a trend, the news — as a word, its tone's color given with it: bold, in sentence case ("STRONG
+ * BUY" reads "Strong buy"), the size of the text around it. Round 6 (DESIGN_BRIEF.md §11.6, rule 2): no tinted pill, so
+ * that a row reads like a report and not a strip of tags. `inline-block`, since only a block takes a first letter.
+ */
+export const CHIP_CLASS = 'inline-block whitespace-nowrap font-semibold lowercase first-letter:uppercase';
 
 /** BUY and SELL, DEPOSIT and WITHDRAWAL in a list: small capitals, never green or red. */
 export function sideTextClass(isSecondSide: boolean): string {

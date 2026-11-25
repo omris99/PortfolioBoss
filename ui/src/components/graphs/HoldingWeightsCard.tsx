@@ -1,9 +1,10 @@
 import { useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { formatMoney, formatPercent } from '../../lib/format';
+import { SkeletonBar } from '../firstLoad/SkeletonBar';
 import type { OpenOnTab } from '../HoldingDrawer';
 import { Tip } from '../Tip';
-import type { InvestmentsAndCash } from './investmentsAndCash';
+import { PORTFOLIO_WHOLE_NAME, type InvestmentsAndCash } from './investmentsAndCash';
 import { heaviestWeightsOf, type CashWeight, type HoldingWeight, type Weight } from './portfolioWeights';
 import { CASH_COLOR_CLASS, STOCKS_COLOR_CLASS, WeightsCard, hintOf, stocksShareText } from './WeightsCard';
 
@@ -105,6 +106,12 @@ function BarInTrack({ bar, largestAmount }: { bar: AccountPartBar; largestAmount
   );
 }
 
+/** A row's columns — name · bar · percent · value —, the same while the bars load. */
+const ROW_CLASS =
+  '-mx-1.5 grid h-7 grid-cols-[52px_minmax(0,1fr)_48px_84px] items-center gap-x-2 rounded-sm px-1.5 text-[13px]';
+
+const CARD_TITLE = 'By holding';
+
 /**
  * A link when the row leads somewhere, plain otherwise; either way laid out as one row of the card, reachable with the
  * keyboard, and highlighted while it is pointed at or has the keyboard's focus.
@@ -120,8 +127,6 @@ function RowFrame({
   onHighlight: (key: string | null) => void;
   children: ReactNode;
 }) {
-  const rowClass =
-    '-mx-1.5 grid h-7 grid-cols-[52px_minmax(0,1fr)_48px_84px] items-center gap-x-2 rounded-sm px-1.5 text-[13px]';
   const highlightWhilePointedAtOrFocused = {
     onMouseEnter: () => onHighlight(bar.key),
     onMouseLeave: () => onHighlight(null),
@@ -130,7 +135,7 @@ function RowFrame({
   };
   if (bar.link === null) {
     return (
-      <div tabIndex={0} aria-describedby={tipId} className={rowClass} {...highlightWhilePointedAtOrFocused}>
+      <div tabIndex={0} aria-describedby={tipId} className={ROW_CLASS} {...highlightWhilePointedAtOrFocused}>
         {children}
       </div>
     );
@@ -140,7 +145,7 @@ function RowFrame({
       to={bar.link.to}
       state={bar.link.state}
       aria-describedby={tipId}
-      className={`${rowClass} transition-colors hover:bg-subtle focus-visible:bg-subtle`}
+      className={`${ROW_CLASS} transition-colors hover:bg-subtle focus-visible:bg-subtle`}
       {...highlightWhilePointedAtOrFocused}
     >
       {children}
@@ -195,7 +200,7 @@ export function HoldingWeightsCard({
   const largestAmount = Math.max(...allBars.map(drawnAmountOf));
 
   return (
-    <WeightsCard title="By holding" caption={`Share of ${tab.wholeName}`}>
+    <WeightsCard title={CARD_TITLE} caption={`Share of ${tab.wholeName}`}>
       <ul>
         {holdingBars.map((bar) => (
           <li key={bar.key} className="relative">
@@ -218,6 +223,33 @@ export function HoldingWeightsCard({
           />
         </div>
       )}
+    </WeightsCard>
+  );
+}
+
+/** How long each of the eight grey bars is, heaviest first, so that they read as a list of weights. */
+const SKELETON_BAR_PERCENTS = [92, 74, 51, 50, 44, 41, 37, 33];
+
+/** The same half during the first load (Portfolio's words): its title, and eight rows of grey bars in the rows' columns. */
+export function HoldingWeightsCardSkeleton() {
+  return (
+    <WeightsCard title={CARD_TITLE} caption={`Share of ${PORTFOLIO_WHOLE_NAME}`}>
+      <ul aria-hidden="true">
+        {SKELETON_BAR_PERCENTS.map((barPercent) => (
+          <li key={barPercent} className={ROW_CLASS}>
+            <SkeletonBar width={36} height={12} />
+            <span className="flex">
+              <SkeletonBar width={`${barPercent}%`} height={10} />
+            </span>
+            <span className="text-right">
+              <SkeletonBar width={40} height={12} />
+            </span>
+            <span className="text-right">
+              <SkeletonBar width={64} height={12} />
+            </span>
+          </li>
+        ))}
+      </ul>
     </WeightsCard>
   );
 }

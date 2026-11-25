@@ -15,7 +15,14 @@ import type { Correlation, HotStock, HotStockLabel } from '../../types/recommend
 import { AnalysisPanel } from '../AnalysisPanel';
 import { AnalystTargetSection } from '../AnalystTarget';
 import { RecoveringTag, RiskSignsLine } from '../companyInfo/RiskSigns';
-import { DrawerFrame, KeyFigure, KeyFigureExtra, KeyFigures, type DrawerTab } from '../DrawerFrame';
+import {
+  DrawerFrame,
+  KeyFigure,
+  KeyFigureExtra,
+  KeyFigures,
+  type DrawerNavigation,
+  type DrawerTab,
+} from '../DrawerFrame';
 import type { InvestmentsAndCash } from '../graphs/investmentsAndCash';
 import { useInvestors } from '../InvestorsContext';
 import { MomentumPanel } from '../Momentum';
@@ -286,18 +293,19 @@ function CandidateRiskSignsLine({ stock }: { stock: HotStock }) {
   );
 }
 
+/** The drawer's name, what a screen reader announces when it opens: "KRVN, Hot". */
+export function candidateDrawerLabelOf(stock: HotStock): string {
+  return `${stock.symbol}, ${LIST_WORDS[stock.label].title}`;
+}
+
 /**
  * A scanned stock's drawer (/recommendations/:candidateId) — the same frame as a holding's. ‹ › step through Hot, Too
- * hot and Correcting in that order; ✕, Esc or the veil close it. Its Analyze runs through the page, so the row's button
- * and this one agree. `weightsTabs` and `openHoldings` are for If I buy.
+ * hot and Correcting in that order; ✕, Esc or the veil close it — the `DrawerShell` the page keeps open. Its Analyze runs
+ * through the page, so the row's button and this one agree. `weightsTabs` and `openHoldings` are for If I buy.
  */
 export function CandidateDrawer({
   stock,
-  previousSymbol,
-  nextSymbol,
-  onPrevious,
-  onNext,
-  onClose,
+  navigation,
   estimate,
   analysisState,
   onAnalyze,
@@ -305,11 +313,7 @@ export function CandidateDrawer({
   openHoldings,
 }: {
   stock: HotStock;
-  previousSymbol: string;
-  nextSymbol: string;
-  onPrevious: () => void;
-  onNext: () => void;
-  onClose: () => void;
+  navigation: DrawerNavigation;
   estimate: EstimatedAnalysisCost | null;
   analysisState: RecommendationAnalysisState;
   onAnalyze: (candidateId: number | null) => void;
@@ -354,7 +358,6 @@ export function CandidateDrawer({
   };
   return (
     <DrawerFrame
-      ariaLabel={`${stock.symbol}, ${LIST_WORDS[stock.label].title}`}
       title={stock.symbol}
       currency="USD"
       tags={
@@ -369,11 +372,7 @@ export function CandidateDrawer({
       tabs={TABS}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      previousLabel={previousSymbol}
-      nextLabel={nextSymbol}
-      onPrevious={onPrevious}
-      onNext={onNext}
-      onClose={onClose}
+      navigation={navigation}
     >
       {renderTab()}
     </DrawerFrame>

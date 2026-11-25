@@ -22,7 +22,7 @@ import { sectorText } from './hotStockTexts';
  */
 
 const FOOT_TEXT =
-  'Picked by rules in code — the analysts’ target first, then the risk signs, then the news score — not a price ' +
+  'Picked by rules in code — the analysts’ target first, then the company risks, then the news score — not a price ' +
   'forecast. Claude only reads the news. Nothing is bought.';
 
 function sameInstant(firstIsoInstant: string, secondIsoInstant: string): boolean {
@@ -84,12 +84,12 @@ function ScoreLine({ stock }: { stock: HotStock }) {
   if (stock.score === null || stock.newsScore === null) return null;
   return (
     <p className="text-caption text-muted">
-      <span title="The news score less the risk signs’ weight: the picks are ordered by it">
+      <span title="The news score less the company risks’ weight: the picks are ordered by it">
         Score <b className={`font-semibold ${pointsColorClass(stock.score)}`}>{formatPoints(stock.score)}</b>
       </span>
       {' · '}
       <span title={NEWS_SCORE_HINT}>news {formatPoints(stock.newsScore)}</span>
-      {' · '}risk signs weigh {stock.riskWeight}
+      {' · '}company risks weigh {stock.riskWeight}
     </p>
   );
 }
@@ -286,7 +286,7 @@ function NoRecommendationYet({
             {shortList.analyzed === 0
               ? 'No hot stock has the analysts’ target 15% or more above its price: nothing to analyze.'
               : `Analyze & recommend reads the analyst ratings, the news and the company figures of ` +
-                `${shortListWords(shortList)}; then the code picks up to 3 by their risk signs and news score.`}
+                `${shortListWords(shortList)}; then the code picks up to 3 by their company risks and news score.`}
           </p>
         </div>
         <div className="ml-auto flex shrink-0 flex-col items-end gap-1">
@@ -334,7 +334,7 @@ function NoStockQualified() {
     <p className="mx-5 my-4 flex items-start gap-2 rounded-md bg-subtle px-3 py-2.5">
       <Info size={16} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
       No stock qualified this time: none had the analysts’ target 15% or more above its price, or every one analyzed
-      had risk signs that weigh more than 2, or no figures from Finnhub.
+      had company risks that weigh more than 2, or no figures from Finnhub.
     </p>
   );
 }

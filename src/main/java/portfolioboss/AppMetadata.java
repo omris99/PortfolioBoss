@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.39.0";
+    public static final String VERSION = "0.40.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,25 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.40.0: [A calmer, clearer UI]
+ * TopBar added: the bell left of the name with its count clear of the mark, a "P" mark, seven tabs that never wrap, the sync in words; it stays on screen while the page scrolls.
+ * Hint added: one hover explanation, a bubble after 400ms or at once on keyboard focus, used in the top bar so far; every page names the browser tab ("NVDA · Positions · PortfolioBoss").
+ * AppShell: a white error band in place of the pink one, a read-only footer, every page a line under its title, and the content column widening up to 1536px on wide screens.
+ * Dates: every date shows as dd/mm/yyyy, and a date field is typed that way, in place of yyyy-MM-dd.
+ * The signal, the momentum and the company risks are words in their tone in place of pastel tags; MomentumMark adds five rising bars; "Risk signs" are now "Company risks".
+ * PositionsTable rewritten: Sector second, a Momentum column, one Unrealized P&L column (the amount over its percent), pairs of figures in one column; all twelve columns fit a 1280px screen.
+ * Holding drawer: a calmer header, key figures of equal width, the signal and the company risks in one labeled line; the drawer takes the focus itself and draws no ring around it.
+ * Averaging calculator: five labeled slots under each holding (Signal, Company risks, Momentum, Analysts' target, Earnings); the analysts' upside is grey everywhere.
+ * Motion added: drawers slide in and out from the right, modals rise in and shrink out, popovers drop in, a tab's content fades in; only fades under reduce motion; Sync now's icon turns.
+ * Drawers: the page keeps one drawer open and ‹ › change only what is inside it, so the next item fades in; a modal closes itself with its exit once a save succeeds.
+ * First load: the Overview, Positions and a drawer opened from its address show their frames with grey bars in place of the dashed "Loading the portfolio…" box, then the data fades in.
+ * AlertsPanel replaces AlertList: Your holdings then The short list, five rows each with "Show N more", "17:15" / "Yesterday" / a date, opening 8px under the bar instead of over it.
+ * AlertGroup and AlertGroupCalculator added: the server sends each alert's group; a stock held now stays in Your holdings even when it entered the short list.
+ * Alert messages in the screens' words: "Momentum turned weak", report dates as 30/11/2026, "Entered the short list: hot, target 31.8% above the price"; stored alerts keep theirs.
+ * Alert settings drawer: 440px, each number inside its sentence, sentence-case groups as hairline lists, a note under a number changed from its default; Save and Cancel leave with its exit.
+ * Averaging calculator: "Not enough cash: …" replaces "96.15 short", which read as selling short; its cash card sticks under the top bar.
+ * scripts/demo added: a sample database of made-up positions on real market data, and Playwright tools for screenshots, dates left in ISO and columns that don't fit.
+ *
  * VERSION 0.39.0: [Stock splits in the trades]
  * StockSplitRow added: a holding's trades show each split at its date as a grey line, "Split 4 for 1 · from IB's report", after the trades of its own day, its meaning on hover.
  * TradesPanel: a trade a split translated shows its quantity and price after the split, as IB's quantity counts them, with what was typed under it: "= 10 at 400.00 before the split".

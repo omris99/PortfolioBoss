@@ -19,7 +19,9 @@ is one labeled line rather than the design's row of slots under a second header.
 (2026-11-07): a new page, the Averaging calculator, designed before it is built, then built the same day from
 arrangement A. Four details follow the rest of the app instead of the design: the highlighter on "in 5 days" rather than
 on the date, the cash's hint as the browser's tooltip, the Weight tab's own sentences under "Not on this page", and 32px
-fields. **Section 10 is the fifth round** (2026-11-14): a new page, Taxes, designed before it is built.
+fields. **Section 10 is the fifth round** (2026-11-14): a new page, Taxes, designed before it is built. **Section 11 is
+the sixth round** (2026-11-24): no new page — a polish of the whole app as built, from screenshots of a demo database,
+for a calmer, clearer experience.
 
 ---
 
@@ -1243,3 +1245,138 @@ recorded"; and the December line ends "Dec 31: shield ₪62.50 → refunded".
   - a month with only fees, and a month with nothing
   - a year with no sales, and the first year (no history before it)
   - a long note on a confirmation
+
+---
+
+## 11. Sixth round: the polish
+
+Every page is built — **Overview · Positions · Averaging calculator · Closed · Investors · Recommendations · Taxes** —
+from this design system's tokens and component specs (rounds 1–5). This round is **not a redesign.** It is the small
+details that make the app feel finished and easy to read. The attached
+screenshots are the app as it is today, at 1440 × 900, on a **demo database: every amount, investor, trade and the
+account id are made up** (the stock symbols and their market data are real).
+
+Section 2's rules hold: no new feature, no new data, no change in behavior. Section 4's color meanings stay. Use the
+design system's roles and tokens; where a piece needs a new token, name it and say why.
+
+### 11.1 What to send back
+
+1. **A critique, screen by screen,** of what looks unfinished: alignment, spacing, type sizes and weights, text that is
+   cut off or wraps badly, two ways of doing the same thing, empty space, a weak hierarchy. For each finding: the
+   screenshot's number, what is wrong, and the fix as a spec (token, px, weight) — small enough to build without a new
+   design. Order the findings by how much they are seen: the top bar and the Overview first, then Positions and
+   the holding drawer.
+2. **Designs for the pieces that were never designed** (11.3), each with its states.
+3. **A short list of rules** the critique leads to, which apply on every page (for example: "a table never cuts off a
+   sector: it wraps to two lines"), so that the fixes stay consistent.
+
+### 11.2 The screenshots
+
+| # | Shows |
+|---|---|
+| 01 | Overview, the whole page |
+| 02 | Overview, the first screen only |
+| 03 | Positions |
+| 04 | Positions, the Columns menu open |
+| 05 | Positions, Analyze's confirm |
+| 06 | Averaging calculator |
+| 07 | Averaging calculator, a purchase typed in |
+| 08 | Closed |
+| 09 | Investors |
+| 10 | Recommendations, the whole page (tall) |
+| 11 | Taxes, 2026 |
+| 12–17 | A holding's drawer (NVDA): Summary, Momentum, Analysts & news, Company, Trades, Weight |
+| 18 | A holding's drawer, By investor (TEAM, held by two investors) |
+| 19 | A holding's drawer, Analysts & news of a stock never analyzed (WMT) |
+| 20 | The Add trade modal |
+| 21–22 | A closed position's drawer, and a manual position's |
+| 23–27 | A scanned stock's drawer: Summary, Momentum, Analysts & news, Company, If I buy |
+| 28 | Taxes, a settlement day opened, and a sale opened into its buys |
+| 29 | Taxes, an investor's tab |
+| 30 | Taxes, 2025 |
+| 31 | The alerts bell, open |
+| 32 | The alert settings drawer |
+| 33 | Sync now failed: TWS not reachable |
+| 34 | The first load |
+
+### 11.3 Never designed: design these
+
+1. **The top bar.** Today: the bell with its unseen count · the wordmark · seven tabs · the account id · "Synced from
+   TWS 2026-11-22 19:10" · Sync now · a dot for the load status. At 1440 "Averaging calculator" wraps to two lines (01);
+   during the first load, before the account and the time are known, it fits on one (34), so the bar jumps when the
+   data arrives. Design it for 1280 to 1920 px: what goes where, what may be shortened, the sync time read as a sentence
+   rather than a timestamp, and whether the dot is needed beside Sync now.
+2. **The first load.** Today a dashed box, "Loading the portfolio…" (34). Skeletons for at least the Overview,
+   Positions and a drawer — or one quieter state — with no jump when the data comes.
+3. **The alerts** (31, 32) were built from existing pieces, never designed. With 36 alerts the list is long, and the
+   "Entered the short list" alerts (stocks not held) crowd out the holdings' own. Design the list: how it is grouped
+   (holdings / the short list), what a row shows (symbol, message, when), unseen against seen, how many show before
+   "more", the empty state ("No alerts yet. They are checked on every sync."). And the settings drawer: nine kinds, each
+   on or off, four of them with a number.
+4. **Motion.** Nothing moves today: the drawers, the modals and the popovers appear and disappear at once. Propose how
+   each comes and goes (direction, duration, easing), the veil's fade, a tab change, and what "reduce motion" leaves.
+   Short and calm, in the tone of §1: nothing flashes.
+5. **Explanations on hover.** Three ways today: the browser's own tooltip (most of the app — it shows in no
+   screenshot), the small bubble of the weights card, and the Taxes page's "?" tooltip. One way for the whole app, and when
+   a "?" is needed rather than a hover on the item itself.
+6. **The browser tab:** no favicon (the browser's default), and the title is always "PortfolioBoss". A favicon from the
+   wordmark, and whether the title names the page ("Positions · PortfolioBoss").
+7. **The footer line,** "Read-only against Interactive Brokers · sector and trades are stored locally", is out of date
+   (the sector comes from IB now): reword it or drop it.
+
+### 11.4 Already seen — a start, not the list
+
+- **Closed (08):** at 1440 the table is wider than its card: the Note column is cut off, and "Consumer, Non-…" is cut.
+- **Positions (03):** a holding shared by two investors shows its quantity as "30 (0 · 30)", the account owner's 0
+  included.
+- **The signal in words:** the Positions table writes it with a dot, red text and a colored "1/5"; the Overview's "Needs
+  attention" says it again in another style ("Signal RED: momentum weak, analysts down").
+- **The Overview's Weights card (01):** the ring and its legend of three sectors leave much of the left half empty
+  beside the ten bars of the right half.
+- **The Sync now failure (33):** a pink band across the top; check its weight against the calm tone.
+- **The drawers' header (12, 23):** five boxes of key figures, then the warning signs — check the rhythm and spacing.
+
+### 11.5 For wide screens
+
+- On a **1920 × 1080** screen the content is 1200 px wide (`max-w-content`), so at 1920 about 360 px of
+  empty page sits on each side. Say whether the content should grow on a wide screen (the tables, at least) or stay at
+  1200.
+- The most used screens — the Overview, Positions and a holding's drawer, the Averaging calculator,
+  Recommendations and Taxes — come first in the critique.
+
+### 11.6 Part 2: decisions on the round, and his notes as rules (2026-11-24)
+
+Claude Design answered with `Polish.md` and new cards (TopBar, FirstLoad, AlertsPanel, AlertSettings, Motion, Hint,
+BrowserTab) — from 8 of the 34 screenshots, the only ones that reached it. The user reviewed the design and the app
+(made-up KRVN row, the Averaging calculator, Positions) and sent this back, with the other 26 screenshots:
+
+**Decisions on round 6**
+1. The bell stays **left of the wordmark** (his earlier choice), not after Sync now; only its count must not touch the
+   "P".
+2. The signs are split in two, under names that can't be confused, the same everywhere (the holding drawer, the
+   Averaging calculator, Recommendations, the Company tab, the alerts): **"Signal"** — the three signs behind the signal
+   dot: momentum weak, analysts down, negative news — and **"Company risks"** — Finnhub's signs about the company (losing
+   money, high debt, expensive, revenue falling) and recovering. Every "Risk signs" becomes "Company risks". This
+   replaces D5's "Warning signs" / "Risk signs", which sound too alike.
+3. Everything else in round 6 stands, except where a note below changes it (P2's momentum chip: note 2).
+
+**His notes — each a rule for every screen, not only the one it was seen on**
+1. **A row must not look messy** (the Hot table). Figures on one line, every header on one line, no second header row
+   whose labels don't sit over what they name; a mark beside a figure (Pulled back, Moves together) is a small mark
+   next to it, explained by its Hint, not a chip on a second line; no column empty on most rows ("In the portfolio" →
+   a small mark by the symbol when it applies); at most one or two kinds of mark in a row.
+2. **No generic tags** (the Averaging calculator's "Momentum weak", "Expensive · P/E 180", "WEAK 1/5"): the same
+   pale-filled rounded pill for every kind of thing looks like the tags an AI builds. A pill only for a rare, real
+   category (manual, partial, held); a verdict or a sign is typography — weight and color, the figure in tabular
+   numerals ("Expensive, P/E 180"), the app's WarnMark where a sign needs a mark; the momentum score a small
+   purpose-made glyph (five short bars, the score's number filled, in its tone) beside the word, not a badge. Fewer
+   boxes, more typography: a financial report, not a dashboard kit.
+3. **No table scrolls sideways at 1280–1440 with every column on** (Positions with Analysts' target and Earnings on:
+   the Symbol column scrolls out of sight; Closed too). A shorter Signal cell, no "USD" on every row of an all-USD
+   account, figures that belong together in one column; only as a fallback, a Symbol column that stays put.
+4. **Positions:** Sector is the second column, right after Symbol. Unrealized P&L is one column, the amount on top and
+   its % under it, the header on two lines: "$ Unrealized P&L" over "Unrealized P&L %".
+5. **Every date is dd/mm/yyyy** (22/11/2026), replacing §3's yyyy-MM-dd — tables, drawers, Taxes, the sync hint and
+   sentence. (The date fields keep the browser's own picker, whose format follows the browser's language.)
+6. **In a "label: value" line the labels stand out** (under each Averaging calculator row the labels are as grey as
+   their values): the label reads first, then its value, the slots on a fixed grid that lines up from row to row (A3).

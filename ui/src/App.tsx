@@ -7,7 +7,6 @@ import { SectorOptionsList } from './components/SectorCell';
 import { usePortfolio } from './hooks/usePortfolio';
 import { useReadingFromTws } from './hooks/useReadingFromTws';
 import { syncNow } from './lib/apiClient';
-import { formatDateTime } from './lib/format';
 import { AveragingCalculatorPage } from './pages/AveragingCalculatorPage';
 import { ClosedPositionsPage } from './pages/ClosedPositionsPage';
 import { InvestorsPage } from './pages/InvestorsPage';
@@ -33,16 +32,31 @@ function App() {
   // Sync now, in the top bar of every page: a new reading from TWS, then the portfolio loaded again.
   const { readingState: syncNowState, startReading: startSyncNow } = useReadingFromTws(syncNow, reload);
 
-  /** The page, once the first snapshot is in; until then, a box saying it is loading (or that nothing came). */
-  const pageOnceLoaded = (renderPage: (loadedSnapshot: PortfolioSnapshot) => ReactNode): ReactNode =>
-    snapshot === null ? <EmptyBox message={isLoading ? 'Loading the portfolio…' : 'No data.'} /> : renderPage(snapshot);
+  /** When the first load failed, every page says so; the error band above it says why. */
+  const firstLoadFailed = snapshot === null && !isLoading;
+  const noDataBox = <EmptyBox message="No data." />;
+
+  /**
+   * The Overview and Positions, with their skeletons while the first load runs (round 6): `renderPage` gets `null`
+   * until the first snapshot is in.
+   */
+  const pageWithSkeleton = (renderPage: (snapshotOrNull: PortfolioSnapshot | null) => ReactNode): ReactNode =>
+    firstLoadFailed ? noDataBox : renderPage(snapshot);
+
+  /**
+   * Every other page, once the first snapshot is in; until then nothing under the top bar, which says "Loading…" — the
+   * first load takes a moment, and the design draws a skeleton only for the Overview, Positions and a holding's drawer.
+   */
+  const pageOnceLoaded = (renderPage: (loadedSnapshot: PortfolioSnapshot) => ReactNode): ReactNode => {
+    if (snapshot !== null) return renderPage(snapshot);
+    return firstLoadFailed ? noDataBox : null;
+  };
 
   return (
     // Every component below can read the investors with useInvestors(), without receiving them as a prop.
     <InvestorsProvider investors={snapshot?.investors ?? []}>
       <AppShell
         account={snapshot?.account ?? null}
-        syncedAt={snapshot === null ? null : formatDateTime(snapshot.asOf)}
         portfolioSyncedAt={snapshot?.asOf ?? null}
         loadStatus={loadStatusOf(errorMessage, isLoading)}
         errorMessage={errorMessage}
@@ -60,10 +74,12 @@ function App() {
           />
         )}
         <Routes>
-          <Route index element={pageOnceLoaded((loaded) => <OverviewPage snapshot={loaded} />)} />
+          <Route index element={pageWithSkeleton((snapshotOrNull) => <OverviewPage snapshot={snapshotOrNull} />)} />
           <Route
             path="positions/:holdingId?"
-            element={pageOnceLoaded((loaded) => <PositionsPage snapshot={loaded} onDataChanged={reload} />)}
+            element={pageWithSkeleton((snapshotOrNull) => (
+              <PositionsPage snapshot={snapshotOrNull} onDataChanged={reload} />
+            ))}
           />
           <Route
             path="averaging"

@@ -113,20 +113,39 @@ export function profitLossColorClass(profitLoss: number | null): string {
   return profitLoss > 0 ? 'text-positive' : 'text-negative';
 }
 
-/** 'yyyy-MM-dd' is shown as it is: unambiguous in any locale, and it sorts correctly as text. */
+/** The API's day, "2026-11-22". */
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * A day from the API ("2026-11-22") as the user reads it, "22/11/2026" (DESIGN_BRIEF.md §11.6, rule 5 — yyyy-MM-dd until
+ * round 6). Only for showing: sorting and the API keep the ISO text.
+ */
 export function formatDate(isoDate: string | null): string {
-  return isoDate ?? EMPTY_VALUE;
+  if (isoDate === null) return EMPTY_VALUE;
+  const parts = ISO_DATE_PATTERN.exec(isoDate);
+  if (parts === null) return isoDate;
+  const [, year, month, day] = parts;
+  return `${day}/${month}/${year}`;
 }
 
 function twoDigits(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-/** An instant from the API ("2026-10-10T13:05:12Z") as "2026-10-10 16:05", in this computer's time zone. */
+/** A moment's day as "22/11/2026", in this computer's time zone. */
+export function formatDayOf(moment: Date): string {
+  return `${twoDigits(moment.getDate())}/${twoDigits(moment.getMonth() + 1)}/${moment.getFullYear()}`;
+}
+
+/** A moment's time of day as "19:10", in this computer's time zone. */
+export function formatTimeOf(moment: Date): string {
+  return `${twoDigits(moment.getHours())}:${twoDigits(moment.getMinutes())}`;
+}
+
+/** An instant from the API ("2026-10-10T13:05:12Z") as "10/10/2026 16:05", in this computer's time zone. */
 export function formatDateTime(isoInstant: string): string {
   const moment = new Date(isoInstant);
-  const date = `${moment.getFullYear()}-${twoDigits(moment.getMonth() + 1)}-${twoDigits(moment.getDate())}`;
-  return `${date} ${twoDigits(moment.getHours())}:${twoDigits(moment.getMinutes())}`;
+  return `${formatDayOf(moment)} ${formatTimeOf(moment)}`;
 }
 
 const DAYS_PER_YEAR = 365;

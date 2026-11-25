@@ -1,6 +1,7 @@
-import { EMPTY_VALUE, formatSignedPercentOneDecimal } from '../../lib/format';
-import { WARNING_SIGN_TAG_CLASS } from '../../lib/styles';
+import { Fragment } from 'react';
+import { formatSignedPercentOneDecimal } from '../../lib/format';
 import type { CompanyFacts, CompanyInfo, RiskSign } from '../../types/portfolio';
+import { LabeledValue } from '../LabeledValue';
 import { TimingNoteWhenDue } from './TimingNote';
 
 interface RiskSignWords {
@@ -9,7 +10,11 @@ interface RiskSignWords {
   rule: string;
 }
 
-/** The five risk signs (RECOMMENDATIONS_TODO.md, decision 5), in the brief's words, sentence case. */
+/**
+ * The five risk signs (RECOMMENDATIONS_TODO.md, decision 5), in the brief's words, sentence case. On screen they are
+ * "Company risks" since round 6 — the user's name, so that they can't be confused with the Signal dot's warning signs;
+ * the code keeps the API's `RiskSign`.
+ */
 const RISK_SIGN_WORDS: Record<RiskSign, RiskSignWords> = {
   LOSES_MONEY: { name: 'Losing money', rule: 'a net margin below 0 over the last 12 months' },
   HIGH_DEBT: { name: 'High debt', rule: 'debt more than twice the equity' },
@@ -45,17 +50,28 @@ const RISK_SIGN_FIGURES: Record<RiskSign, (figures: FiguresBehindTheSigns) => st
 };
 
 /**
- * One of the five risk signs, in the warning-sign tone, in sentence case — never capitals. With `figure`, the figure
- * that raised it follows: "Expensive · P/E 52". Its hover names the rule it broke.
+ * One of the five company risks as words, not a tag (round 6, DESIGN_BRIEF.md §11.6, rule 2): its name bold in the loss
+ * tone, then with `figure` the figure that raised it — "Expensive, P/E 52". Its hover names the rule it broke.
  */
 export function RiskSignTag({ sign, figure = null }: { sign: RiskSign; figure?: string | null }) {
   const { name, rule } = RISK_SIGN_WORDS[sign];
+  // The name and the figure each stay whole, and the line may break between them: in a narrow slot (the Averaging
+  // calculator's) "Losing money, net margin −3.8%" would otherwise run into the next one.
   return (
-    <span title={`${name} · a risk sign: ${figure === null ? '' : `${figure}, `}${rule}`} className={WARNING_SIGN_TAG_CLASS}>
-      {name}
-      {figure !== null && <span className="font-normal">&nbsp;· {figure}</span>}
+    <span title={`${name} · a company risk: ${figure === null ? '' : `${figure}, `}${rule}`} className="text-negative">
+      <span className="whitespace-nowrap font-semibold">{name}</span>
+      {figure !== null && (
+        <>
+          , <span className="whitespace-nowrap">{figure}</span>
+        </>
+      )}
     </span>
   );
+}
+
+/** Between two company risks in a line: a faint middle dot. */
+function RiskSeparator() {
+  return <span className="mx-1.5 text-faint">·</span>;
 }
 
 /** Lower than a year ago — one of the five risk signs, so it wears their tag everywhere. */
@@ -99,12 +115,11 @@ export function RiskSignTagList({
   const figuresBehindTheSigns = { companyFacts: companyInfo.companyFacts, yearReturnPercent };
   return (
     <>
-      {companyInfo.riskSigns.map((sign) => (
-        <RiskSignTag
-          key={sign}
-          sign={sign}
-          figure={showFigures ? RISK_SIGN_FIGURES[sign](figuresBehindTheSigns) : null}
-        />
+      {companyInfo.riskSigns.map((sign, signIndex) => (
+        <Fragment key={sign}>
+          {signIndex > 0 && <RiskSeparator />}
+          <RiskSignTag sign={sign} figure={showFigures ? RISK_SIGN_FIGURES[sign](figuresBehindTheSigns) : null} />
+        </Fragment>
       ))}
     </>
   );
@@ -119,9 +134,9 @@ function NotChecked({ hint }: { hint: string }) {
 }
 
 /**
- * A stock's risk signs in a row, each with the figure that raised it when `showFigures`: "—" when it has none — not
- * green: having none is not a forecast —, "Not checked" when Finnhub never answered or gave none of its figures,
- * `notCheckedHints` saying which on hover.
+ * A stock's company risks in a line, each with the figure that raised it when `showFigures`: "No company risks" when it
+ * has none — in grey, not green: having none is not a forecast —, "Not checked" when Finnhub never answered or gave none
+ * of its figures, `notCheckedHints` saying which on hover.
  */
 export function RiskSigns({
   companyInfo,
@@ -137,16 +152,20 @@ export function RiskSigns({
   const notCheckedHint = notCheckedHintOf(companyInfo, notCheckedHints);
   if (notCheckedHint !== null) return <NotChecked hint={notCheckedHint} />;
   if ((companyInfo?.riskSigns ?? []).length === 0) {
-    return <span title="No risk signs: none of the five rules raised one">{EMPTY_VALUE}</span>;
+    return (
+      <span title="None of the five rules raised a company risk" className="text-muted">
+        No company risks
+      </span>
+    );
   }
   return (
-    <span className="inline-flex flex-wrap gap-1">
+    <span>
       <RiskSignTagList companyInfo={companyInfo} yearReturnPercent={yearReturnPercent} showFigures={showFigures} />
     </span>
   );
 }
 
-/** Under a drawer's key figures: "Risk signs", each with its figure, then the timing note when the report is due. */
+/** Under a scanned stock's key figures: "Company risks", each with its figure, then the timing note when it is due. */
 export function RiskSignsLine({
   companyInfo,
   yearReturnPercent,
@@ -157,14 +176,15 @@ export function RiskSignsLine({
   notCheckedHints: NotCheckedHints;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-caption">
-      <span className="text-muted">Risk signs</span>
-      <RiskSigns
-        companyInfo={companyInfo}
-        yearReturnPercent={yearReturnPercent}
-        showFigures
-        notCheckedHints={notCheckedHints}
-      />
+    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[13px]">
+      <LabeledValue label="Company risks">
+        <RiskSigns
+          companyInfo={companyInfo}
+          yearReturnPercent={yearReturnPercent}
+          showFigures
+          notCheckedHints={notCheckedHints}
+        />
+      </LabeledValue>
       <TimingNoteWhenDue companyInfo={companyInfo} />
     </div>
   );

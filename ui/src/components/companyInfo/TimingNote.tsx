@@ -1,4 +1,4 @@
-import { EMPTY_VALUE } from '../../lib/format';
+import { EMPTY_VALUE, formatDate } from '../../lib/format';
 import { HIGHLIGHTER_CLASS } from '../../lib/styles';
 import type { CompanyInfo, EarningsDate } from '../../types/portfolio';
 
@@ -14,16 +14,17 @@ const EARNINGS_HOURS: Record<string, string> = {
   dmh: 'during the session',
 };
 
-const TIMING_NOTE_HINT = 'A timing note, not a risk sign: it never lowers a stock.';
+const TIMING_NOTE_HINT = 'A timing note, not a company risk: it never lowers a stock.';
 
 function earningsHourText(earningsDate: EarningsDate): string | null {
   return earningsDate.hour === null ? null : (EARNINGS_HOURS[earningsDate.hour] ?? null);
 }
 
-/** "2026-11-12, after the close". */
+/** "12/11/2026, after the close". */
 export function earningsText(earningsDate: EarningsDate): string {
   const hour = earningsHourText(earningsDate);
-  return hour === null ? earningsDate.date : `${earningsDate.date}, ${hour}`;
+  const day = formatDate(earningsDate.date);
+  return hour === null ? day : `${day}, ${hour}`;
 }
 
 /** Whole days from today to a 'yyyy-MM-dd' date, on the calendar: 0 today, 1 tomorrow, below 0 before today. */
@@ -98,7 +99,7 @@ export function NextEarningsDate({
   if (earningsDate === null) {
     return <span title="No report in the next four months, in Finnhub’s calendar">{EMPTY_VALUE}</span>;
   }
-  const date = <span title={earningsText(earningsDate)}>{earningsDate.date}</span>;
+  const date = <span title={earningsText(earningsDate)}>{formatDate(earningsDate.date)}</span>;
   if (!companyInfo.reportsWithin14Days) return date;
   if (markPlacement === 'below') {
     return (

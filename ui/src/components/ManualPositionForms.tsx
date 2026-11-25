@@ -12,6 +12,7 @@ import {
   numberOrNull,
   trimmedOrNull,
 } from '../lib/formInput';
+import { formatDate } from '../lib/format';
 import { NUMBER_INPUT_CLASS, PRIMARY_BUTTON_CLASS, QUIET_DANGER_BUTTON_CLASS } from '../lib/styles';
 import type { ClosedPosition, ManualPositionRequest, NewManualPositionRequest } from '../types/portfolio';
 import { ClosedPositionTags, NO_REALIZED_PNL_REASON } from './ClosedPositionsTable';
@@ -105,7 +106,7 @@ function problemWithNewPosition(values: NewPositionValues, todayIsoDate: string)
   if (detailsProblem !== null) return detailsProblem;
   if (!isPositiveWholeNumber(values.quantityText)) return 'Enter a whole quantity greater than 0.';
   if (!isIsoDate(values.buyDate) || !isIsoDate(values.sellDate)) {
-    return 'Enter the buy date and the sell date as yyyy-MM-dd.';
+    return 'Enter the buy date and the sell date as dd/mm/yyyy.';
   }
   if (values.sellDate > todayIsoDate) return 'The sell date cannot be in the future.';
   if (values.sellDate < values.buyDate) return 'The sell date cannot be before the buy date.';
@@ -266,17 +267,17 @@ export function ClosedPositionModal({ onSaved, onClose }: { onSaved: () => Promi
   const updateFormValue = (field: keyof NewPositionValues) => (typedText: string) =>
     setFormValues((currentValues) => ({ ...currentValues, [field]: typedText }));
 
-  const handleSubmit = async () => {
+  /** Whether it saved: the modal then closes itself. */
+  const handleSubmit = async (): Promise<boolean> => {
     const problem = problemWithNewPosition(formValues, todayIsoDate);
     if (problem !== null) {
       setErrorMessage(problem);
-      return;
+      return false;
     }
-    const isSaved = await runSave(async () => {
+    return runSave(async () => {
       await addManualPosition(toNewManualPositionRequest(formValues, investorId));
       await onSaved();
     });
-    if (isSaved) onClose();
   };
 
   return (
@@ -286,7 +287,7 @@ export function ClosedPositionModal({ onSaved, onClose }: { onSaved: () => Promi
       size="wide"
       errorMessage={errorMessage}
       isSaving={isSaving}
-      onSubmit={() => void handleSubmit()}
+      onSubmit={handleSubmit}
       onClose={onClose}
     >
       <div className="grid grid-cols-4 gap-4">
@@ -360,7 +361,7 @@ function ManualPositionLine({ closedPosition }: { closedPosition: ClosedPosition
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
       <b className="font-semibold">{closedPosition.symbol}</b>
-      <ClosedPositionTags closedPosition={closedPosition} />· sold {closedPosition.closeDate} ·
+      <ClosedPositionTags closedPosition={closedPosition} />· sold {formatDate(closedPosition.closeDate)} ·
       {closedPosition.realizedPnl === null ? (
         <span title={NO_REALIZED_PNL_REASON}>no P&amp;L</span>
       ) : (

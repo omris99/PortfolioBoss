@@ -51,9 +51,6 @@ const HEADER_CELL_CLASS =
 const ROW_CELL_CLASS = 'h-12 whitespace-nowrap px-1.5 align-middle text-[13px] first:pl-4 last:pr-4';
 const LINE_CELL_CLASS = 'border-b px-1.5 pb-3 first:pl-4 last:pr-4 [tr:last-child_&]:border-b-0';
 
-/** The edge at the left of a row that buys — the row and its line —: it counts in the cash card. */
-const PLANNED_EDGE_CLASS = 'shadow-[inset_3px_0_0_var(--color-accent)]';
-
 function alignmentClassOf(isFigure: boolean): string {
   return isFigure ? 'text-right' : 'text-left';
 }
@@ -188,14 +185,13 @@ function AveragingTableRows({
 }) {
   const { averagingRow, typedTexts, rowResult } = entry;
   const { holding, holdingInAccount, averageCost } = averagingRow;
-  const isPlanned = rowResult.kind === 'purchase';
-  const plannedEdgeClass = isPlanned ? PLANNED_EDGE_CLASS : '';
+  // No edge marks a row that buys (round 6, the user's OK): the figures after the purchase and the cash card say it.
   const isFieldUnusable = (field: 'target' | 'amount') => rowResult.kind === 'unusable' && rowResult.field === field;
   const figureCellClass = `${ROW_CELL_CLASS} text-right`;
   return (
     <>
       <tr>
-        <td className={`${ROW_CELL_CLASS} w-[150px] ${plannedEdgeClass}`}>
+        <td className={`${ROW_CELL_CLASS} w-[150px]`}>
           <HoldingCell averagingRow={averagingRow} />
         </td>
         <td className={figureCellClass}>{formatQuantity(holdingInAccount.quantity)}</td>
@@ -229,7 +225,7 @@ function AveragingTableRows({
         <PurchaseCells rowResult={rowResult} />
       </tr>
       <tr>
-        <td className={`${LINE_CELL_CLASS} ${plannedEdgeClass}`} />
+        <td className={LINE_CELL_CLASS} />
         <td colSpan={COLUMNS.length - 1} className={LINE_CELL_CLASS}>
           <RowMessage rowResult={rowResult} />
           <WhatToKnowLine holding={holding} />

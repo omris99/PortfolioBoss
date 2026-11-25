@@ -4,6 +4,7 @@ import { Pencil } from 'lucide-react';
 import { useSaveAction } from '../../hooks/useSaveAction';
 import { cancelTaxConfirmation, confirmTaxDays, correctTaxConfirmation } from '../../lib/apiClient';
 import { INPUT_CLASS } from '../../lib/formInput';
+import { formatDate } from '../../lib/format';
 import { ICON_BUTTON_CLASS, LINK_BUTTON_CLASS, NUMBER_INPUT_CLASS, SECONDARY_BUTTON_CLASS } from '../../lib/styles';
 import type { SettlementDay } from '../../types/taxes';
 import { Field, FormError, SaveButton, Toggle } from '../FormFields';
@@ -100,7 +101,7 @@ function RecordedAmountFields({
         saveTypedAmount();
       }}
     >
-      <p className="text-section-title">What the broker recorded for {settlementDay.settlementDay}</p>
+      <p className="text-section-title">What the broker recorded for {formatDate(settlementDay.settlementDay)}</p>
       <div className="mt-3 flex flex-col gap-3">
         {isEntryKindAsked && (
           <Field label="Entry" isGroup>
@@ -160,7 +161,7 @@ export function BrokerRecordedAmountForm({
   return (
     <Popover.Root open={isOpen} onOpenChange={setIsOpen}>
       <Popover.Trigger
-        aria-label={`Type what the broker recorded for ${settlementDay.settlementDay}`}
+        aria-label={`Type what the broker recorded for ${formatDate(settlementDay.settlementDay)}`}
         className={pencilClassOf(isTheWayIn)}
       >
         <Pencil size={14} />
@@ -169,8 +170,8 @@ export function BrokerRecordedAmountForm({
         <Popover.Content
           align="end"
           sideOffset={6}
-          aria-label={`What the broker recorded for ${settlementDay.settlementDay}`}
-          className="z-30 w-[340px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] text-ink shadow-raised"
+          aria-label={`What the broker recorded for ${formatDate(settlementDay.settlementDay)}`}
+          className="popover-motion z-30 w-[340px] rounded-md border bg-surface-raised px-4 py-3 text-[13px] text-ink shadow-raised"
         >
           <RecordedAmountFields
             settlementDay={settlementDay}

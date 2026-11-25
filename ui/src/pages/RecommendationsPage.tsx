@@ -5,11 +5,13 @@ import { HelpPopover } from '../components/HelpPopover';
 import { PageHeader } from '../components/PageHeader';
 import { AnalysisDetailLine } from '../components/recommendations/AnalysisDetailLine';
 import { RowAnalyzeButton } from '../components/recommendations/AnalyzeButtons';
-import { CandidateDrawer } from '../components/recommendations/CandidateDrawer';
+import { DrawerShell } from '../components/DrawerShell';
+import { CandidateDrawer, candidateDrawerLabelOf } from '../components/recommendations/CandidateDrawer';
 import { CORRECTING_COLUMNS, HOT_COLUMNS, TOO_HOT_COLUMNS } from '../components/recommendations/hotStockColumns';
 import { RecommendationCard } from '../components/recommendations/RecommendationCard';
 import { ScanCard } from '../components/recommendations/ScanCard';
 import { StockListCard } from '../components/recommendations/StockListCard';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useRecommendationAnalysis } from '../hooks/useRecommendationAnalysis';
 import { useReadingFromTws } from '../hooks/useReadingFromTws';
 import { useRecommendations } from '../hooks/useRecommendations';
@@ -74,6 +76,7 @@ export function RecommendationsPage({ snapshot }: { snapshot: PortfolioSnapshot 
 
   const allStocks = stocksInPageOrder(recommendations);
   const openStock = allStocks.find((stock) => stock.candidateId === openCandidateId) ?? null;
+  useDocumentTitle('Recommendations', openStock?.symbol ?? null);
 
   const openDrawer = (candidateId: number) =>
     navigate(`/recommendations/${candidateId}`, { state: OPENED_FROM_TABLE });
@@ -93,7 +96,7 @@ export function RecommendationsPage({ snapshot }: { snapshot: PortfolioSnapshot 
     <>
       <PageHeader
         title="Recommendations"
-        description={<span className="text-faint">US stocks in a long upward trend, from IB’s scan</span>}
+        description="US stocks in a long upward trend, from IB’s scan."
       />
       {isFirstLoad ? (
         <EmptyBox message={isLoading ? 'Loading the scan…' : (errorMessage ?? 'No data.')} />
@@ -146,21 +149,25 @@ export function RecommendationsPage({ snapshot }: { snapshot: PortfolioSnapshot 
           )}
         </div>
       )}
+      {/* One shell while a drawer is open, a new drawer in it per stock: ‹ › fade the next one in. */}
       {openStock !== null && (
-        <CandidateDrawer
-          key={openStock.candidateId}
-          stock={openStock}
-          previousSymbol={neighbourOf(allStocks, openStock.candidateId, -1).symbol}
-          nextSymbol={neighbourOf(allStocks, openStock.candidateId, 1).symbol}
-          onPrevious={() => stepTo(neighbourOf(allStocks, openStock.candidateId, -1))}
-          onNext={() => stepTo(neighbourOf(allStocks, openStock.candidateId, 1))}
-          onClose={closeDrawer}
-          estimate={estimate}
-          analysisState={analysisState}
-          onAnalyze={analyze}
-          weightsTabs={weightsTabsOf(openHoldings, snapshot.totalCashValue, snapshot.investors)}
-          openHoldings={openHoldings}
-        />
+        <DrawerShell ariaLabel={candidateDrawerLabelOf(openStock)} onClose={closeDrawer}>
+          <CandidateDrawer
+            key={openStock.candidateId}
+            stock={openStock}
+            navigation={{
+              previousLabel: neighbourOf(allStocks, openStock.candidateId, -1).symbol,
+              nextLabel: neighbourOf(allStocks, openStock.candidateId, 1).symbol,
+              onPrevious: () => stepTo(neighbourOf(allStocks, openStock.candidateId, -1)),
+              onNext: () => stepTo(neighbourOf(allStocks, openStock.candidateId, 1)),
+            }}
+            estimate={estimate}
+            analysisState={analysisState}
+            onAnalyze={analyze}
+            weightsTabs={weightsTabsOf(openHoldings, snapshot.totalCashValue, snapshot.investors)}
+            openHoldings={openHoldings}
+          />
+        </DrawerShell>
       )}
     </>
   );

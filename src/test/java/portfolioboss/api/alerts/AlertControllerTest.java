@@ -11,6 +11,7 @@ import portfolioboss.alerts.AlertService;
 import portfolioboss.api.alerts.response.AlertResponse;
 import portfolioboss.api.alerts.response.AlertSettingResponse;
 import portfolioboss.api.alerts.response.AlertsResponse;
+import portfolioboss.model.alerts.AlertGroup;
 import portfolioboss.model.alerts.AlertType;
 
 import java.math.BigDecimal;
@@ -52,7 +53,7 @@ class AlertControllerTest {
         given(alertsReadService.currentAlerts()).willReturn(new AlertsResponse(
                 List.of(new AlertResponse(2, AlertType.ANALYST_CUT_TARGET, 8101, "ABCD", 12L,
                         "Morgan Stanley cut its target to 410.00 from 450.00", Instant.parse("2026-11-11T21:40:00Z"),
-                        null)),
+                        null, AlertGroup.YOUR_HOLDINGS)),
                 List.of(new AlertSettingResponse(AlertType.ABOVE_WEIGHT_LIMIT, true, BigDecimal.valueOf(20),
                         BigDecimal.valueOf(15)))));
 
@@ -63,6 +64,7 @@ class AlertControllerTest {
                 .andExpect(jsonPath("$.alerts[0].holdingId").value(12))
                 .andExpect(jsonPath("$.alerts[0].createdAt").value("2026-11-11T21:40:00Z"))
                 .andExpect(jsonPath("$.alerts[0].seenAt").isEmpty())
+                .andExpect(jsonPath("$.alerts[0].group").value("YOUR_HOLDINGS"))
                 .andExpect(jsonPath("$.settings[0].threshold").value(20))
                 .andExpect(jsonPath("$.settings[0].defaultThreshold").value(15));
     }

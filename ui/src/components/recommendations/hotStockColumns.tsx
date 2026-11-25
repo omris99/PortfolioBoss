@@ -5,7 +5,7 @@ import type { Investor } from '../../types/portfolio';
 import type { HotStock } from '../../types/recommendations';
 import { TargetCell } from '../AnalystTarget';
 import { RecoveringTag } from '../companyInfo/RiskSigns';
-import { MomentumChip } from '../Momentum';
+import { MomentumMark } from '../Momentum';
 import {
   correlationsHint,
   correlationText,
@@ -175,7 +175,7 @@ export const MOMENTUM_COLUMN: HotStockColumn = {
   title: 'Momentum',
   alignment: 'left',
   widthClass: 'w-[120px]',
-  renderValue: (stock) => <MomentumChip momentum={stock.momentum} />,
+  renderValue: (stock) => <MomentumMark momentum={stock.momentum} />,
 };
 
 export const MOVES_WITH_COLUMN: HotStockColumn = {

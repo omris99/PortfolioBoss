@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from 'react';
 import { ArrowRight, ChevronRight, Clock } from 'lucide-react';
-import { EMPTY_VALUE, formatShekels, formatSignedShekels, profitLossColorClass } from '../../lib/format';
+import { EMPTY_VALUE, formatDate, formatShekels, formatSignedShekels, profitLossColorClass } from '../../lib/format';
 import { tableRowClass } from '../../lib/styles';
 import type { SettlementDay } from '../../types/taxes';
 import { HelpOnHover } from '../HelpOnHover';
@@ -19,7 +19,7 @@ const DAY_CELL_CLASS = 'h-[52px] whitespace-nowrap px-3';
 /** "Traded 2026-06-18" — the days of the day's sales, when there are any (a day of fees has none). */
 function tradeDaysText(settlementDay: SettlementDay): string | null {
   const tradeDays = [...new Set(settlementDay.sales.map((sale) => sale.tradeDate))];
-  return tradeDays.length === 0 ? null : `Traded ${tradeDays.join(', ')}`;
+  return tradeDays.length === 0 ? null : `Traded ${tradeDays.map((tradeDay) => formatDate(tradeDay)).join(', ')}`;
 }
 
 /** Whether anything of the day is calculated: a sale, or a fee whose rate is known. */
@@ -122,7 +122,7 @@ export function SettlementDayRows({
         </td>
         <td className={`${DAY_CELL_CLASS} tabular-nums`}>
           <span className="inline-flex items-center gap-1">
-            {settlementDay.settlementDay}
+            {formatDate(settlementDay.settlementDay)}
             {tradeDays !== null && <HelpOnHover label="When the sales were made">{tradeDays}</HelpOnHover>}
           </span>
         </td>

@@ -19,6 +19,7 @@ import portfolioboss.db.alerts.AlertSettingEntity;
 import portfolioboss.db.alerts.AlertSettingRepository;
 import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
+import portfolioboss.model.alerts.AlertGroup;
 import portfolioboss.model.alerts.AlertType;
 import portfolioboss.sync.PortfolioSyncService;
 
@@ -27,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * What the bell reads ({@code GET /api/alerts}) against the real PostgreSQL test database: the alerts are stored here
@@ -87,6 +89,29 @@ class AlertsReadServiceTest {
             assertThat(alert.symbol()).isEqualTo("HOTA");
             assertThat(alert.holdingId()).isNull();
         });
+    }
+
+    /**
+     * The panel's two groups (the user's rule: a stock held is first of all a holding). WXYZ is sold before the alerts are
+     * read: its short-list alert is then a stock not held, while its warning stays a holding's own.
+     */
+    @Test
+    void onlyAShortListAlertOfAStockNotHeldNowIsInTheShortListGroup() {
+        portfolioSyncService.sync(new PortfolioSnapshot(ACCOUNT, SYNCED_AT.plusSeconds(3600), 70_000.0, 50_000.0,
+                List.of(holdingOf("ABCD", ABCD_CON_ID))));
+        storeAlert(AlertType.ENTERED_SHORT_LIST, HOTA_CON_ID, "HOTA", SYNCED_AT);
+        storeAlert(AlertType.ENTERED_SHORT_LIST, ABCD_CON_ID, "ABCD", SYNCED_AT.plusSeconds(60));
+        storeAlert(AlertType.ENTERED_SHORT_LIST, WXYZ_CON_ID, "WXYZ", SYNCED_AT.plusSeconds(120));
+        storeAlert(AlertType.TRADES_DONT_MATCH_IB, WXYZ_CON_ID, "WXYZ", SYNCED_AT.plusSeconds(180));
+
+        List<AlertResponse> alerts = alertsReadService.currentAlerts().alerts();
+
+        assertThat(alerts).extracting(alert -> alert.alertType() + " " + alert.symbol(), AlertResponse::group)
+                .containsExactly(
+                        tuple("TRADES_DONT_MATCH_IB WXYZ", AlertGroup.YOUR_HOLDINGS),
+                        tuple("ENTERED_SHORT_LIST WXYZ", AlertGroup.SHORT_LIST),
+                        tuple("ENTERED_SHORT_LIST ABCD", AlertGroup.YOUR_HOLDINGS),
+                        tuple("ENTERED_SHORT_LIST HOTA", AlertGroup.SHORT_LIST));
     }
 
     @Test

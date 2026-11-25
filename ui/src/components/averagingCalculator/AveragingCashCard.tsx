@@ -18,7 +18,13 @@ function purchaseCountText(purchaseCount: number): string {
 }
 
 /** "3 purchases · 6,325.95 + commissions 15.00 = 6,340.95", and "Cash left 6,066.85" while the cash covers it. */
-function PlanTotalText({ planTotal, isShort }: { planTotal: PlanTotal; isShort: boolean }) {
+function PlanTotalText({
+  planTotal,
+  costsMoreThanTheCash,
+}: {
+  planTotal: PlanTotal;
+  costsMoreThanTheCash: boolean;
+}) {
   return (
     <>
       <Separator />
@@ -28,7 +34,7 @@ function PlanTotalText({ planTotal, isShort }: { planTotal: PlanTotal; isShort: 
         {formatMoney(planTotal.amount)} + commissions {formatMoney(planTotal.commissions)} ={' '}
         <b className="font-semibold">{formatMoney(planTotal.total)}</b>
       </span>
-      {!isShort && (
+      {!costsMoreThanTheCash && (
         <>
           <Separator />
           <span>
@@ -53,15 +59,19 @@ export function AveragingCashCard({
   onClear,
 }: {
   tab: InvestmentsAndCash;
-  /** The tab's cash: below zero when stocks were bought with borrowed money — every purchase is short then. */
+  /** The tab's cash: below zero when stocks were bought with borrowed money — every purchase costs more than it then. */
   cash: number;
   planTotal: PlanTotal;
   onClear: () => void;
 }) {
   const hasPurchases = planTotal.purchaseCount > 0;
-  const isShort = planTotal.cashLeft < 0;
+  const costsMoreThanTheCash = planTotal.cashLeft < 0;
   return (
-    <section aria-label="Cash and plan" className={`${CARD_CLASS} sticky top-2 z-10 px-5 py-3 shadow-raised`}>
+    // It sticks 8px under the top bar, which stays on screen too.
+    <section
+      aria-label="Cash and plan"
+      className={`${CARD_CLASS} sticky top-[calc(theme(spacing.topbar)_+_8px)] z-10 px-5 py-3 shadow-raised`}
+    >
       <div className="flex min-h-[32px] flex-wrap items-center gap-2">
         <Wallet size={16} aria-hidden="true" className="shrink-0 text-muted" />
         <span className="inline-flex items-baseline gap-1.5 text-muted">
@@ -72,7 +82,7 @@ export function AveragingCashCard({
         </span>
         {hasPurchases ? (
           <>
-            <PlanTotalText planTotal={planTotal} isShort={isShort} />
+            <PlanTotalText planTotal={planTotal} costsMoreThanTheCash={costsMoreThanTheCash} />
             <button type="button" onClick={onClear} className={`${SMALL_SECONDARY_BUTTON_CLASS} ml-auto`}>
               Clear
             </button>
@@ -83,12 +93,13 @@ export function AveragingCashCard({
           </span>
         )}
       </div>
-      {hasPurchases && isShort && (
+      {/* Not "96.15 short": in an investing app, "short" reads as selling short (the user's note). */}
+      {hasPurchases && costsMoreThanTheCash && (
         <p role="status" className="mt-2 flex items-center gap-2 border-t pt-2 text-[13px] font-medium text-warn-real">
           <WarnMark level="real" />
           <span>
-            {formatMoney(-planTotal.cashLeft)} short: the purchases and their commissions come to{' '}
-            {formatMoney(planTotal.total)}, more than the cash of {formatMoney(cash)}
+            <b className="font-semibold">Not enough cash:</b> the purchases and their commissions come to{' '}
+            {formatMoney(planTotal.total)} — {formatMoney(-planTotal.cashLeft)} more than the cash of {formatMoney(cash)}.
           </span>
         </p>
       )}

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { ArrowRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { deleteTrade } from '../lib/apiClient';
-import { EMPTY_VALUE, formatMoney, formatQuantity } from '../lib/format';
+import { EMPTY_VALUE, formatDate, formatMoney, formatQuantity } from '../lib/format';
 import {
   DELETE_ICON_BUTTON_CLASS,
   ICON_BUTTON_CLASS,
@@ -69,7 +69,7 @@ function TradeRow({
   return (
     <>
       <tr>
-        <td className={cellClass}>{trade.tradeDate}</td>
+        <td className={cellClass}>{formatDate(trade.tradeDate)}</td>
         <td className={cellClass}>
           <span className={sideTextClass(trade.side === 'SELL')}>{trade.side}</span>
         </td>
@@ -231,7 +231,7 @@ function tradeLineOf(
   const { quantity, price } = quantityAndPriceAfterTheSplits(trade, translatedTrade);
   const beforeTheSplit = translatedTrade === null ? '' : ` (${tradeBeforeTheSplitText(trade)})`;
   const investor = investorName === null ? '' : ` · ${investorName}`;
-  return `${trade.tradeDate} · ${trade.side} ${formatQuantity(quantity)} ${symbol} at ${formatMoney(price)}${beforeTheSplit}${investor}`;
+  return `${formatDate(trade.tradeDate)} · ${trade.side} ${formatQuantity(quantity)} ${symbol} at ${formatMoney(price)}${beforeTheSplit}${investor}`;
 }
 
 /** No trades yet: for a holding being backfilled, what the form will start as. */

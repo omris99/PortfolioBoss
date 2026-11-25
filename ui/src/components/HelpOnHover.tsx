@@ -46,7 +46,7 @@ export function HelpOnHover({
             sideOffset={4}
             onClick={keepFromTheRowAround}
             // Above the drawer (z-40) and a modal (z-50), like the other explanations.
-            className="z-[60] w-max max-w-[300px] rounded-md border bg-surface-raised px-3 py-2 text-[13px] font-normal leading-[18px] text-ink shadow-raised"
+            className="hint-motion z-[60] w-max max-w-[300px] rounded-md border bg-surface-raised px-3 py-2 text-[13px] font-normal leading-[18px] text-ink shadow-raised"
           >
             {children}
           </Tooltip.Content>

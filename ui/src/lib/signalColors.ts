@@ -13,20 +13,20 @@ import type {
  */
 type SignalTone = 'good' | 'inBetween' | 'warning' | 'plain';
 
-/** A small label: a tinted background behind the text. */
-const LABEL_CLASSES: Record<SignalTone, string> = {
-  good: 'bg-positive-soft text-positive',
-  inBetween: 'bg-inbetween-soft text-inbetween',
-  warning: 'bg-negative-soft text-negative',
-  plain: 'bg-unknown-soft text-unknown',
-};
-
-/** The same tones as text alone: the momentum score in the Signal column. */
+/** The tones as text: a verdict's word, a momentum score. No tinted background since round 6 — verdicts are words. */
 const TEXT_CLASSES: Record<SignalTone, string> = {
   good: 'text-positive',
   inBetween: 'text-inbetween',
   warning: 'text-negative',
   plain: 'text-unknown',
+};
+
+/** The same tones as the fill of a drawing: the momentum mark's bars. */
+const FILL_CLASSES: Record<SignalTone, string> = {
+  good: 'fill-positive',
+  inBetween: 'fill-inbetween',
+  warning: 'fill-negative',
+  plain: 'fill-unknown',
 };
 
 /** The dot: filled in its colour, an empty ring while there is none. */
@@ -79,9 +79,14 @@ export const SIGNAL_TONES: Record<HoldingSignal, SignalTone> = {
   RED: 'warning',
 };
 
-/** The label classes for a value, e.g. `labelClassOf(momentum.label, MOMENTUM_TONES)`; grey when it is unknown. */
+/** A verdict's color for a value, e.g. `labelClassOf(rating, RATING_TONES)`; grey when it is unknown. */
 export function labelClassOf<Value extends string>(value: Value | null, tones: Record<Value, SignalTone>): string {
-  return LABEL_CLASSES[value === null ? 'plain' : tones[value]];
+  return TEXT_CLASSES[value === null ? 'plain' : tones[value]];
+}
+
+/** The fill of a drawing for a value, e.g. `fillClassOf(momentum.label, MOMENTUM_TONES)`; grey when it is unknown. */
+export function fillClassOf<Value extends string>(value: Value | null, tones: Record<Value, SignalTone>): string {
+  return FILL_CLASSES[value === null ? 'plain' : tones[value]];
 }
 
 /** The text colour alone for a value, e.g. `textClassOf(momentum.label, MOMENTUM_TONES)`; grey when it is unknown. */

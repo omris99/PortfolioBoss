@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   EMPTY_VALUE,
+  formatDate,
   formatDayCount,
   formatHoldingPeriod,
   formatMoney,
@@ -11,7 +12,14 @@ import {
 } from '../lib/format';
 import type { ClosedPosition, TranslatedTrade } from '../types/portfolio';
 import { ClosedPositionTags } from './ClosedPositionsTable';
-import { DrawerFrame, KeyFigure, KeyFigureExtra, KeyFigures, type DrawerTab } from './DrawerFrame';
+import {
+  DrawerFrame,
+  KeyFigure,
+  KeyFigureExtra,
+  KeyFigures,
+  type DrawerNavigation,
+  type DrawerTab,
+} from './DrawerFrame';
 import { hasSeveralInvestors, investorNameOf, useInvestors } from './InvestorsContext';
 import { InvestorSplitTable, isShared, type SplitPosition } from './InvestorSplitTable';
 import { ManualPositionDetails } from './ManualPositionForms';
@@ -20,12 +28,12 @@ import { WarningBand } from './WarnMark';
 
 type ClosedTab = 'details' | 'trades' | 'byInvestor';
 
-/** "Technology · Investor Dana · Bought 2024-11-04 → sold 2026-06-18 · Commission 10.00" under the symbol. */
+/** "Technology · Investor Dana · Bought 04/11/2024 → sold 18/06/2026 · Commission 10.00" under the symbol. */
 function sublineOf(closedPosition: ClosedPosition, investorName: string | null): string {
   return [
     closedPosition.sector ?? 'No sector',
     investorName === null ? null : `Investor ${investorName}`,
-    `Bought ${closedPosition.openDate} → sold ${closedPosition.closeDate}`,
+    `Bought ${formatDate(closedPosition.openDate)} → sold ${formatDate(closedPosition.closeDate)}`,
     `Commission ${formatMoney(closedPosition.commissions)}`,
   ]
     .filter((part) => part !== null)
@@ -71,32 +79,30 @@ function ClosedKeyFigures({ closedPosition }: { closedPosition: ClosedPosition }
   );
 }
 
+/** The drawer's name, what a screen reader announces when it opens: "MSFT closed position". */
+export function closedDrawerLabelOf(closedPosition: ClosedPosition): string {
+  return `${closedPosition.symbol} closed position`;
+}
+
 /**
  * A closed position's details over the Closed table, on the same frame as a holding's drawer with only the tabs that
  * apply. A holding's sold period has one: its trades, read-only, with a link to correct them in Positions. A manual
  * position has Details (editable, and Delete position), Trades (add, correct, delete) and, when shared, By investor.
  * `closedPositions` are every closed position, for the manual position's split by investor. `translatedTradesOfItsHolding`
- * are the trades of its holding a split translated (`holding.translatedTrades`); none for a manual position.
+ * are the trades of its holding a split translated (`holding.translatedTrades`); none for a manual position. It sits in
+ * the `DrawerShell` the page keeps open, which closes it.
  */
 export function ClosedDrawer({
   closedPosition,
   closedPositions,
   translatedTradesOfItsHolding,
-  previousLabel,
-  nextLabel,
-  onPrevious,
-  onNext,
-  onClose,
+  navigation,
   onDataChanged,
 }: {
   closedPosition: ClosedPosition;
   closedPositions: ClosedPosition[];
   translatedTradesOfItsHolding: TranslatedTrade[];
-  previousLabel: string;
-  nextLabel: string;
-  onPrevious: () => void;
-  onNext: () => void;
-  onClose: () => void;
+  navigation: DrawerNavigation;
   onDataChanged: () => Promise<void>;
 }) {
   const investors = useInvestors();
@@ -161,7 +167,6 @@ export function ClosedDrawer({
   const investorName = hasSeveralInvestors(investors) ? investorNameOf(investors, closedPosition.investorId) : null;
   return (
     <DrawerFrame
-      ariaLabel={`${closedPosition.symbol} closed position`}
       title={closedPosition.symbol}
       currency={closedPosition.currency}
       tags={<ClosedPositionTags closedPosition={closedPosition} />}
@@ -171,11 +176,7 @@ export function ClosedDrawer({
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      previousLabel={previousLabel}
-      nextLabel={nextLabel}
-      onPrevious={onPrevious}
-      onNext={onNext}
-      onClose={onClose}
+      navigation={navigation}
     >
       {panelOf(activeTab)}
     </DrawerFrame>

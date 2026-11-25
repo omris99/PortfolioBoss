@@ -1,6 +1,7 @@
 import {
   EMPTY_VALUE,
   formatAmountInItsCurrency,
+  formatDate,
   formatExchangeRate,
   formatQuantity,
   formatShekels,
@@ -132,9 +133,9 @@ function SharesSoldTableRow({ row, partCount }: { row: SharesSoldRow; partCount:
       <td className={CELL_CLASS}>
         {startsANewBuy && (
           <span className="inline-flex items-center gap-1">
-            {sharesSold.buyTradeDate}
+            {formatDate(sharesSold.buyTradeDate)}
             <HelpOnHover label="When the buy settled">
-              Settled {sharesSold.buySettlementDay}
+              Settled {formatDate(sharesSold.buySettlementDay)}
               {sharesSold.buyRate !== null && ` · rate ${formatExchangeRate(sharesSold.buyRate)}`}
             </HelpOnHover>
           </span>

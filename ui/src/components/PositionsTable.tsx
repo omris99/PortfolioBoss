@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import {
+  ACCOUNT_CURRENCY,
   EMPTY_VALUE,
   formatDate,
   formatMoney,
@@ -9,21 +10,17 @@ import {
   formatSignedPercent,
   profitLossColorClass,
 } from '../lib/format';
-import {
-  TABLE_CELL_CLASS,
-  TABLE_CLASS,
-  TABLE_HEADER_CELL_CLASS,
-  TAG_CLASS,
-  tableRowClass,
-} from '../lib/styles';
+import { TABLE_CLASS, TAG_CLASS, tableRowClass } from '../lib/styles';
 import type { Holding, HoldingSignal } from '../types/portfolio';
-import { TargetCell } from './AnalystTarget';
+import { TargetUpside } from './AnalystTarget';
 import type { ColumnChoice } from './ColumnsMenu';
 import { NextEarningsDate } from './companyInfo/TimingNote';
+import { SkeletonBar } from './firstLoad/SkeletonBar';
 import { HelpPopover } from './HelpPopover';
 import { HoldingPeriod } from './HoldingPeriod';
 import { HoldingWarningMark } from './HoldingWarnings';
 import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
+import { MomentumMark } from './Momentum';
 import { SectorCell } from './SectorCell';
 import { SignalCell, SignalCellLegend } from './Signal';
 
@@ -90,26 +87,53 @@ function sortStateAfterClicking(currentSort: SortState, clickedColumn: ColumnDef
 
 // ── columns ─────────────────────────────────────────────────────────────────────────────────────
 
-/** What a cell can do beyond showing a value: an editable cell reloads the portfolio after saving. */
-interface TableActions {
-  onDataChanged: () => Promise<void>;
-}
-
 /** Everything about one column lives here: adding a column means adding one entry to {@link POSITION_COLUMNS}. */
 interface ColumnDefinition extends ColumnChoice {
+  /**
+   * A column of two figures, one over the other, says both in its header, each line over its figure: "Avg cost" over
+   * "Last". Without it the header is the title.
+   */
+  headerLines?: [string, string];
   alignment: 'left' | 'right';
   /** What the column sorts by; an empty value (`null`) always sorts last. */
   sortValue: (holding: Holding) => SortValue | null;
   /** The order on the first click: A→Z for text, oldest (or nearest) first for dates, largest first for numbers. */
   firstSortDirection: SortDirection;
-  renderValue: (holding: Holding, tableActions: TableActions) => ReactNode;
+  renderValue: (holding: Holding) => ReactNode;
   /** Text colour classes for the cell, on an open holding; a closed one's cells are all muted. */
   valueColorClass?: (holding: Holding) => string;
+  /**
+   * The first load's grey bars in this column's cells, row after row, round again after the last: each row's widths in
+   * px, two for a cell of two lines (the sector over the industry, a figure over the one under it).
+   */
+  barWidthsWhileLoading: number[][];
 }
 
+/**
+ * Two figures that belong together in one column, the first over the second (round 6, DESIGN_BRIEF.md §11.6, rule 3 —
+ * so that the table fits its card with every column on): the second a size smaller, in `secondColorClass`.
+ */
+function TwoFigures({
+  first,
+  second,
+  secondColorClass = 'text-muted',
+}: {
+  first: ReactNode;
+  second: ReactNode;
+  secondColorClass?: string;
+}) {
+  return (
+    <span className="inline-block leading-[18px]">
+      <span className="block">{first}</span>
+      <span className={`block text-caption ${secondColorClass}`}>{second}</span>
+    </span>
+  );
+}
+
+/** The symbol, then its warning triangle and a closed holding's tag, wrapping under it in a narrow column. */
 function SymbolWithStatus({ holding }: { holding: Holding }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex max-w-[92px] flex-wrap items-center gap-x-1.5 gap-y-0.5">
       <span className="font-semibold">{holding.symbol}</span>
       <HoldingWarningMark warnings={holding.warnings} />
       {isClosed(holding) && <span className={TAG_CLASS}>closed</span>}
@@ -118,38 +142,54 @@ function SymbolWithStatus({ holding }: { holding: Holding }) {
 }
 
 /**
- * "39 (15 · 24)": IB's quantity, and how it divides — the account owner's part first, then each other investor's.
- * Hovering names them: "Me 15 · Avi 24". Just "39" while nobody but the account owner holds any of it.
+ * IB's quantity, and under it how it divides when two investors or more hold some — "30 · 20", the account owner's part
+ * first, only the investors holding some (never "0 · 30"). Hovering names them: "Omri 30 · Dana 20".
  */
 function QuantityWithSplit({ holding }: { holding: Holding }) {
   const investors = useInvestors();
   const accountOwner = accountOwnerOf(investors);
-  const otherInvestorsParts = holding.investorQuantities.filter((part) => part.investorId !== accountOwner?.id);
-  if (accountOwner === null || otherInvestorsParts.length === 0) return <>{formatQuantity(holding.position)}</>;
+  const partsHeld = holding.investorQuantities.filter((part) => part.quantity > 0);
+  if (partsHeld.length < 2) return <>{formatQuantity(holding.position)}</>;
 
-  // 0 when the others hold all of it: the account owner's part is still shown, so the split reads the same way.
-  const accountOwnerQuantity =
-    holding.investorQuantities.find((part) => part.investorId === accountOwner.id)?.quantity ?? 0;
-  const parts = [{ investorId: accountOwner.id, quantity: accountOwnerQuantity }, ...otherInvestorsParts];
-  const split = parts.map((part) => formatQuantity(part.quantity)).join(' · ');
-  const namedSplit = parts
+  const partsInOrder = [
+    ...partsHeld.filter((part) => part.investorId === accountOwner?.id),
+    ...partsHeld.filter((part) => part.investorId !== accountOwner?.id),
+  ];
+  const namedSplit = partsInOrder
     .map((part) => `${investorNameOf(investors, part.investorId)} ${formatQuantity(part.quantity)}`)
     .join(' · ');
   return (
     <span title={namedSplit}>
-      {formatQuantity(holding.position)} <span className="text-faint">({split})</span>
+      <TwoFigures
+        first={formatQuantity(holding.position)}
+        second={partsInOrder.map((part) => formatQuantity(part.quantity)).join(' · ')}
+        secondColorClass="text-faint"
+      />
     </span>
   );
 }
 
-/** "18,726.00 USD", the currency small: holdings in other currencies don't add up with these. */
+/** "18,726.00": no currency in the account's dollars (round 6); another currency's code small after it — "HKD". */
 function MarketValue({ holding }: { holding: Holding }) {
-  if (holding.marketValue === null) return <>{formatMoney(null)}</>;
+  if (holding.marketValue === null || holding.currency === ACCOUNT_CURRENCY) return <>{formatMoney(holding.marketValue)}</>;
   return (
     <>
       {formatMoney(holding.marketValue)}
       <span className="ml-1 text-[11px] text-faint">{holding.currency}</span>
     </>
+  );
+}
+
+/** The analysts' median target, its upside under it; "—" without one. A closed holding's is no longer read. */
+function AnalystTargetFigures({ holding }: { holding: Holding }) {
+  if (isClosed(holding) || holding.analystTarget.medianTarget === null) {
+    return isClosed(holding) ? <>{EMPTY_VALUE}</> : <TargetUpside analystTarget={holding.analystTarget} />;
+  }
+  return (
+    <TwoFigures
+      first={formatMoney(holding.analystTarget.medianTarget)}
+      second={<TargetUpside analystTarget={holding.analystTarget} />}
+    />
   );
 }
 
@@ -167,12 +207,15 @@ function signalSortValue(holding: Holding): number | null {
 }
 
 /**
- * Every column, in the table's order; `isShownByDefault` are the eight shown until the Columns menu says otherwise.
- * The dates and the holding period are derived from the trades entered by hand.
+ * Every column, in the table's order (round 6: Sector second, a Momentum column, the unrealized P&L one column, two
+ * figures that belong together in one); `isShownByDefault` are the eight shown until the Columns menu says otherwise.
+ * With every column on, the table fits its card from 1280px. The dates and the holding period are derived from the
+ * trades entered by hand.
  */
 export const POSITION_COLUMNS: ColumnDefinition[] = [
   {
     key: 'symbol',
+    barWidthsWhileLoading: [[44], [52], [40], [48]],
     title: 'Symbol',
     isShownByDefault: true,
     isAlwaysShown: true,
@@ -182,8 +225,24 @@ export const POSITION_COLUMNS: ColumnDefinition[] = [
     renderValue: (holding) => <SymbolWithStatus holding={holding} />,
   },
   {
-    // The dot, the warning signs and the momentum score in one column (AI_ANALYSIS_TODO.md, decision 15).
+    key: 'sector',
+    barWidthsWhileLoading: [[96, 76], [120, 96], [84, 68], [110, 88]],
+    title: 'Sector',
+    isShownByDefault: true,
+    alignment: 'left',
+    sortValue: (holding) => holding.sector,
+    firstSortDirection: 'ascending',
+    // A long pair of words wraps, never cut (round 6): "Consumer, Non-cyclical".
+    renderValue: (holding) => (
+      <span className="block max-w-[150px] whitespace-normal leading-[18px]">
+        <SectorCell holding={holding} />
+      </span>
+    ),
+  },
+  {
+    // The dot and the warning signs it found (AI_ANALYSIS_TODO.md, decision 15); the momentum has its own column.
     key: 'signal',
+    barWidthsWhileLoading: [[150], [120], [140], [96]],
     title: 'Signal',
     isShownByDefault: true,
     alignment: 'left',
@@ -192,16 +251,18 @@ export const POSITION_COLUMNS: ColumnDefinition[] = [
     renderValue: (holding) => <SignalCell holding={holding} />,
   },
   {
-    key: 'sector',
-    title: 'Sector',
+    key: 'momentum',
+    barWidthsWhileLoading: [[60], [64]],
+    title: 'Momentum',
     isShownByDefault: true,
     alignment: 'left',
-    sortValue: (holding) => holding.sector,
-    firstSortDirection: 'ascending',
-    renderValue: (holding) => <SectorCell holding={holding} />,
+    sortValue: (holding) => holding.momentum?.score ?? null,
+    firstSortDirection: 'descending',
+    renderValue: (holding) => <MomentumMark momentum={holding.momentum} />,
   },
   {
     key: 'position',
+    barWidthsWhileLoading: [[28], [36]],
     title: 'Qty',
     isShownByDefault: true,
     alignment: 'right',
@@ -210,25 +271,8 @@ export const POSITION_COLUMNS: ColumnDefinition[] = [
     renderValue: (holding) => <QuantityWithSplit holding={holding} />,
   },
   {
-    key: 'averageCost',
-    title: 'Avg cost',
-    isShownByDefault: false,
-    alignment: 'right',
-    sortValue: (holding) => holding.averageCost,
-    firstSortDirection: 'descending',
-    renderValue: (holding) => formatMoney(holding.averageCost),
-  },
-  {
-    key: 'marketPrice',
-    title: 'Last',
-    isShownByDefault: false,
-    alignment: 'right',
-    sortValue: (holding) => holding.marketPrice,
-    firstSortDirection: 'descending',
-    renderValue: (holding) => formatMoney(holding.marketPrice),
-  },
-  {
     key: 'marketValue',
+    barWidthsWhileLoading: [[80], [72], [88]],
     title: 'Market value',
     isShownByDefault: true,
     alignment: 'right',
@@ -237,38 +281,62 @@ export const POSITION_COLUMNS: ColumnDefinition[] = [
     renderValue: (holding) => <MarketValue holding={holding} />,
   },
   {
+    // One column, the amount over its percent (the user's ask, round 6).
     key: 'unrealizedPnl',
+    barWidthsWhileLoading: [[64, 48], [72, 52], [56, 48]],
     title: 'Unrealized P&L',
+    headerLines: ['$ Unrealized P&L', 'Unrealized P&L %'],
     isShownByDefault: true,
     alignment: 'right',
     sortValue: (holding) => holding.unrealizedPnl,
     firstSortDirection: 'descending',
-    renderValue: (holding) => formatSignedMoney(holding.unrealizedPnl),
+    renderValue: (holding) => (
+      <TwoFigures
+        first={formatSignedMoney(holding.unrealizedPnl)}
+        second={formatSignedPercent(holding.unrealizedPnlPercent)}
+        secondColorClass={isClosed(holding) ? 'text-muted' : profitLossColorClass(holding.unrealizedPnlPercent)}
+      />
+    ),
     valueColorClass: (holding) => profitLossColorClass(holding.unrealizedPnl),
   },
   {
-    key: 'unrealizedPnlPercent',
-    title: '%',
+    key: 'holdingDays',
+    barWidthsWhileLoading: [[40], [48], [36]],
+    title: 'Held',
     isShownByDefault: true,
     alignment: 'right',
-    sortValue: (holding) => holding.unrealizedPnlPercent,
+    sortValue: (holding) => holding.holdingDays,
     firstSortDirection: 'descending',
-    renderValue: (holding) => formatSignedPercent(holding.unrealizedPnlPercent),
-    valueColorClass: (holding) => profitLossColorClass(holding.unrealizedPnlPercent),
+    renderValue: (holding) => <HoldingPeriod days={holding.holdingDays} />,
+  },
+  {
+    key: 'averageCostAndLast',
+    barWidthsWhileLoading: [[56, 48], [64, 56]],
+    title: 'Avg cost · Last',
+    headerLines: ['Avg cost', 'Last'],
+    isShownByDefault: false,
+    alignment: 'right',
+    sortValue: (holding) => holding.averageCost,
+    firstSortDirection: 'descending',
+    renderValue: (holding) => (
+      <TwoFigures first={formatMoney(holding.averageCost)} second={formatMoney(holding.marketPrice)} />
+    ),
   },
   // What a scanned stock has (MY_HOLDINGS_TODO.md, session 3): an open holding's only — a closed one's is no longer read.
   {
     key: 'analystTarget',
+    barWidthsWhileLoading: [[56, 44], [64, 48]],
     title: 'Analysts’ target',
+    headerLines: ['Analysts’ target', 'Upside'],
     isShownByDefault: false,
     alignment: 'right',
     sortValue: (holding) => (isClosed(holding) ? null : holding.analystTarget.upsidePercent),
     firstSortDirection: 'descending',
-    renderValue: (holding) =>
-      isClosed(holding) ? EMPTY_VALUE : <TargetCell analystTarget={holding.analystTarget} />,
+    renderValue: (holding) => <AnalystTargetFigures holding={holding} />,
   },
   {
     key: 'earnings',
+    barWidthsWhileLoading: [[72], [64]],
     title: 'Earnings',
     isShownByDefault: false,
     alignment: 'right',
@@ -278,31 +346,17 @@ export const POSITION_COLUMNS: ColumnDefinition[] = [
       isClosed(holding) ? EMPTY_VALUE : <NextEarningsDate companyInfo={holding.companyInfo} markPlacement="below" />,
   },
   {
-    key: 'holdingDays',
-    title: 'Held',
-    isShownByDefault: true,
-    alignment: 'right',
-    sortValue: (holding) => holding.holdingDays,
-    firstSortDirection: 'descending',
-    renderValue: (holding) => <HoldingPeriod days={holding.holdingDays} />,
-  },
-  {
-    key: 'firstBuyDate',
-    title: 'Bought',
+    key: 'boughtAndLastSold',
+    barWidthsWhileLoading: [[72, 72], [72, 64]],
+    title: 'Bought · Last sold',
+    headerLines: ['Bought', 'Last sold'],
     isShownByDefault: false,
     alignment: 'right',
     sortValue: (holding) => holding.firstBuyDate,
     firstSortDirection: 'ascending',
-    renderValue: (holding) => formatDate(holding.firstBuyDate),
-  },
-  {
-    key: 'lastSellDate',
-    title: 'Last sold',
-    isShownByDefault: false,
-    alignment: 'right',
-    sortValue: (holding) => holding.lastSellDate,
-    firstSortDirection: 'ascending',
-    renderValue: (holding) => formatDate(holding.lastSellDate),
+    renderValue: (holding) => (
+      <TwoFigures first={formatDate(holding.firstBuyDate)} second={formatDate(holding.lastSellDate)} />
+    ),
   },
 ];
 
@@ -315,6 +369,32 @@ function alignmentClass(column: ColumnDefinition): string {
 }
 
 // ── table ───────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The cells of this table (round 6): 6px apart so that every column fits 1280px, rows of 56px for the cells of two
+ * lines; the Symbol column stays put if the table must still scroll sideways — only a fallback.
+ */
+const HEADER_CELL_CLASS =
+  'h-11 whitespace-nowrap border-b bg-subtle px-1.5 text-label font-medium text-muted first:sticky first:left-0 ' +
+  'first:z-[1] first:pl-5 last:pr-5';
+const CELL_CLASS = 'h-14 whitespace-nowrap border-b px-1.5 first:pl-5 last:pr-5';
+
+/** The Symbol cell's own fill, so that the columns scrolling under it don't show through: the row's, on hover too. */
+function symbolCellFillClass(isSelected: boolean): string {
+  return `sticky left-0 z-[1] ${isSelected ? 'bg-selected' : 'bg-surface group-hover:bg-subtle'}`;
+}
+
+/** The title, or the two lines of a column of two figures, each line over its figure. */
+function HeaderText({ column }: { column: ColumnDefinition }) {
+  if (column.headerLines === undefined) return <>{column.title}</>;
+  const alignItemsClass = column.alignment === 'right' ? 'items-end' : 'items-start';
+  return (
+    <span className={`inline-flex flex-col leading-[15px] ${alignItemsClass}`}>
+      <span>{column.headerLines[0]}</span>
+      <span>{column.headerLines[1]}</span>
+    </span>
+  );
+}
 
 function SortableHeaderCell({
   column,
@@ -329,17 +409,17 @@ function SortableHeaderCell({
   return (
     <th
       aria-sort={isSortedByThisColumn ? sortState.direction : 'none'}
-      className={`${TABLE_HEADER_CELL_CLASS} font-medium ${alignmentClass(column)}`}
+      className={`${HEADER_CELL_CLASS} ${alignmentClass(column)}`}
     >
       <span className="inline-flex items-center gap-0.5">
         <button
           type="button"
           onClick={() => onSort(sortStateAfterClicking(sortState, column))}
-          className={`-mx-1 inline-flex h-7 items-center gap-1 rounded-sm px-1 transition-colors hover:text-ink ${
+          className={`-mx-1 inline-flex min-h-7 items-center gap-1 rounded-sm px-1 transition-colors hover:text-ink ${
             isSortedByThisColumn ? 'text-ink' : ''
           }`}
         >
-          {column.title}
+          <HeaderText column={column} />
           {isSortedByThisColumn &&
             (sortState.direction === 'ascending' ? (
               <ArrowUp size={12} strokeWidth={2.5} />
@@ -362,13 +442,11 @@ function HoldingRow({
   columns,
   isSelected,
   onOpen,
-  tableActions,
 }: {
   holding: Holding;
   columns: ColumnDefinition[];
   isSelected: boolean;
   onOpen: () => void;
-  tableActions: TableActions;
 }) {
   const openOnEnter = (event: KeyboardEvent<HTMLTableRowElement>) => {
     if (event.key === 'Enter') onOpen();
@@ -379,14 +457,15 @@ function HoldingRow({
       aria-label={`${holding.symbol}, open details`}
       onClick={onOpen}
       onKeyDown={openOnEnter}
-      className={tableRowClass(isSelected)}
+      className={`group ${tableRowClass(isSelected)}`}
     >
-      {columns.map((column) => {
+      {columns.map((column, columnIndex) => {
         // A closed holding: every cell muted, not faded, so it still reads well; its figures are "—" anyway.
         const colorClass = isClosed(holding) ? 'text-muted' : (column.valueColorClass?.(holding) ?? '');
+        const fillClass = columnIndex === 0 ? symbolCellFillClass(isSelected) : '';
         return (
-          <td key={column.key} className={`${TABLE_CELL_CLASS} ${alignmentClass(column)} ${colorClass}`}>
-            {column.renderValue(holding, tableActions)}
+          <td key={column.key} className={`${CELL_CLASS} ${alignmentClass(column)} ${colorClass} ${fillClass}`}>
+            {column.renderValue(holding)}
           </td>
         );
       })}
@@ -394,31 +473,23 @@ function HoldingRow({
   );
 }
 
-/**
- * One row per holding, in the order the page sorted them (`rows`); clicking a row, or Enter on it, opens the holding's
- * drawer (`onOpen`), and the open one is `selectedHoldingId`. Only `visibleColumnKeys` are shown, in the table's own
- * order. `onDataChanged` reloads the portfolio after a sector is saved.
- */
-export function PositionsTable({
-  rows,
-  visibleColumnKeys,
+/** The columns the Columns menu shows, in the table's own order. */
+function visibleColumnsOf(visibleColumnKeys: string[]): ColumnDefinition[] {
+  return POSITION_COLUMNS.filter((column) => visibleColumnKeys.includes(column.key));
+}
+
+/** The table's frame — it scrolls sideways only as a fallback —, its head, and `body`. */
+function TableWithHead({
+  columns,
   sortState,
   onSort,
-  selectedHoldingId,
-  onOpen,
-  onDataChanged,
+  body,
 }: {
-  rows: Holding[];
-  visibleColumnKeys: string[];
+  columns: ColumnDefinition[];
   sortState: SortState;
   onSort: (sortState: SortState) => void;
-  selectedHoldingId: number | null;
-  onOpen: (holdingId: number) => void;
-  onDataChanged: () => Promise<void>;
+  body: ReactNode;
 }) {
-  const columns = POSITION_COLUMNS.filter((column) => visibleColumnKeys.includes(column.key));
-  const tableActions: TableActions = { onDataChanged };
-
   return (
     <div className="overflow-x-auto">
       <table className={TABLE_CLASS}>
@@ -429,7 +500,40 @@ export function PositionsTable({
             ))}
           </tr>
         </thead>
-        {/* id, not symbol: two holdings can share a symbol, and React needs a unique key per row. */}
+        {body}
+      </table>
+    </div>
+  );
+}
+
+/**
+ * One row per holding, in the order the page sorted them (`rows`); clicking a row, or Enter on it, opens the holding's
+ * drawer (`onOpen`), and the open one is `selectedHoldingId`. Only `visibleColumnKeys` are shown, in the table's own
+ * order.
+ */
+export function PositionsTable({
+  rows,
+  visibleColumnKeys,
+  sortState,
+  onSort,
+  selectedHoldingId,
+  onOpen,
+}: {
+  rows: Holding[];
+  visibleColumnKeys: string[];
+  sortState: SortState;
+  onSort: (sortState: SortState) => void;
+  selectedHoldingId: number | null;
+  onOpen: (holdingId: number) => void;
+}) {
+  const columns = visibleColumnsOf(visibleColumnKeys);
+  return (
+    <TableWithHead
+      columns={columns}
+      sortState={sortState}
+      onSort={onSort}
+      body={
+        // id, not symbol: two holdings can share a symbol, and React needs a unique key per row.
         <tbody className="[&>tr:last-child>td]:border-b-0">
           {rows.map((holding) => (
             <HoldingRow
@@ -438,11 +542,67 @@ export function PositionsTable({
               columns={columns}
               isSelected={holding.id === selectedHoldingId}
               onOpen={() => onOpen(holding.id)}
-              tableActions={tableActions}
             />
           ))}
         </tbody>
-      </table>
-    </div>
+      }
+    />
+  );
+}
+
+/** How many grey rows the table shows during the first load. */
+const ROWS_WHILE_LOADING = 8;
+
+/** A cell's grey bars in `rowIndex`'s row: one, or two one over the other, on the column's side. */
+function CellBarsWhileLoading({ column, rowIndex }: { column: ColumnDefinition; rowIndex: number }) {
+  const [firstLineWidth, secondLineWidth] =
+    column.barWidthsWhileLoading[rowIndex % column.barWidthsWhileLoading.length];
+  if (secondLineWidth === undefined) return <SkeletonBar width={firstLineWidth} height={12} />;
+  const alignItemsClass = column.alignment === 'right' ? 'items-end' : 'items-start';
+  return (
+    <span className={`inline-flex flex-col gap-1.5 align-middle ${alignItemsClass}`}>
+      <SkeletonBar width={firstLineWidth} height={12} />
+      <SkeletonBar width={secondLineWidth} height={10} />
+    </span>
+  );
+}
+
+/**
+ * The same table during the first load (round 6): its head as the Columns menu has it, then eight rows of grey bars in
+ * the rows' own cells, so they stand as tall as the rows that replace them.
+ */
+export function PositionsTableSkeleton({
+  visibleColumnKeys,
+  sortState,
+  onSort,
+}: {
+  visibleColumnKeys: string[];
+  sortState: SortState;
+  onSort: (sortState: SortState) => void;
+}) {
+  const columns = visibleColumnsOf(visibleColumnKeys);
+  const rowIndexes = Array.from({ length: ROWS_WHILE_LOADING }, (_, rowIndex) => rowIndex);
+  return (
+    <TableWithHead
+      columns={columns}
+      sortState={sortState}
+      onSort={onSort}
+      body={
+        <tbody aria-busy="true" className="[&>tr:last-child>td]:border-b-0">
+          {rowIndexes.map((rowIndex) => (
+            <tr key={rowIndex}>
+              {columns.map((column, columnIndex) => (
+                <td
+                  key={column.key}
+                  className={`${CELL_CLASS} ${alignmentClass(column)} ${columnIndex === 0 ? symbolCellFillClass(false) : ''}`}
+                >
+                  <CellBarsWhileLoading column={column} rowIndex={rowIndex} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      }
+    />
   );
 }
