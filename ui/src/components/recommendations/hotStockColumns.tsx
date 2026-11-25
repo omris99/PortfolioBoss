@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { EMPTY_VALUE, formatMoney, formatPercent, formatSignedPercentOneDecimal } from '../../lib/format';
-import { EXPLAINED_CLASS } from '../../lib/styles';
 import type { Investor } from '../../types/portfolio';
 import type { HotStock } from '../../types/recommendations';
 import { TargetCell } from '../AnalystTarget';
 import { RecoveringTag } from '../companyInfo/RiskSigns';
+import { Hint } from '../Hint';
 import { MomentumMark } from '../Momentum';
+import { ShortenedText } from '../ShortenedText';
 import {
   correlationsHint,
   correlationText,
@@ -33,13 +34,17 @@ function MarkLine({ children }: { children: ReactNode }) {
   return <div className="mt-1">{children}</div>;
 }
 
-/** The symbol, and IB's name under it in small capitals, cut at 200px. */
+/** The symbol, and IB's name under it in small capitals, cut at 200px — whole in its hint. */
 function StockCell({ stock }: { stock: HotStock }) {
   return (
     <>
       <div className="text-body font-semibold">{stock.symbol}</div>
-      <div title={stock.companyName ?? undefined} className="max-w-[200px] truncate text-[11px] uppercase text-muted">
-        {stock.companyName ?? EMPTY_VALUE}
+      <div className="flex text-[11px] uppercase text-muted">
+        {stock.companyName === null ? (
+          EMPTY_VALUE
+        ) : (
+          <ShortenedText text={stock.companyName} className="max-w-[200px]" />
+        )}
       </div>
     </>
   );
@@ -56,21 +61,15 @@ function SectorCell({ stock }: { stock: HotStock }) {
   );
 }
 
-/** The holding it moves with most, its hover the top 3; Moves together under it from 0.7. */
+/** The holding it moves with most, the top 3 in its hint; Moves together under it from 0.7. */
 function MovesWithCell({ stock }: { stock: HotStock }) {
   if (stock.correlations.length === 0) {
-    return (
-      <span title={NO_CORRELATION_REASON} className={EXPLAINED_CLASS}>
-        {EMPTY_VALUE}
-      </span>
-    );
+    return <Hint text={NO_CORRELATION_REASON}>{EMPTY_VALUE}</Hint>;
   }
   const strongestCorrelation = stock.correlations[0];
   return (
     <>
-      <span title={correlationsHint(stock.correlations)} className={EXPLAINED_CLASS}>
-        {correlationText(strongestCorrelation)}
-      </span>
+      <Hint text={correlationsHint(stock.correlations)}>{correlationText(strongestCorrelation)}</Hint>
       {strongestCorrelation.movesTogether && (
         <MarkLine>
           <InfoMark kind="movesTogether" />

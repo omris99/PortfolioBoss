@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import { CARD_CLASS, tableRowClass } from '../../lib/styles';
 import type { HotStock, HotStockLabel } from '../../types/recommendations';
+import { RowReachedAsAWhole } from '../Hint';
 import { useInvestors } from '../InvestorsContext';
 import type { HotStockColumn } from './hotStockColumns';
 import { LIST_WORDS, ListHeading } from './ListHeading';
@@ -63,7 +64,8 @@ function StockRows({
     if (event.key === 'Enter') onOpen(stock.candidateId);
   };
   return (
-    <>
+    // The row and its detail line are one stop of the keyboard: Enter on the row opens the stock.
+    <RowReachedAsAWhole>
       <tr
         tabIndex={0}
         onClick={() => onOpen(stock.candidateId)}
@@ -87,7 +89,7 @@ function StockRows({
           <td aria-hidden="true" className={DETAIL_CELL_CLASS} />
         </tr>
       )}
-    </>
+    </RowReachedAsAWhole>
   );
 }
 
@@ -161,7 +163,7 @@ function StockTable({
 /** No detail line: the short lists, which have none in the design. */
 const NO_DETAIL_LINE = () => null;
 
-/** A list's card: its heading (`headingAside` at its right end), then its table — or one line when it is empty. */
+/** A list's card: its heading (`headingHelp` after the list's meaning), then its table — or one line when it is empty. */
 export function StockListCard({
   list,
   stocks,
@@ -171,7 +173,7 @@ export function StockListCard({
   onOpen,
   analyzeButtonOf,
   detailLineOf = NO_DETAIL_LINE,
-  headingAside,
+  headingHelp,
 }: {
   list: HotStockLabel;
   stocks: HotStock[];
@@ -181,12 +183,12 @@ export function StockListCard({
   onOpen: (candidateId: number) => void;
   analyzeButtonOf: (stock: HotStock) => ReactNode;
   detailLineOf?: (stock: HotStock) => ReactNode;
-  headingAside?: ReactNode;
+  headingHelp?: ReactNode;
 }) {
   const { title, emptyText } = LIST_WORDS[list];
   return (
     <section aria-label={title} className={`overflow-hidden ${CARD_CLASS}`}>
-      <ListHeading list={list} count={stocks.length} aside={headingAside} />
+      <ListHeading list={list} count={stocks.length} help={headingHelp} />
       {stocks.length === 0 ? (
         <p className="px-5 py-6 text-center text-muted">{emptyText}</p>
       ) : (

@@ -1,9 +1,9 @@
-import { useId, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { formatMoney, formatPercent } from '../../lib/format';
 import { SkeletonBar } from '../firstLoad/SkeletonBar';
+import { Hint } from '../Hint';
 import type { OpenOnTab } from '../HoldingDrawer';
-import { Tip } from '../Tip';
 import { PORTFOLIO_WHOLE_NAME, type InvestmentsAndCash } from './investmentsAndCash';
 import { heaviestWeightsOf, type CashWeight, type HoldingWeight, type Weight } from './portfolioWeights';
 import { CASH_COLOR_CLASS, STOCKS_COLOR_CLASS, WeightsCard, hintOf, stocksShareText } from './WeightsCard';
@@ -25,7 +25,7 @@ interface AccountPartBar {
    * the cash, which has no page.
    */
   link: { to: string; state?: OpenOnTab } | null;
-  /** What the row's Tip says. */
+  /** What the row's hint says. */
   hint: string;
   barColorClass: string;
 }
@@ -114,75 +114,47 @@ const CARD_TITLE = 'By holding';
 
 /**
  * A link when the row leads somewhere, plain otherwise; either way laid out as one row of the card, reachable with the
- * keyboard, and highlighted while it is pointed at or has the keyboard's focus.
+ * keyboard, with the row's hint on the whole row.
  */
-function RowFrame({
-  bar,
-  tipId,
-  onHighlight,
-  children,
-}: {
-  bar: AccountPartBar;
-  tipId: string;
-  onHighlight: (key: string | null) => void;
-  children: ReactNode;
-}) {
-  const highlightWhilePointedAtOrFocused = {
-    onMouseEnter: () => onHighlight(bar.key),
-    onMouseLeave: () => onHighlight(null),
-    onFocus: () => onHighlight(bar.key),
-    onBlur: () => onHighlight(null),
-  };
+function RowFrame({ bar, children }: { bar: AccountPartBar; children: ReactNode }) {
   if (bar.link === null) {
     return (
-      <div tabIndex={0} aria-describedby={tipId} className={ROW_CLASS} {...highlightWhilePointedAtOrFocused}>
-        {children}
-      </div>
+      <Hint text={bar.hint} wrapInSpan={false}>
+        <div tabIndex={0} className={ROW_CLASS}>
+          {children}
+        </div>
+      </Hint>
     );
   }
   return (
-    <Link
-      to={bar.link.to}
-      state={bar.link.state}
-      aria-describedby={tipId}
-      className={`${ROW_CLASS} transition-colors hover:bg-subtle focus-visible:bg-subtle`}
-      {...highlightWhilePointedAtOrFocused}
-    >
-      {children}
-    </Link>
+    <Hint text={bar.hint} wrapInSpan={false}>
+      <Link
+        to={bar.link.to}
+        state={bar.link.state}
+        className={`${ROW_CLASS} transition-colors hover:bg-subtle focus-visible:bg-subtle`}
+      >
+        {children}
+      </Link>
+    </Hint>
   );
 }
 
-/** One row — name · bar · percent · value — and its Tip above it. Its parent is `relative`, so the Tip sits over the row. */
-function AccountPartRow({
-  bar,
-  largestAmount,
-  isHighlighted,
-  onHighlight,
-}: {
-  bar: AccountPartBar;
-  largestAmount: number;
-  isHighlighted: boolean;
-  onHighlight: (key: string | null) => void;
-}) {
-  const tipId = useId();
+/** One row — name · bar · percent · value —, its hint over it. */
+function AccountPartRow({ bar, largestAmount }: { bar: AccountPartBar; largestAmount: number }) {
   return (
-    <>
-      <RowFrame bar={bar} tipId={tipId} onHighlight={onHighlight}>
-        <span className={`truncate ${bar.nameIsASymbol ? 'font-semibold' : 'font-medium text-muted'}`}>{bar.name}</span>
-        <span>{bar.amount >= 0 && <BarInTrack bar={bar} largestAmount={largestAmount} />}</span>
-        <span className="text-right font-semibold">{formatPercent(bar.percentOfAccount)}</span>
-        <span className="text-right text-muted">{formatMoney(bar.amount)}</span>
-      </RowFrame>
-      <Tip id={tipId} text={bar.hint} isOpen={isHighlighted} />
-    </>
+    <RowFrame bar={bar}>
+      <span className={`truncate ${bar.nameIsASymbol ? 'font-semibold' : 'font-medium text-muted'}`}>{bar.name}</span>
+      <span>{bar.amount >= 0 && <BarInTrack bar={bar} largestAmount={largestAmount} />}</span>
+      <span className="text-right font-semibold">{formatPercent(bar.percentOfAccount)}</span>
+      <span className="text-right text-muted">{formatMoney(bar.amount)}</span>
+    </RowFrame>
   );
 }
 
 /**
  * The whole account by part — the tab's: all of an investor's money on their tab —: a bar for each holding, heaviest
  * first and each opening its drawer on the Weight tab, then one for the cash under a hairline. Together they add up to
- * 100%. Pointing at a row, or reaching it with the keyboard, opens its Tip.
+ * 100%. Pointing at a row, or reaching it with the keyboard, opens its hint.
  */
 export function HoldingWeightsCard({
   tab,
@@ -193,7 +165,6 @@ export function HoldingWeightsCard({
   holdingWeights: HoldingWeight[];
   cashWeight: CashWeight | null;
 }) {
-  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const holdingBars = holdingBarsOf(holdingWeights, tab);
   const cashBar = cashWeight === null ? null : cashBarOf(cashWeight, tab);
   const allBars = cashBar === null ? holdingBars : [...holdingBars, cashBar];
@@ -203,24 +174,14 @@ export function HoldingWeightsCard({
     <WeightsCard title={CARD_TITLE} caption={`Share of ${tab.wholeName}`}>
       <ul>
         {holdingBars.map((bar) => (
-          <li key={bar.key} className="relative">
-            <AccountPartRow
-              bar={bar}
-              largestAmount={largestAmount}
-              isHighlighted={bar.key === highlightedKey}
-              onHighlight={setHighlightedKey}
-            />
+          <li key={bar.key}>
+            <AccountPartRow bar={bar} largestAmount={largestAmount} />
           </li>
         ))}
       </ul>
       {cashBar !== null && (
-        <div className="relative mt-2 border-t pt-2">
-          <AccountPartRow
-            bar={cashBar}
-            largestAmount={largestAmount}
-            isHighlighted={cashBar.key === highlightedKey}
-            onHighlight={setHighlightedKey}
-          />
+        <div className="mt-2 border-t pt-2">
+          <AccountPartRow bar={cashBar} largestAmount={largestAmount} />
         </div>
       )}
     </WeightsCard>

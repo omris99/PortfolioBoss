@@ -25,7 +25,6 @@ export function ReadingFromTwsButton({
   size,
   disabled = false,
   className = '',
-  title,
   onClick,
 }: {
   readingState: ReadingFromTwsState;
@@ -34,7 +33,6 @@ export function ReadingFromTwsButton({
   size: ButtonSize;
   disabled?: boolean;
   className?: string;
-  title?: string;
   onClick: () => void;
 }) {
   const isReading = readingState.kind === 'reading';
@@ -44,7 +42,6 @@ export function ReadingFromTwsButton({
       type="button"
       disabled={isReading || disabled}
       onClick={onClick}
-      title={title}
       className={`${BUTTON_CLASS_OF_SIZE[size]} ${className}`}
     >
       <RefreshCw size={iconSize} className={isReading ? 'turning-icon' : undefined} aria-hidden="true" />

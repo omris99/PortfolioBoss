@@ -33,6 +33,8 @@ pick it up.
   real US stocks on the real database's market data; it reads the real database read-only and checks its row counts).
   Account `U1234567`, investors Omri and Dana. No SNDK: its analysts' target counts the targets of before its 19.11
   split (+2708% on screen) — a real bug of the app, told to him, not fixed and not part of this plan.
+- **`scripts/demo/` is git-ignored** (his choice, 2026-11-25): the demo database's script and data and the tools below
+  live on this machine only — not in the repo, never committed.
 - **The tools** in `scripts/demo/` (`npm install` there once — `playwright-core`, which drives the installed Chrome):
   - `node take-screenshots.mjs <folder>` — 36 screenshots of every page, drawer, modal and state at 1440 × 900 @2×
     (`ONLY=<part of a name>` for some); every request that writes is blocked except Sync now;
@@ -160,16 +162,39 @@ above, then look at the screenshots.
   sticks 8px under the bar (`top-[calc(theme(spacing.topbar)_+_8px)]`). Checked in Chrome: the bar at 0 after a
   scroll, the cash card at 64px under a 57px bar.
 
+### Stage ה — one way to explain on hover (built and browser-checked by him 2026-11-25)
+
+His three decisions: **one "?" that opens on hover and keyboard focus** (the Taxes page's, which he had checked — not
+the design's click-to-pin popover, and not click only); **hints inside a table row the keyboard reaches as a whole are
+no Tab stops of their own** (Positions, Closed, the Recommendations lists, a tax day — the row stays one stop); **a slice
+of the sector ring only lights its legend row** — the bubble shows on the row itself, after 400ms like every hint.
+- `Hint.tsx`: `placement` (`above` / `below`, was `side`), `align`, `term` (the dotted underline, only for a term in running
+  text — `EXPLAINED_CLASS` is gone), `focusable`, `wrapInSpan` (false: the hint on the element itself — a weights row, the
+  highlighted timing note and a company risk, which must stay inline text to wrap), `disabled` (the bell's hint while its
+  panel is open; a paid run's button while its confirm is open). A disabled button inside lets the pointer through to its
+  hint (`[&_button:disabled]:pointer-events-none`); a click on a bubble never reaches the row under it.
+  `HintsProvider` — one Radix provider around the app (`main.tsx`): 400ms, and no "skip the delay" after a hint closes.
+  `RowReachedAsAWhole` — the context a row puts around itself so that its hints aren't Tab stops.
+- `HelpOnHover.tsx` is the one "?" (20px, 14px icon, accent on accent-soft, opens at once); `HelpPopover.tsx` and `Tip.tsx`
+  are deleted. The "?" sits 4px after the words it explains: `CardHeading`'s `help` (Signal at a glance, O3),
+  `ListHeading`'s `help` (Hot, R4), the year card's `YearCardCell` `help` ("Tax this year so far"), the drawer's "News
+  score" heading.
+- Taxes: one sentence → a hint on the item, no "?": the ✓ (when, the note, the other calculated amount), the clock, ₪0.00,
+  a day's date (traded on), a buy's date (settled, rate), a figure in shekels (its currency and rate), a fee's words. The
+  "?" stays for the page's line, "IB's report up to", the year's tax, the shield strip, "Counts" and the FIFO note.
+- `ShortenedText.tsx` — a text cut with "…", whole in its hint: a trade's and a deposit's note, the Averaging sector, IB's
+  company name (the Hot list, a pick).
+- `WarnMark`'s `title` is `label` (aria-label only; no SVG `<title>`); `ReadingFromTwsButton` and `KeyFigureExtra` lost
+  `title`; `SourceLink`'s is `hint`; `ConfirmBeforeRun` takes `triggerHint`.
+- Checked: `npm run build`; a one-off check of every screen — no `title` and no SVG `<title>` on any of 26 screens;
+  `find-iso-dates.mjs` (its "closed drawer trades" step dropped — that drawer has a single tab, shown as a heading: it
+  failed on every run); a one-off Playwright check (15 of 15: nothing at 200ms, the bubble
+  by 600ms, gone on leaving, Esc, Sync now, the bell quiet while open, the "?" 4px after its title and at once, a legend
+  row's hint and none on a slice, Tab from row to row on Positions and Taxes, the Qty split's names, the ✓'s words) —
+  moving the pointer in steps: Radix keeps a bubble open while the pointer is "on its way" to it, until the next move;
+  screenshots.
+
 ## Next
-
-### Stage ה — one way to explain on hover
-
-- `Hint` README: `components/Hint.tsx` (built) everywhere in place of the browser's `title` (most of the app), the
-  weights card's `Tip` and the Taxes page's `HelpOnHover`. One sentence about one thing → a `Hint` on the thing (a dotted
-  underline only for a term in running text; an icon button keeps its `aria-label` and gets a `Hint` with the same
-  words); two sentences or more, a list, how a heading's figures are worked out → a "?" (`HelpPopover`) 4px after the
-  heading, never at a card's far edge (O3, R4). The drawer's ‹ › ✕ and Sync now get `Hint`s. List the `title=` uses
-  first (`grep`) and go page by page. `@radix-ui/react-tooltip` stays pinned at 1.2.16.
 
 ### Stage ו — the rest of the findings
 
@@ -189,8 +214,8 @@ above, then look at the screenshots.
   with faint text; the Delete block's frame in `border`, only its button red.
 - **Taxes** (X1, X2, X4): the Check column aligned right under the month's controls; an opened day in one frame, the
   buys' table with only a hairline above its head; "1 of 1 day confirmed".
-- **Overview** (O3, O4): the "?" of Signal at a glance 4px after its title; the Weights card 5fr : 7fr, the ring (168px)
-  centered above its legend.
+- **Overview** (O4): the Weights card 5fr : 7fr, the ring (168px) centered above its legend. (O3, the "?" after its
+  title, was done in stage ה, and so was R4.)
 - **Small** (A1, E3, K1, T5): the averaging cash card's shadow only while it sticks; Sync now back to its rest look after
   failing; the Columns menu focuses its first item, no ring on the popover; every "Loading..." is "Loading…".
 

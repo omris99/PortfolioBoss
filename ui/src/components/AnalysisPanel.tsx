@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { formatDate, formatDateTime, formatMoney, formatSignedPercent } from '../lib/format';
 import { ACTION_TONES, labelClassOf, RATING_TONES, SENTIMENT_TONES, TREND_TONES } from '../lib/signalColors';
-import { CHIP_CLASS, EXPLAINED_CLASS } from '../lib/styles';
+import { CHIP_CLASS } from '../lib/styles';
 import type {
   AnalystAction,
   AnalystActionType,
@@ -18,7 +18,8 @@ import type {
   StockAnalysis,
 } from '../types/portfolio';
 import { AnalyzeHoldingButton } from './AnalyzeControls';
-import { HelpPopover } from './HelpPopover';
+import { HelpOnHover } from './HelpOnHover';
+import { Hint } from './Hint';
 import { noTrendReason, SignalLegend, targetMovesText } from './Signal';
 
 /** What an analyst firm did, in plain words. */
@@ -97,24 +98,35 @@ export function siteOf(url: string): string {
   }
 }
 
-/**
- * Opens the source in a new tab, with the external-link icon; plain text when the address is not a web page. `title`:
- * what the hover says — for example the result's own title.
- */
-export function SourceLink({ url, title, children }: { url: string; title?: string; children: ReactNode }) {
+/** The source opened in a new tab, with the external-link icon; plain text when the address is not a web page. */
+function SourceLinkWithoutHint({ url, children }: { url: string; children: ReactNode }) {
   const webAddress = webAddressOrNull(url);
-  if (webAddress === null) return <span title={title}>{children}</span>;
+  if (webAddress === null) return <span>{children}</span>;
   return (
     <a
       href={webAddress}
       target="_blank"
       rel="noopener noreferrer"
-      title={title}
       className="inline-flex items-center gap-[3px] text-link underline-offset-2 hover:underline"
     >
       {children}
       <ExternalLink size={12} className="shrink-0" />
     </a>
+  );
+}
+
+/**
+ * Opens the source in a new tab, with the external-link icon; plain text when the address is not a web page. `hint`:
+ * what its hint says — for example the result's own title —; none without it.
+ */
+export function SourceLink({ url, hint, children }: { url: string; hint?: string; children: ReactNode }) {
+  const link = <SourceLinkWithoutHint url={url}>{children}</SourceLinkWithoutHint>;
+  if (hint === undefined) return link;
+  return (
+    // The link itself is a Tab stop; plain text without an address is no stop of its own.
+    <Hint text={hint} align="start" focusable={false}>
+      {link}
+    </Hint>
   );
 }
 
@@ -125,9 +137,9 @@ const COPY_DATE_HINT =
 /** "copy of 18/09/2026": how old the search engine's copy of a source may be (AI_ANALYSIS_TODO.md, decision 20). */
 function CopyDate({ date }: { date: string | null }) {
   return (
-    <span title={COPY_DATE_HINT} className={`text-caption text-faint ${EXPLAINED_CLASS}`}>
-      {date === null ? 'copy date unknown' : `copy of ${formatDate(date)}`}
-    </span>
+    <Hint text={COPY_DATE_HINT}>
+      <span className="text-caption text-faint">{date === null ? 'copy date unknown' : `copy of ${formatDate(date)}`}</span>
+    </Hint>
   );
 }
 
@@ -189,17 +201,17 @@ function sourceSummaryOf(source: SourceConsensus): string {
 }
 
 /**
- * "Targets 323.86–340.02 across 4 sources", every source's figures on hover: one target that looks exact says less
- * than the spread (AI_ANALYSIS_TODO.md, decision 16). Nothing with fewer than two targets.
+ * "Targets 323.86–340.02 across 4 sources", every source's figures in its hint, a line each: one target that looks exact
+ * says less than the spread (AI_ANALYSIS_TODO.md, decision 16). Nothing with fewer than two targets.
  */
 function TargetSpread({ consensus, sources }: { consensus: AnalystConsensus; sources: SourceConsensus[] }) {
   if (consensus.sourceCount < 2) return null;
   return (
     <p className="mb-2">
-      <span title={sources.map(sourceSummaryOf).join('\n')} className={EXPLAINED_CLASS}>
+      <Hint text={sources.map(sourceSummaryOf).join('\n')} align="start" term>
         Targets {formatMoney(consensus.targetLow)}–{formatMoney(consensus.targetHigh)} across {consensus.sourceCount}{' '}
         sources
-      </span>
+      </Hint>
     </p>
   );
 }
@@ -216,9 +228,9 @@ function TrendLine({ analysis }: { analysis: StockAnalysis }) {
       {analysis.analystTrend === null ? (
         <span className="text-muted">{noTrendReason(analysis)}</span>
       ) : (
-        <span title="Only price targets count, among the actions below: a rating without a target moves nothing">
+        <Hint text="Only price targets count, among the actions below: a rating without a target moves nothing">
           {targetMovesText(analysis)}
-        </span>
+        </Hint>
       )}
     </div>
   );
@@ -278,9 +290,9 @@ function HiddenActionsLine({ hiddenCount }: { hiddenCount: number }) {
   const actions = hiddenCount === 1 ? '1 action' : `${hiddenCount} actions`;
   return (
     <p className="mt-2 text-caption text-faint">
-      <span title={HIDDEN_ACTIONS_HINT} className={EXPLAINED_CLASS}>
+      <Hint text={HIDDEN_ACTIONS_HINT} align="start" term>
         {actions} without a price target {hiddenCount === 1 ? 'is' : 'are'} not shown
-      </span>
+      </Hint>
     </p>
   );
 }
@@ -339,7 +351,7 @@ function HeadlineRow({ headline }: { headline: Headline }) {
 
 /**
  * "Why it moves: A contract win with a large bank lifted the shares. examplewire.com" — from the week's news only, the
- * result it rests on linked, its title on hover (RECOMMENDATIONS_TODO.md, decision 4).
+ * result it rests on linked, its title in its hint (RECOMMENDATIONS_TODO.md, decision 4).
  */
 function WhyItMoves({ moveReason }: { moveReason: MoveReason | null }) {
   return (
@@ -350,7 +362,7 @@ function WhyItMoves({ moveReason }: { moveReason: MoveReason | null }) {
       ) : (
         <>
           {moveReason.reason}{' '}
-          <SourceLink url={moveReason.url} title={moveReason.title}>
+          <SourceLink url={moveReason.url} hint={moveReason.title}>
             {siteOf(moveReason.url)}
           </SourceLink>
         </>
@@ -454,9 +466,9 @@ export function HoldingAnalysisPanel({
         )
       }
       help={
-        <HelpPopover label="What the dot’s colors mean">
+        <HelpOnHover label="What the dot’s colors mean">
           <SignalLegend />
-        </HelpPopover>
+        </HelpOnHover>
       }
       notAnalyzedText={
         isOpen

@@ -1,7 +1,7 @@
 import { EMPTY_VALUE, formatDate, formatMoney, formatSignedPercentOneDecimal } from '../lib/format';
-import { EXPLAINED_CLASS } from '../lib/styles';
 import type { AnalystPriceTarget, AnalystTarget } from '../types/portfolio';
 import { SubHeading } from './AnalysisPanel';
+import { Hint } from './Hint';
 
 /**
  * The analysts' target from Dow Jones's headlines (RECOMMENDATIONS_TODO.md, decision 14), a holding's or a scanned
@@ -14,7 +14,7 @@ function firmCountText(firmCount: number): string {
   return firmCount === 1 ? '1 firm' : `${firmCount} firms`;
 }
 
-/** On hover: what the figure is — or why there is none. */
+/** The figure's hint: what it is — or why there is none. */
 function analystTargetHint(analystTarget: AnalystTarget): string {
   if (analystTarget.medianTarget === null) {
     return (
@@ -35,9 +35,11 @@ function analystTargetHint(analystTarget: AnalystTarget): string {
 export function TargetUpside({ analystTarget }: { analystTarget: AnalystTarget }) {
   const upsidePercent = analystTarget.upsidePercent;
   return (
-    <span title={analystTargetHint(analystTarget)} className={`${EXPLAINED_CLASS} text-muted`}>
-      {upsidePercent === null ? EMPTY_VALUE : formatSignedPercentOneDecimal(upsidePercent)}
-    </span>
+    <Hint text={analystTargetHint(analystTarget)}>
+      <span className="text-muted">
+        {upsidePercent === null ? EMPTY_VALUE : formatSignedPercentOneDecimal(upsidePercent)}
+      </span>
+    </Hint>
   );
 }
 
@@ -62,25 +64,30 @@ export function TargetCell({ analystTarget }: { analystTarget: AnalystTarget }) 
   );
 }
 
-/** "2026-10-12 · Needham · 450.00", and the target it replaced when the headline names one. */
+/**
+ * "12/10/2026 · Needham · 450.00", and the target it replaced when the headline names one; Dow Jones's headline in the
+ * row's hint.
+ */
 function FirmTargetRow({ firmTarget }: { firmTarget: AnalystPriceTarget }) {
   return (
-    <li title={firmTarget.headline} className="grid grid-cols-[84px_1fr_auto] gap-3 border-b py-2 text-[13px]">
-      <span className="text-muted">{formatDate(firmTarget.publishedAt.slice(0, 10))}</span>
-      <span className="min-w-0 truncate font-medium">{firmTarget.firm}</span>
-      <span className="text-right">
-        {firmTarget.previousPriceTarget !== null && (
-          <span className="text-muted">{formatMoney(firmTarget.previousPriceTarget)} → </span>
-        )}
-        {formatMoney(firmTarget.priceTarget)}
-      </span>
-    </li>
+    <Hint text={firmTarget.headline} align="start" wrapInSpan={false}>
+      <li className="grid grid-cols-[84px_1fr_auto] gap-3 border-b py-2 text-[13px]">
+        <span className="text-muted">{formatDate(firmTarget.publishedAt.slice(0, 10))}</span>
+        <span className="min-w-0 truncate font-medium">{firmTarget.firm}</span>
+        <span className="text-right">
+          {firmTarget.previousPriceTarget !== null && (
+            <span className="text-muted">{formatMoney(firmTarget.previousPriceTarget)} → </span>
+          )}
+          {formatMoney(firmTarget.priceTarget)}
+        </span>
+      </li>
+    </Hint>
   );
 }
 
 /**
  * The drawer's "Analysts & news" tab, first: the median target and its upside, `ruleText` — what the target is for on
- * this page —, and each firm's latest target, the newest first, the headline on hover.
+ * this page —, and each firm's latest target, the newest first, the headline in its hint.
  */
 export function AnalystTargetSection({ analystTarget, ruleText }: { analystTarget: AnalystTarget; ruleText: string }) {
   return (

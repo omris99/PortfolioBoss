@@ -11,6 +11,7 @@ import {
 import { INNER_TABLE_CLASS, INNER_TABLE_FRAME_CLASS } from '../../lib/styles';
 import type { Sale, SharesSoldFromOneBuy } from '../../types/taxes';
 import { HelpOnHover } from '../HelpOnHover';
+import { Hint } from '../Hint';
 import type { StockSalesOfTheDay } from './stockSalesOfTheDay';
 import { isSameAmount } from './taxTexts';
 
@@ -53,30 +54,24 @@ const RULE_TEXT =
   'Each buy is calculated two ways, in dollars and in shekels, and the result closer to zero counts. A gain one way ' +
   'and a loss the other counts as 0.';
 
-/** A figure in shekels with its amount in the trade's currency and the rate in a "?": "$4,205.00 at 3.750". */
+/** A figure in shekels with its amount in the trade's currency and the rate in its hint: "$4,205.00 at 3.750". */
 function ShekelsWithTheirRate({
-  label,
   amount,
   currency,
   rate,
   partText = '',
 }: {
-  label: string;
   amount: number;
   currency: string;
   rate: number | null;
   /** "Part 2 of 3: 7 shares at $342.25 · " before it, on a sale IB reported in parts. */
   partText?: string;
 }) {
+  const rateText = rate === null ? '' : ` at ${formatExchangeRate(rate)}`;
   return (
-    <span className="inline-flex items-center gap-1">
+    <Hint text={`${partText}${formatAmountInItsCurrency(amount, currency)}${rateText}`} align="end">
       {formatShekels(inShekels(amount, rate))}
-      <HelpOnHover label={label}>
-        {partText}
-        {formatAmountInItsCurrency(amount, currency)}
-        {rate !== null && ` at ${formatExchangeRate(rate)}`}
-      </HelpOnHover>
-    </span>
+    </Hint>
   );
 }
 
@@ -122,6 +117,12 @@ function TwoWaysAndWhatCounts({ sharesSold }: { sharesSold: SharesSoldFromOneBuy
   );
 }
 
+/** The buy date's hint: "Settled 18/06/2026 · rate 3.750". */
+function buySettledText(sharesSold: SharesSoldFromOneBuy): string {
+  const rateText = sharesSold.buyRate === null ? '' : ` · rate ${formatExchangeRate(sharesSold.buyRate)}`;
+  return `Settled ${formatDate(sharesSold.buySettlementDay)}${rateText}`;
+}
+
 function SharesSoldTableRow({ row, partCount }: { row: SharesSoldRow; partCount: number }) {
   const { part, partNumber, sharesSold, startsANewBuy } = row;
   const partText =
@@ -132,19 +133,14 @@ function SharesSoldTableRow({ row, partCount }: { row: SharesSoldRow; partCount:
     <tr className={startsANewBuy ? 'border-t first:border-t-0' : ''}>
       <td className={CELL_CLASS}>
         {startsANewBuy && (
-          <span className="inline-flex items-center gap-1">
+          <Hint text={buySettledText(sharesSold)} align="start">
             {formatDate(sharesSold.buyTradeDate)}
-            <HelpOnHover label="When the buy settled">
-              Settled {formatDate(sharesSold.buySettlementDay)}
-              {sharesSold.buyRate !== null && ` · rate ${formatExchangeRate(sharesSold.buyRate)}`}
-            </HelpOnHover>
-          </span>
+          </Hint>
         )}
       </td>
       <td className={`${CELL_CLASS} text-right`}>{formatQuantity(sharesSold.quantity)}</td>
       <td className={`${CELL_CLASS} text-right`}>
         <ShekelsWithTheirRate
-          label="The cost in its currency"
           amount={sharesSold.cost}
           currency={part.currency}
           rate={sharesSold.buyRate}
@@ -152,7 +148,6 @@ function SharesSoldTableRow({ row, partCount }: { row: SharesSoldRow; partCount:
       </td>
       <td className={`${CELL_CLASS} text-right`}>
         <ShekelsWithTheirRate
-          label="What it was sold for in its currency"
           amount={sharesSold.proceeds}
           currency={part.currency}
           rate={sharesSold.saleRate}
@@ -167,7 +162,7 @@ function SharesSoldTableRow({ row, partCount }: { row: SharesSoldRow; partCount:
 /**
  * A stock's sale of a day opened into the buys it took from, first in first out: a row for each part IB reported and
  * each buy it took from — the buy's date once for its run of rows, the shares telling the parts apart, each part's price
- * in the "?" of Sold for. Cost and Sold for in shekels, at the buy's and the sale's settlement days' rates; then the two
+ * in the hint of Sold for. Cost and Sold for in shekels, at the buy's and the sale's settlement days' rates; then the two
  * ways of the taxable gain and what counts.
  */
 export function SharesSoldFromEachBuyTable({ stockSales }: { stockSales: StockSalesOfTheDay }) {

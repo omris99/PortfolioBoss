@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.40.0";
+    public static final String VERSION = "0.41.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,15 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.41.0: [One way to explain on hover]
+ * Hint everywhere: the browser's own tooltip is gone from every screen; figures, marks, notes, dates and icon buttons explain themselves in the app's bubble.
+ * HelpOnHover is the app's one "?": it opens on hover or keyboard focus, 4px after the words it explains; HelpPopover and the weights' Tip are removed.
+ * RowReachedAsAWhole: in a table row the keyboard reaches as one stop (Positions, Closed, Recommendations, a tax day) the hints are no Tab stops, so Tab still goes row by row.
+ * Taxes page: the check mark, the clock, a zero gain and a day's or a buy's date carry their one-line explanation themselves; a "?" stays only by the longer ones.
+ * Weights card: each legend and bar row explains itself in a Hint; a slice of the ring lights its row without opening a bubble.
+ * Hint: a dotted underline only for a term in running text, no longer under figures in tables; a disabled button's hint still opens with the reason.
+ * ShortenedText added: a note, a sector or IB's company name cut with an ellipsis shows the whole text in its hint.
+ *
  * VERSION 0.40.0: [A calmer, clearer UI]
  * TopBar added: the bell left of the name with its count clear of the mark, a "P" mark, seven tabs that never wrap, the sync in words; it stays on screen while the page scrolls.
  * Hint added: one hover explanation, a bubble after 400ms or at once on keyboard focus, used in the top bar so far; every page names the browser tab ("NVDA · Positions · PortfolioBoss").

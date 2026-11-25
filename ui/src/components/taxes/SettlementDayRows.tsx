@@ -3,7 +3,7 @@ import { ArrowRight, ChevronRight, Clock } from 'lucide-react';
 import { EMPTY_VALUE, formatDate, formatShekels, formatSignedShekels, profitLossColorClass } from '../../lib/format';
 import { tableRowClass } from '../../lib/styles';
 import type { SettlementDay } from '../../types/taxes';
-import { HelpOnHover } from '../HelpOnHover';
+import { Hint, RowReachedAsAWhole } from '../Hint';
 import { DaySales } from './DaySales';
 import { salesCellText } from './stockSalesOfTheDay';
 import { TaxCheckCell } from './TaxCheckCell';
@@ -29,14 +29,13 @@ function hasACalculatedPart(settlementDay: SettlementDay): boolean {
   return hasACalculatedSale || hasAFeeWithItsRate;
 }
 
-/** The Taxable gain cell: the day's in its tone, "₪0.00" with why for a 0, "—" when nothing of it is calculated. */
+/** The Taxable gain cell: the day's in its tone, "₪0.00" with why in its hint for a 0, "—" when nothing is calculated. */
 function TaxableGainCell({ settlementDay }: { settlementDay: SettlementDay }) {
   if (settlementDay.status === 'CALCULATED_TO_ZERO') {
     return (
-      <span className="inline-flex items-center gap-1">
+      <Hint text={CALCULATED_TO_ZERO_TEXT} align="end">
         {formatShekels(0)}
-        <HelpOnHover label="Why no tax and no shield">{CALCULATED_TO_ZERO_TEXT}</HelpOnHover>
-      </span>
+      </Hint>
     );
   }
   if (!hasACalculatedPart(settlementDay)) return <span className="text-muted">{EMPTY_VALUE}</span>;
@@ -50,7 +49,7 @@ function TaxableGainCell({ settlementDay }: { settlementDay: SettlementDay }) {
 /**
  * The Entry cell: the amount the broker recorded once confirmed, else the calculated one — "Tax ₪1,277.13", "Shield
  * ₪849.38" —, "—" while nothing can be. On an investor's tab, which has no Check column, a day waiting for a rate keeps
- * its clock here.
+ * its clock here, why in its hint.
  */
 function EntryCell({ settlementDay, isPortfolioTab }: { settlementDay: SettlementDay; isPortfolioTab: boolean }) {
   if (settlementDay.confirmation !== null) return <>{entryText(settlementDay.confirmation.taxAmount)}</>;
@@ -61,9 +60,9 @@ function EntryCell({ settlementDay, isPortfolioTab }: { settlementDay: Settlemen
     <span className="inline-flex items-center gap-1 text-muted">
       {EMPTY_VALUE}
       {!isPortfolioTab && settlementDay.status === 'WAITING_FOR_A_RATE' && (
-        <HelpOnHover label="Not calculated yet" icon={<Clock size={16} />}>
-          {waitingForARateText(settlementDay.settlementDay)}
-        </HelpOnHover>
+        <Hint text={waitingForARateText(settlementDay.settlementDay)} align="end">
+          <Clock size={16} role="img" aria-label="Not calculated yet" className="text-faint" />
+        </Hint>
       )}
     </span>
   );
@@ -110,21 +109,25 @@ export function SettlementDayRows({
 
   return (
     <>
-      <tr
-        tabIndex={0}
-        aria-expanded={isOpen}
-        onClick={onToggle}
-        onKeyDown={toggleOnOpeningKey}
-        className={`${tableRowClass(isOpen)} ${hasSomethingUnderTheRow ? '' : 'border-b'}`}
-      >
+      <RowReachedAsAWhole>
+        <tr
+          tabIndex={0}
+          aria-expanded={isOpen}
+          onClick={onToggle}
+          onKeyDown={toggleOnOpeningKey}
+          className={`${tableRowClass(isOpen)} ${hasSomethingUnderTheRow ? '' : 'border-b'}`}
+        >
         <td className="h-[52px] pl-3">
           <ChevronRight size={16} className={`text-muted transition-transform ${isOpen ? 'rotate-90' : ''}`} />
         </td>
         <td className={`${DAY_CELL_CLASS} tabular-nums`}>
-          <span className="inline-flex items-center gap-1">
-            {formatDate(settlementDay.settlementDay)}
-            {tradeDays !== null && <HelpOnHover label="When the sales were made">{tradeDays}</HelpOnHover>}
-          </span>
+          {tradeDays === null ? (
+            formatDate(settlementDay.settlementDay)
+          ) : (
+            <Hint text={tradeDays} align="start">
+              {formatDate(settlementDay.settlementDay)}
+            </Hint>
+          )}
         </td>
         <td className={`${DAY_CELL_CLASS} truncate`}>{salesCellText(settlementDay)}</td>
         <td className={`${DAY_CELL_CLASS} text-right tabular-nums`}>
@@ -143,7 +146,8 @@ export function SettlementDayRows({
             />
           </td>
         )}
-      </tr>
+        </tr>
+      </RowReachedAsAWhole>
       {lineUnderTheDay !== null && (
         <tr className={isOpen ? '' : 'border-b'}>
           <td />

@@ -1,7 +1,7 @@
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { EmptyBox } from '../components/EmptyBox';
 import { weightsTabsOf } from '../components/graphs/investmentsAndCash';
-import { HelpPopover } from '../components/HelpPopover';
+import { HelpOnHover } from '../components/HelpOnHover';
 import { PageHeader } from '../components/PageHeader';
 import { AnalysisDetailLine } from '../components/recommendations/AnalysisDetailLine';
 import { RowAnalyzeButton } from '../components/recommendations/AnalyzeButtons';
@@ -36,7 +36,7 @@ function neighbourOf(stocks: HotStock[], candidateId: number, step: number): Hot
 /** The Hot list's "?": what makes a stock hot, and the list's order (RECOMMENDATIONS_TODO.md, decision 1). */
 function HotListHelp() {
   return (
-    <HelpPopover label="What makes a stock hot">
+    <HelpOnHover label="What makes a stock hot">
       <p>
         A long upward trend: the price above its 200-day average, and the 50-day average above the 200-day one. Hot is
         then 0–15% above the 50-day average.
@@ -44,7 +44,7 @@ function HotListHelp() {
       <p className="mt-2">
         The order: pulled back first, then the higher momentum score, then the less stretched above the 50-day average.
       </p>
-    </HelpPopover>
+    </HelpOnHover>
   );
 }
 
@@ -125,7 +125,7 @@ export function RecommendationsPage({ snapshot }: { snapshot: PortfolioSnapshot 
                 onOpen={openDrawer}
                 analyzeButtonOf={analyzeButtonOf}
                 detailLineOf={detailLineOf}
-                headingAside={<HotListHelp />}
+                headingHelp={<HotListHelp />}
               />
               <StockListCard
                 list="TOO_HOT"

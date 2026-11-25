@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { ACCOUNT_CURRENCY } from '../lib/format';
 import { LARGE_ICON_BUTTON_CLASS } from '../lib/styles';
 import { DrawerCloseButton, DrawerTitle } from './DrawerShell';
+import { Hint } from './Hint';
 
 export interface DrawerTab<TabKey extends string> {
   key: TabKey;
@@ -17,30 +18,50 @@ export interface DrawerNavigation {
   onNext: () => void;
 }
 
+/**
+ * ‹ or ›, with what it opens in its hint ("Next: COST"); disabled and without a hint while there is no list to step
+ * through (`opensLabel` null: the first load).
+ */
+function StepButton({
+  direction,
+  opensLabel,
+  onStep,
+  children,
+}: {
+  direction: 'Previous' | 'Next';
+  opensLabel: string | null;
+  onStep: (() => void) | undefined;
+  children: ReactNode;
+}) {
+  const button = (
+    <button
+      type="button"
+      aria-label={direction}
+      disabled={opensLabel === null}
+      onClick={onStep}
+      className={LARGE_ICON_BUTTON_CLASS}
+    >
+      {children}
+    </button>
+  );
+  if (opensLabel === null) return button;
+  return (
+    <Hint text={`${direction}: ${opensLabel}`} focusable={false}>
+      {button}
+    </Hint>
+  );
+}
+
 /** ‹ › and ✕ at the header's right; ‹ › disabled while there is no list to step through (the first load). */
 function HeaderButtons({ navigation }: { navigation: DrawerNavigation | null }) {
   return (
     <span className="ml-auto inline-flex items-center gap-0.5">
-      <button
-        type="button"
-        aria-label="Previous"
-        title={navigation === null ? undefined : `Previous: ${navigation.previousLabel}`}
-        disabled={navigation === null}
-        onClick={navigation?.onPrevious}
-        className={LARGE_ICON_BUTTON_CLASS}
-      >
+      <StepButton direction="Previous" opensLabel={navigation?.previousLabel ?? null} onStep={navigation?.onPrevious}>
         <ChevronLeft size={18} />
-      </button>
-      <button
-        type="button"
-        aria-label="Next"
-        title={navigation === null ? undefined : `Next: ${navigation.nextLabel}`}
-        disabled={navigation === null}
-        onClick={navigation?.onNext}
-        className={LARGE_ICON_BUTTON_CLASS}
-      >
+      </StepButton>
+      <StepButton direction="Next" opensLabel={navigation?.nextLabel ?? null} onStep={navigation?.onNext}>
         <ChevronRight size={18} />
-      </button>
+      </StepButton>
       <span aria-hidden="true" className="mx-1 h-4 w-px bg-line" />
       <DrawerCloseButton />
     </span>
@@ -185,9 +206,9 @@ export function KeyFigures({ children }: { children: ReactNode }) {
 }
 
 /** The small line under a key figure: "Me 20 · Dana 20", "+13.55%", "575 days". */
-export function KeyFigureExtra({ colorClass = 'text-muted', title, children }: { colorClass?: string; title?: string; children: ReactNode }) {
+export function KeyFigureExtra({ colorClass = 'text-muted', children }: { colorClass?: string; children: ReactNode }) {
   return (
-    <span title={title} className={`block text-caption ${colorClass}`}>
+    <span className={`block text-caption ${colorClass}`}>
       {children}
     </span>
   );

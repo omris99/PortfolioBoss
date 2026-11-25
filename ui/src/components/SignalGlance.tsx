@@ -3,7 +3,7 @@ import { CARD_CLASS } from '../lib/styles';
 import type { Holding, HoldingSignal } from '../types/portfolio';
 import { CardHeading } from './CardHeading';
 import { SkeletonBar } from './firstLoad/SkeletonBar';
-import { HelpPopover } from './HelpPopover';
+import { HelpOnHover } from './HelpOnHover';
 import { SignalColorDot, SignalLegend } from './Signal';
 
 /** A holding's dot, or 'none' while it has none: not analyzed yet, or fewer than two of its three parts known. */
@@ -34,13 +34,14 @@ function countsBySignal(holdings: Holding[]): Record<SignalGroup, number> {
 /** The card's title with its "?", which explains the colours. */
 function SignalGlanceHeading() {
   return (
-    <CardHeading title={CARD_TITLE}>
-      <span className="ml-auto">
-        <HelpPopover label="What the signal colors mean">
+    <CardHeading
+      title={CARD_TITLE}
+      help={
+        <HelpOnHover label="What the signal colors mean">
           <SignalLegend />
-        </HelpPopover>
-      </span>
-    </CardHeading>
+        </HelpOnHover>
+      }
+    />
   );
 }
 

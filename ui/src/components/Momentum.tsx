@@ -3,7 +3,7 @@ import { EMPTY_VALUE, formatDate, formatMoney, formatSignedPercent } from '../li
 import { fillClassOf, labelClassOf, MOMENTUM_TONES } from '../lib/signalColors';
 import { CHIP_CLASS } from '../lib/styles';
 import type { Momentum, MomentumLabel } from '../types/portfolio';
-import { HelpPopover } from './HelpPopover';
+import { HelpOnHover } from './HelpOnHover';
 
 /** "4/5", "?/5" while one of the checks is unknown, "—" without a single stored close. */
 export function momentumScoreText(momentum: Momentum | null): string {
@@ -170,7 +170,7 @@ function CheckRow({ check }: { check: MomentumCheck }) {
 
 function LabelMeaningsHelp() {
   return (
-    <HelpPopover label="What the momentum score means">
+    <HelpOnHover label="What the momentum score means">
       <p>Five checks on the daily closes; the score counts the ones that pass.</p>
       <ul className="mt-2 grid gap-1.5">
         {LABEL_MEANINGS.map(({ label, range, meaning }) => (
@@ -182,7 +182,7 @@ function LabelMeaningsHelp() {
           </li>
         ))}
       </ul>
-    </HelpPopover>
+    </HelpOnHover>
   );
 }
 

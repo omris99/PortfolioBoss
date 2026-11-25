@@ -16,6 +16,7 @@ import type { Investor } from '../types/portfolio';
 import { CashMovementsList } from './CashMovements';
 import { CurrencyFigure } from './CurrencyFigure';
 import { Field } from './FormFields';
+import { Hint } from './Hint';
 import { Modal } from './Modal';
 import { WarningBand } from './WarnMark';
 
@@ -87,7 +88,7 @@ export function InvestorModal({
 
 // ── a card ──────────────────────────────────────────────────────────────────────────────────────
 
-/** One line of the statement: the label on the left (with a hint on hover), the figure on the right. */
+/** One line of the statement: the label on the left (a term with its hint, when it has one), the figure on the right. */
 function StatementRow({
   label,
   hint,
@@ -103,8 +104,14 @@ function StatementRow({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-b py-2">
-      <dt title={hint} className={isStrong ? 'font-semibold text-ink' : 'text-muted'}>
-        {label}
+      <dt className={isStrong ? 'font-semibold text-ink' : 'text-muted'}>
+        {hint === undefined ? (
+          label
+        ) : (
+          <Hint text={hint} align="start" term>
+            {label}
+          </Hint>
+        )}
       </dt>
       <dd className={`text-right ${isStrong ? 'text-base font-semibold' : 'font-medium'} ${colorClass}`}>{children}</dd>
     </div>
@@ -174,15 +181,16 @@ export function InvestorCard({ investor, onDataChanged }: { investor: Investor; 
       <div className="flex items-center gap-2">
         <h2 className="text-figure font-semibold">{investor.name}</h2>
         {investor.accountOwner && <span className={TAG_CLASS}>account owner</span>}
-        <button
-          type="button"
-          aria-label={`Rename ${investor.name}`}
-          title="Rename"
-          onClick={() => setIsRenaming(true)}
-          className={ICON_BUTTON_CLASS}
-        >
-          <Pencil size={14} />
-        </button>
+        <Hint text={`Rename ${investor.name}`} focusable={false}>
+          <button
+            type="button"
+            aria-label={`Rename ${investor.name}`}
+            onClick={() => setIsRenaming(true)}
+            className={ICON_BUTTON_CLASS}
+          >
+            <Pencil size={14} />
+          </button>
+        </Hint>
       </div>
       <p className="-mt-1.5 text-[13px] text-muted">{sourceLineOf(investor)}</p>
 

@@ -1,4 +1,5 @@
 import type { Holding, HoldingWarning } from '../types/portfolio';
+import { Hint } from './Hint';
 import { WarnMark, WarningBand, type WarningLevel } from './WarnMark';
 
 /**
@@ -28,11 +29,15 @@ export function firstRealWarningOf(holding: Holding): HoldingWarning | null {
   return holding.warnings.find((warning) => levelOf(warning) === 'real') ?? null;
 }
 
-/** The triangle next to the symbol; hovering shows the message. Nothing when the trades entered match IB. */
+/** The triangle next to the symbol, the message in its hint. Nothing when the trades entered match IB. */
 export function HoldingWarningMark({ warnings }: { warnings: HoldingWarning[] }) {
   if (warnings.length === 0) return null;
   const messages = warnings.map((warning) => warning.message).join('\n');
-  return <WarnMark level={areAllMinor(warnings) ? 'minor' : 'real'} title={messages} />;
+  return (
+    <Hint text={messages}>
+      <WarnMark level={areAllMinor(warnings) ? 'minor' : 'real'} label={messages} />
+    </Hint>
+  );
 }
 
 /** The same messages written out, at the top of a holding's drawer and of its Trades tab. */

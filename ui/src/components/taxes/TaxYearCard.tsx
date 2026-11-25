@@ -13,10 +13,14 @@ import {
   taxRefundedInSettledMonths,
 } from './taxYears';
 
-function YearCardCell({ title, children }: { title: string; children: ReactNode }) {
+/** One cell of the year's card: its title, with its "?" 4px after it when it has one (`help`), then its figures. */
+function YearCardCell({ title, help, children }: { title: string; help?: ReactNode; children: ReactNode }) {
   return (
     <div className="px-5 py-4">
-      <p className="text-label text-muted">{title}</p>
+      <p className="flex h-5 items-center gap-1 text-label text-muted">
+        {title}
+        {help}
+      </p>
       <div className="mt-1">{children}</div>
     </div>
   );
@@ -48,7 +52,7 @@ function notSettledYetText(taxYear: TaxYear, isTheLastSyncsYear: boolean): strin
   return taxYear.shieldLeft > 0 ? `Shield carried ${formatShekels(taxYear.shieldLeft)}` : 'Nothing';
 }
 
-/** The tax figure's "?": how it is made, on Portfolio with the days confirmed as the broker recorded them. */
+/** The "?" of the tax figure's title: how it is made, on Portfolio with the days confirmed as the broker recorded them. */
 function taxOfTheYearExplanation(taxYear: TaxYear, tab: InvestorTab): string {
   const taxableGain = formatShekels(taxYear.taxableGain);
   return tab.investorId === null
@@ -112,11 +116,11 @@ export function TaxYearCard({
   return (
     <section aria-label={`The tax of ${taxYear.year}`} className={CARD_CLASS}>
       <div className={`grid divide-x ${isPortfolioTab ? 'grid-cols-4' : 'grid-cols-3'}`}>
-        <YearCardCell title={isTheLastSyncsYear ? 'Tax this year so far' : 'Tax of the year'}>
-          <p className="flex items-center gap-1">
-            <span className="text-figure-lg tabular-nums">{formatShekels(taxYear.taxOfTheYearSoFar)}</span>
-            <HelpOnHover label="How the year’s tax is made">{taxOfTheYearExplanation(taxYear, tab)}</HelpOnHover>
-          </p>
+        <YearCardCell
+          title={isTheLastSyncsYear ? 'Tax this year so far' : 'Tax of the year'}
+          help={<HelpOnHover label="How the year’s tax is made">{taxOfTheYearExplanation(taxYear, tab)}</HelpOnHover>}
+        >
+          <p className="text-figure-lg tabular-nums">{formatShekels(taxYear.taxOfTheYearSoFar)}</p>
         </YearCardCell>
         <YearCardCell title="Settled">
           <p>{settledText(taxYear)}</p>

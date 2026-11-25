@@ -17,9 +17,11 @@ import {
 } from '../lib/styles';
 import type { StockSplit, Trade, TranslatedTrade } from '../types/portfolio';
 import { InfoBand } from './FormFields';
+import { Hint } from './Hint';
 import { HoldingWarningBands } from './HoldingWarnings';
 import { hasSeveralInvestors, investorNameOf, useInvestors } from './InvestorsContext';
 import { ConfirmDialog } from './Modal';
+import { ShortenedText } from './ShortenedText';
 import { isBeforeTheSplit } from './stockSplits/sharesAsTheyWereThen';
 import { StockSplitRow } from './stockSplits/StockSplitRow';
 import { tradeBeforeTheSplitText } from './stockSplits/stockSplitTexts';
@@ -76,31 +78,37 @@ function TradeRow({
         <td className={`${cellClass} text-right`}>{formatQuantity(quantity)}</td>
         <td className={`${cellClass} text-right`}>{formatMoney(price)}</td>
         <td className={`${cellClass} text-right`}>{formatMoney(trade.commission)}</td>
-        <td title={trade.note ?? undefined} className={`${cellClass} max-w-[120px] truncate`}>
-          {trade.note ?? <span className="text-faint">{EMPTY_VALUE}</span>}
+        <td className={cellClass}>
+          {trade.note === null ? (
+            <span className="text-faint">{EMPTY_VALUE}</span>
+          ) : (
+            <ShortenedText text={trade.note} className="max-w-[120px]" />
+          )}
         </td>
         {investorName !== null && <td className={cellClass}>{investorName}</td>}
         {rowActions !== null && (
           <td className={`${cellClass} w-14 text-right`}>
             <span className="inline-flex">
-              <button
-                type="button"
-                aria-label="Edit trade"
-                title="Edit this trade"
-                onClick={() => rowActions.onEdit(trade)}
-                className={ICON_BUTTON_CLASS}
-              >
-                <Pencil size={14} />
-              </button>
-              <button
-                type="button"
-                aria-label="Delete trade"
-                title="Delete this trade"
-                onClick={() => rowActions.onDelete(trade)}
-                className={DELETE_ICON_BUTTON_CLASS}
-              >
-                <Trash2 size={14} />
-              </button>
+              <Hint text="Edit this trade" focusable={false}>
+                <button
+                  type="button"
+                  aria-label="Edit this trade"
+                  onClick={() => rowActions.onEdit(trade)}
+                  className={ICON_BUTTON_CLASS}
+                >
+                  <Pencil size={14} />
+                </button>
+              </Hint>
+              <Hint text="Delete this trade" align="end" focusable={false}>
+                <button
+                  type="button"
+                  aria-label="Delete this trade"
+                  onClick={() => rowActions.onDelete(trade)}
+                  className={DELETE_ICON_BUTTON_CLASS}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </Hint>
             </span>
           </td>
         )}

@@ -7,6 +7,7 @@ import {
   formatQuantity,
   formatSignedPercentOneDecimal,
 } from '../../lib/format';
+import { ShortenedText } from '../ShortenedText';
 import { SignalDot } from '../Signal';
 import { percentOfAccountOf, type PurchasePlan } from '../weightCalculator/targetWeight';
 import { NumberInputWithUnit, shareCountText } from '../weightCalculator/WeightCalculatorPanel';
@@ -93,7 +94,7 @@ function ColumnHeaders() {
   );
 }
 
-/** The signal dot, the symbol, and IB's sector under it — cut when long, whole on hover. */
+/** The signal dot, the symbol, and IB's sector under it — cut when long, whole in its hint. */
 function HoldingCell({ averagingRow }: { averagingRow: AveragingRow }) {
   const { holding } = averagingRow;
   return (
@@ -101,9 +102,11 @@ function HoldingCell({ averagingRow }: { averagingRow: AveragingRow }) {
       <SignalDot holding={holding} />
       <span className="flex min-w-0 flex-col">
         <span className="font-semibold">{holding.symbol}</span>
-        <span title={holding.sector ?? undefined} className="block max-w-[122px] truncate text-caption text-muted">
-          {holding.sector ?? EMPTY_VALUE}
-        </span>
+        {holding.sector === null ? (
+          <span className="text-caption text-muted">{EMPTY_VALUE}</span>
+        ) : (
+          <ShortenedText text={holding.sector} className="max-w-[122px] text-caption text-muted" />
+        )}
       </span>
     </span>
   );

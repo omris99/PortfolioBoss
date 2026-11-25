@@ -59,8 +59,8 @@ status and the FIFO-against-average-cost flag worked out in Java — and the sto
 stored once by the sync, a holding's trades typed in translated through them on every read, the tax's Flex trades too,
 and shown in a holding's trades — the split's line, a translated trade with what was typed under it, the trade form's
 note — and the UI's polish of its small details (UI_POLISH_TODO.md): the top bar, dates dd/mm/yyyy, words in place of
-tags, motion and the first load's skeletons, the alerts panel in two groups and its settings drawer, on a demo
-database):*
+tags, motion and the first load's skeletons, the alerts panel in two groups and its settings drawer, one way to explain
+on hover in place of the browser's tooltip, on a demo database):*
 
 | Scope | Covers |
 |---|---|
@@ -77,7 +77,7 @@ database):*
 | `calculation` | `portfolioboss.calculation` (until 2026-10-08 the scopes `domain` and `model`; since 2026-10-09 only what computes) — `HoldingHistory`, `ClosedPosition`, `TradeFact`, `PositionTrades`, `InvestorPart`, `CashMovementFact`, `InvestorSummary`, `InvestorSummaryCalculator`, `Momentum`, `ConsensusCalculator`, `AnalystTrendCalculator`, `SignalCalculator`, `HotStockCalculator`, `ReturnsCorrelation`, `ScanSchedule`, `AnalystTargetCalculator`, `RecommendationCandidate`, `RecommendationCalculator`, `NewsScoreCalculator`, `RiskSignsCalculator`, `OrderCommission`, `DailyClosesWithSpy`, `PortfolioWeightsCalculator` (both 2026-11-11), and since 2026-11-22 the splits' `calculation/splits` — `StockSplit`, `StoredStockSplits`, `TradesAfterTheSplits` (a holding's typed trades translated through its splits): derived dates, closed positions and realized P&L, reconciliation warnings, each investor's cash and profit, the momentum score and the year's figures, the analysts' consensus and trend and the dot, the hot-stock rule and the page's order, the correlations, when a scan is due, the analysts' target from Dow Jones, the risk signs and the timing note (a scanned stock's and a holding's), the news score and the pick, the default commission, a stock's momentum against SPY from the stored closes, a holding's share of the whole account — no Spring, no database |
 | `exceptions` | `portfolioboss.exceptions` (since 2026-10-26) — the app's own exceptions (`TwsUnavailableException`, `TwsBusyException`, `FlexReportUnavailableException`, `ExchangeRatesUnavailableException`) |
 | `ui` | the React app in `ui/` (with its Vite/Tailwind/TypeScript config) — its pages, the Recommendations page's pieces in `components/recommendations/`, the Averaging calculator's in `components/averagingCalculator/`, the alerts bell, its panel and settings drawer in `components/alerts/`, the Taxes page's in `components/taxes/`, the stock splits' in `components/stockSplits/`, the top bar's in `components/topBar/`, the first load's skeleton bars in `components/firstLoad/`, the motion's hook in `hooks/animation/`, and what a holding and a scanned stock both show in `components/companyInfo/` and `components/AnalystTarget.tsx` — and `UiLauncher`, which starts it and opens the browser |
-| `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling — `scripts/demo/` too (the demo database's script and data, the Playwright screenshot and check tools) |
+| `config` | `run.sh`, `pom.xml`, `application.properties`, build setup, `.claude/`, tooling (`scripts/demo/` is git-ignored: the demo database's script and data and the Playwright tools stay on this machine) |
 
 Tests (`src/test/`) take the scope of the code they cover.
 
@@ -100,7 +100,7 @@ Tests (`src/test/`) take the scope of the code they cover.
 - **Always** show the drafted commit message to the user and wait for approval before running `git commit`
 - **Never** add `Co-Authored-By:`, `Generated with`, or any trailer lines to the commit message
 - **Never** commit `out/`, `target/`, `*.class`, `ui/node_modules/`, `ui/dist/`, `ui/dev-server.log`,
-  `scripts/demo/node_modules/`, `config/local.env`, or `.claude/settings.local.json` unless the user explicitly asks
+  `scripts/demo/` (git-ignored, his choice), `config/local.env`, or `.claude/settings.local.json` unless the user explicitly asks
 - **Never** commit a screenshot, a recording or anything else showing the real portfolio; the demo's come from
   `portfolioboss_demo` only, and a `.docx` at the repo root is his own draft — ask before staging it
 - Keep the subject line under 72 characters

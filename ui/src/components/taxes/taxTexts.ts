@@ -98,7 +98,7 @@ export function waitingForARateText(settlementDay: string): string {
   return `Bank of Israel’s rate for ${formatDate(settlementDay)} isn’t stored yet: it comes with a sync after it is published.`;
 }
 
-/** The "?" of a day calculated as 0. */
+/** The hint of a day calculated as 0, on its "₪0.00". */
 export const CALCULATED_TO_ZERO_TEXT = 'No tax and no shield: a gain one way and a loss the other counts as 0.';
 
 /** The "?" beside a sale whose cost first in first out isn't the Closed page's. */

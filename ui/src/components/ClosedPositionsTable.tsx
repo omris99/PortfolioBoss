@@ -12,7 +12,6 @@ import {
 } from '../lib/format';
 import {
   CARD_CLASS,
-  EXPLAINED_CLASS,
   TABLE_CLASS,
   TABLE_HEADER_CELL_CLASS,
   TAG_CLASS,
@@ -20,6 +19,7 @@ import {
 } from '../lib/styles';
 import type { ClosedPosition } from '../types/portfolio';
 import { CurrencyFigure } from './CurrencyFigure';
+import { Hint, RowReachedAsAWhole } from './Hint';
 import { HoldingPeriod } from './HoldingPeriod';
 import { hasSeveralInvestors, investorNameOf, useInvestors } from './InvestorsContext';
 import { WarnMark, WarningBand } from './WarnMark';
@@ -62,13 +62,13 @@ export function ClosedPositionTags({ closedPosition }: { closedPosition: ClosedP
   );
 }
 
-/** "+40.00 USD", or a dotted "—" that says why there is none. */
+/** "+40.00 USD", or a "—" whose hint says why there is none. */
 function RealizedPnl({ closedPosition }: { closedPosition: ClosedPosition }) {
   if (closedPosition.realizedPnl === null) {
     return (
-      <span title={NO_REALIZED_PNL_REASON} className={EXPLAINED_CLASS}>
+      <Hint text={NO_REALIZED_PNL_REASON} align="end">
         {EMPTY_VALUE}
-      </span>
+      </Hint>
     );
   }
   return <CurrencyFigure value={closedPosition.realizedPnl} currency={closedPosition.currency} />;
@@ -99,7 +99,11 @@ function SymbolWithTags({ closedPosition }: { closedPosition: ClosedPosition }) 
     <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1 py-1">
       <span className="font-semibold">{closedPosition.symbol}</span>
       <ClosedPositionTags closedPosition={closedPosition} />
-      {closedPosition.warning !== null && <WarnMark level="real" title={closedPosition.warning} />}
+      {closedPosition.warning !== null && (
+        <Hint text={closedPosition.warning}>
+          <WarnMark level="real" label={closedPosition.warning} />
+        </Hint>
+      )}
     </span>
   );
 }
@@ -232,7 +236,7 @@ function ClosedPositionRows({
     if (event.key === 'Enter') onOpen();
   };
   return (
-    <>
+    <RowReachedAsAWhole>
       <tr
         tabIndex={0}
         aria-label={`${closedPosition.symbol}, sold ${formatDate(closedPosition.closeDate)}, open details`}
@@ -260,7 +264,7 @@ function ClosedPositionRows({
           </td>
         </tr>
       )}
-    </>
+    </RowReachedAsAWhole>
   );
 }
 

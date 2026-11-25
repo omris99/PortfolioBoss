@@ -83,9 +83,6 @@ export function sideTextClass(isSecondSide: boolean): string {
   return `text-[11px] font-semibold tracking-[0.03em] ${isSecondSide ? 'text-muted' : 'text-ink'}`;
 }
 
-/** A figure or text whose hover explains it: dotted underline, help cursor. */
-export const EXPLAINED_CLASS = 'cursor-help underline decoration-line-strong decoration-dotted underline-offset-[3px]';
-
 // ── tables ──────────────────────────────────────────────────────────────────────────────────────
 
 /** A table on a page, in its card: a header on `subtle`, 44px rows, the outer cells padded like the card. */

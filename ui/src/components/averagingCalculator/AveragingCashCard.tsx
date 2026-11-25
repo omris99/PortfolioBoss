@@ -1,7 +1,8 @@
 import { Wallet } from 'lucide-react';
 import { formatMoney } from '../../lib/format';
-import { CARD_CLASS, EXPLAINED_CLASS, SMALL_SECONDARY_BUTTON_CLASS } from '../../lib/styles';
+import { CARD_CLASS, SMALL_SECONDARY_BUTTON_CLASS } from '../../lib/styles';
 import type { InvestmentsAndCash } from '../graphs/investmentsAndCash';
+import { Hint } from '../Hint';
 import { WarnMark } from '../WarnMark';
 import type { PlanTotal } from './averagingPlan';
 
@@ -75,9 +76,10 @@ export function AveragingCashCard({
       <div className="flex min-h-[32px] flex-wrap items-center gap-2">
         <Wallet size={16} aria-hidden="true" className="shrink-0 text-muted" />
         <span className="inline-flex items-baseline gap-1.5 text-muted">
-          <span title={tab.cashHint} className={EXPLAINED_CLASS}>
+          {/* Below the word: the card sticks to the top of the screen, under the top bar. */}
+          <Hint text={tab.cashHint} placement="below" align="start" term>
             Cash
-          </span>
+          </Hint>
           <b className="text-[16px] font-semibold text-ink">{formatMoney(cash)}</b>
         </span>
         {hasPurchases ? (

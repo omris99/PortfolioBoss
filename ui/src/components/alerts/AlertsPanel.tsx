@@ -3,6 +3,7 @@ import { BellOff, ChevronDown, Settings } from 'lucide-react';
 import { Link } from 'react-router';
 import { LARGE_ICON_BUTTON_CLASS, LINK_BUTTON_CLASS } from '../../lib/styles';
 import type { Alert } from '../../types/alerts';
+import { Hint } from '../Hint';
 import { useCurrentMinute } from '../topBar/useCurrentMinute';
 import { ALERT_GROUPS, ALERTS_SHOWN_PER_GROUP, alertsOfGroup, type AlertGroupWords } from './alertGroups';
 import { alertTimeText } from './alertTime';
@@ -134,15 +135,13 @@ export function AlertsPanel({
       <div className="flex shrink-0 items-center gap-2 border-b py-2 pl-4 pr-3">
         <h2 className="text-section-title">Alerts</h2>
         {newAlertIds.size > 0 && <span className="text-caption tabular-nums text-muted">{newAlertIds.size} new</span>}
-        <button
-          type="button"
-          aria-label="Alert settings"
-          title="Alert settings"
-          onClick={onOpenSettings}
-          className={`${LARGE_ICON_BUTTON_CLASS} ml-auto`}
-        >
-          <Settings size={16} />
-        </button>
+        <span className="ml-auto flex">
+          <Hint text="Alert settings" focusable={false}>
+            <button type="button" aria-label="Alert settings" onClick={onOpenSettings} className={LARGE_ICON_BUTTON_CLASS}>
+              <Settings size={16} />
+            </button>
+          </Hint>
+        </span>
       </div>
       {alerts.length === 0 ? (
         <NoAlertsYet />

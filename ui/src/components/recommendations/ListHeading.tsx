@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { COUNT_CHIP_CLASS } from '../../lib/styles';
 import type { HotStockLabel } from '../../types/recommendations';
+import { Hint } from '../Hint';
 
 interface ListWords {
   title: string;
@@ -36,35 +37,39 @@ const BAND_ORDER: HotStockLabel[] = ['CORRECTING', 'HOT', 'TOO_HOT'];
  */
 function PositionBand({ list }: { list: HotStockLabel }) {
   return (
-    <span
-      title="Where this list sits against the 50-day average: below · 0–15% above · more than 15% above"
-      className="inline-flex gap-0.5"
+    <Hint
+      text="Where this list sits against the 50-day average: below · 0–15% above · more than 15% above"
+      align="end"
     >
-      {BAND_ORDER.map((bandList) => (
-        <span
-          key={bandList}
-          aria-hidden="true"
-          className={`h-1.5 w-3 rounded-[1px] ${bandList === list ? 'bg-[var(--color-text-muted)]' : 'bg-line-strong'}`}
-        />
-      ))}
-    </span>
+      <span className="inline-flex gap-0.5 py-1">
+        {BAND_ORDER.map((bandList) => (
+          <span
+            key={bandList}
+            aria-hidden="true"
+            className={`h-1.5 w-3 rounded-[1px] ${bandList === list ? 'bg-[var(--color-text-muted)]' : 'bg-line-strong'}`}
+          />
+        ))}
+      </span>
+    </Hint>
   );
 }
 
 /**
- * The head of a list's card: its name, how many stocks it has, what it means in words, and the band; `aside` goes at
- * the right end (the Hot list's "?").
+ * The head of a list's card: its name, how many stocks it has, what it means in words with its "?" 4px after them
+ * (`help`, the Hot list's: round 6 — never at the card's far edge), and the band at the right end.
  */
-export function ListHeading({ list, count, aside }: { list: HotStockLabel; count: number; aside?: ReactNode }) {
+export function ListHeading({ list, count, help }: { list: HotStockLabel; count: number; help?: ReactNode }) {
   const { title, meaning } = LIST_WORDS[list];
   return (
     <div className="flex min-h-[52px] items-center gap-2 border-b px-5 py-3">
       <h2 className="text-section-title">{title}</h2>
       <span className={COUNT_CHIP_CLASS}>{count}</span>
-      <span className="text-[13px] text-muted">{meaning}</span>
-      <span className="ml-auto flex items-center gap-2">
+      <span className="inline-flex items-center gap-1">
+        <span className="text-[13px] text-muted">{meaning}</span>
+        {help}
+      </span>
+      <span className="ml-auto flex items-center">
         <PositionBand list={list} />
-        {aside}
       </span>
     </div>
   );

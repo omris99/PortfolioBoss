@@ -39,6 +39,8 @@ function navigationLinkClass({ isActive }: { isActive: boolean }): string {
     : `${baseClass} text-muted hover:text-ink`;
 }
 
+const SYNC_NOW_HINT = 'Read the portfolio from TWS again, as ./run.sh does at startup. TWS must be open.';
+
 /** "Sync failed" and "Not connected": the loss tone, with their icon. */
 function ProblemWords({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
@@ -104,7 +106,7 @@ function SyncLine({
       {hint === null ? (
         words
       ) : (
-        <Hint text={hint} side="bottom" align="end">
+        <Hint text={hint} placement="below" align="end">
           {words}
         </Hint>
       )}
@@ -159,16 +161,17 @@ export function TopBar({
         </nav>
         <div className="ml-auto flex items-center gap-2 whitespace-nowrap text-[13px] leading-[18px] text-muted">
           <SyncLine status={status} syncedAt={syncedAt} account={account} />
-          <ReadingFromTwsButton
-            readingState={syncNowState}
-            idleText="Sync now"
-            readingText="Syncing…"
-            size="small"
-            disabled={status === 'loading'}
-            className="min-w-[104px]"
-            title="Read the portfolio from TWS again, as ./run.sh does at startup. TWS must be open."
-            onClick={onSyncNow}
-          />
+          <Hint text={SYNC_NOW_HINT} placement="below" align="end" focusable={false}>
+            <ReadingFromTwsButton
+              readingState={syncNowState}
+              idleText="Sync now"
+              readingText="Syncing…"
+              size="small"
+              disabled={status === 'loading'}
+              className="min-w-[104px]"
+              onClick={onSyncNow}
+            />
+          </Hint>
         </div>
       </div>
     </header>

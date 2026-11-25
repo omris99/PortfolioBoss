@@ -5,6 +5,7 @@ import { useAlerts } from '../../hooks/useAlerts';
 import { markAlertsAsSeen, saveAlertSettings } from '../../lib/apiClient';
 import { LARGE_ICON_BUTTON_CLASS } from '../../lib/styles';
 import type { Alert, AlertSetting } from '../../types/alerts';
+import { Hint } from '../Hint';
 import { AlertSettingsDrawer } from './AlertSettingsDrawer';
 import { AlertsPanel } from './AlertsPanel';
 
@@ -72,22 +73,24 @@ export function AlertsBell({ portfolioSyncedAt }: { portfolioSyncedAt: string | 
   return (
     <>
       <Popover.Root open={isListOpen} onOpenChange={openOrCloseList}>
-        <Popover.Trigger
-          aria-label={bellLabelOf(unseenAlerts.length)}
-          title="Alerts"
-          className={`${LARGE_ICON_BUTTON_CLASS} relative data-[state=open]:bg-accent-soft data-[state=open]:text-accent`}
-        >
-          <Bell size={18} />
-          {unseenAlerts.length > 0 && (
-            // 7px out to the right, with a white ring, so that the number never touches the name's mark (round 6).
-            <span
-              aria-hidden="true"
-              className="absolute -right-[7px] -top-px flex h-4 min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-semibold leading-4 text-on-accent ring-2 ring-surface"
-            >
-              {unseenCountText}
-            </span>
-          )}
-        </Popover.Trigger>
+        {/* No hint while the panel is open: it would cover the panel's head. */}
+        <Hint text="Alerts" placement="below" align="start" focusable={false} disabled={isListOpen}>
+          <Popover.Trigger
+            aria-label={bellLabelOf(unseenAlerts.length)}
+            className={`${LARGE_ICON_BUTTON_CLASS} relative data-[state=open]:bg-accent-soft data-[state=open]:text-accent`}
+          >
+            <Bell size={18} />
+            {unseenAlerts.length > 0 && (
+              // 7px out to the right, with a white ring, so that the number never touches the name's mark (round 6).
+              <span
+                aria-hidden="true"
+                className="absolute -right-[7px] -top-px flex h-4 min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-semibold leading-4 text-on-accent ring-2 ring-surface"
+              >
+                {unseenCountText}
+              </span>
+            )}
+          </Popover.Trigger>
+        </Hint>
         <Popover.Portal>
           <Popover.Content
             align="start"

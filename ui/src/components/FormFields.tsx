@@ -3,6 +3,7 @@ import { Calendar, ChevronDown, Info, LoaderCircle, TriangleAlert } from 'lucide
 import { formatDate } from '../lib/format';
 import { INPUT_CLASS, isIsoDate, isoDateFromTypedDate } from '../lib/formInput';
 import { PRIMARY_BUTTON_CLASS, TOGGLE_GROUP_CLASS, toggleOptionClass } from '../lib/styles';
+import { Hint } from './Hint';
 
 /** The columns a field takes in its form's grid. */
 const COLUMN_SPAN_CLASSES = { 1: '', 2: 'col-span-2', 3: 'col-span-3', 4: 'col-span-4' } as const;
@@ -145,15 +146,18 @@ export function DateInput({
         onChange={(event) => updateTypedText(event.target.value)}
         className={`${INPUT_CLASS} w-full pr-9 tabular-nums`}
       />
-      <button
-        type="button"
-        onClick={openPicker}
-        aria-label="Pick a date"
-        title={max ? `Pick a date (up to ${formatDate(max)})` : 'Pick a date'}
-        className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors hover:bg-accent-soft hover:text-accent"
-      >
-        <Calendar size={16} />
-      </button>
+      <span className="absolute right-1 top-1 flex">
+        <Hint text={max ? `Pick a date (up to ${formatDate(max)})` : 'Pick a date'} align="end" focusable={false}>
+          <button
+            type="button"
+            onClick={openPicker}
+            aria-label="Pick a date"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors hover:bg-accent-soft hover:text-accent"
+          >
+            <Calendar size={16} />
+          </button>
+        </Hint>
+      </span>
       <input
         ref={pickerRef}
         type="date"

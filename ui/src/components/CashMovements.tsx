@@ -17,7 +17,9 @@ import {
 } from '../lib/styles';
 import type { CashMovement, CashMovementRequest, CashMovementType, Investor } from '../types/portfolio';
 import { DateInput, Field, Toggle } from './FormFields';
+import { Hint } from './Hint';
 import { ConfirmDialog, Modal } from './Modal';
+import { ShortenedText } from './ShortenedText';
 
 const NOTE_MAX_LENGTH = 500;   // the investor_cash_movement.note column
 
@@ -180,17 +182,25 @@ function CashMovementRow({
         <span className={sideTextClass(cashMovement.type === 'WITHDRAWAL')}>{cashMovement.type}</span>
       </td>
       <td className={`${INNER_CELL_CLASS} text-right`}>{formatMoney(cashMovement.amount)}</td>
-      <td title={cashMovement.note ?? undefined} className={`${INNER_CELL_CLASS} max-w-[120px] truncate`}>
-        {cashMovement.note ?? <span className="text-faint">{EMPTY_VALUE}</span>}
+      <td className={INNER_CELL_CLASS}>
+        {cashMovement.note === null ? (
+          <span className="text-faint">{EMPTY_VALUE}</span>
+        ) : (
+          <ShortenedText text={cashMovement.note} className="max-w-[120px]" />
+        )}
       </td>
       <td className={`${INNER_CELL_CLASS} w-14 text-right`}>
         <span className="inline-flex">
-          <button type="button" aria-label="Edit" title="Edit" onClick={onEdit} className={ICON_BUTTON_CLASS}>
-            <Pencil size={14} />
-          </button>
-          <button type="button" aria-label="Delete" title="Delete" onClick={onDelete} className={DELETE_ICON_BUTTON_CLASS}>
-            <Trash2 size={14} />
-          </button>
+          <Hint text="Edit" focusable={false}>
+            <button type="button" aria-label="Edit" onClick={onEdit} className={ICON_BUTTON_CLASS}>
+              <Pencil size={14} />
+            </button>
+          </Hint>
+          <Hint text="Delete" align="end" focusable={false}>
+            <button type="button" aria-label="Delete" onClick={onDelete} className={DELETE_ICON_BUTTON_CLASS}>
+              <Trash2 size={14} />
+            </button>
+          </Hint>
         </span>
       </td>
     </tr>

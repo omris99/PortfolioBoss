@@ -1,6 +1,7 @@
 import type { HotStock } from '../../types/recommendations';
 import { TargetUpside } from '../AnalystTarget';
 import { CompanyPanel, CompanyRow } from '../companyInfo/CompanyPanel';
+import { Hint } from '../Hint';
 import { CandidateRiskSigns } from './CandidateRiskSigns';
 import { CANDIDATE_NOT_CHECKED_HINTS } from './hotStockTexts';
 import { formatPoints, NEWS_SCORE_HINT } from './NewsScore';
@@ -41,9 +42,11 @@ function ForTheRecommendation({ stock }: { stock: HotStock }) {
         </CompanyRow>
         {stock.score !== null && stock.newsScore !== null && (
           <CompanyRow label="Score" rule="The news score less the signs’ weight: the picks are ordered by it">
-            <span title={NEWS_SCORE_HINT} className="text-muted">
-              news {formatPoints(stock.newsScore)} − {stock.riskWeight} =
-            </span>
+            <Hint text={NEWS_SCORE_HINT}>
+              <span className="text-muted">
+                news {formatPoints(stock.newsScore)} − {stock.riskWeight} =
+              </span>
+            </Hint>
             <b className="font-semibold">{formatPoints(stock.score)}</b>
           </CompanyRow>
         )}

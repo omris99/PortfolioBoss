@@ -2,8 +2,9 @@ import { useState, type ReactElement, type ReactNode } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { Check, LoaderCircle, ScanSearch, TriangleAlert } from 'lucide-react';
 import { analyzeHoldings, errorMessageOf } from '../lib/apiClient';
-import { EXPLAINED_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS, SMALL_SECONDARY_BUTTON_CLASS } from '../lib/styles';
+import { PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS, SMALL_SECONDARY_BUTTON_CLASS } from '../lib/styles';
 import type { AnalysisRun, EstimatedAnalysisCost } from '../types/portfolio';
+import { Hint } from './Hint';
 
 // ── what a run is expected to cost ──────────────────────────────────────────────────────────────
 
@@ -78,14 +79,17 @@ function useAnalysisRun(holdingIds: number[] | null, onDataChanged: () => Promis
   return { isRunning, lastRun, errorMessage, run };
 }
 
-/** "Failed: AEVA, TTWO", each one's reason on hover. They keep their previous analysis. */
+/** "Failed: AEVA, TTWO", each one's reason in its hint, a line each. They keep their previous analysis. */
 function FailedStocks({ run }: { run: AnalysisRun }) {
   if (run.failed.length === 0) return null;
   const symbols = run.failed.map((failure) => failure.symbol).join(', ');
   const reasons = run.failed.map((failure) => `${failure.symbol}: ${failure.message}`).join('\n');
   return (
-    <span title={reasons} className={`text-negative ${EXPLAINED_CLASS}`}>
-      · Failed: {symbols}
+    <span className="text-negative">
+      ·{' '}
+      <Hint text={reasons} term>
+        Failed: {symbols}
+      </Hint>
     </span>
   );
 }
@@ -138,16 +142,19 @@ export function RunningIcon({ isRunning, size }: { isRunning: boolean; size: num
 /**
  * A paid run's button that asks first, in a popover beside it: `children` say what will run and what it should cost,
  * then the run's own button (`confirmLabel`) and Cancel — Esc or a click outside cancel too. `trigger` is the button
- * itself, a `<button>` element: the popover adds its click to it.
+ * itself, a `<button>` element: the popover adds its click to it; `triggerHint` is its hint — what it runs and costs, or
+ * why it is disabled.
  */
 export function ConfirmBeforeRun({
   trigger,
+  triggerHint,
   confirmLabel,
   onConfirm,
   align = 'start',
   children,
 }: {
   trigger: ReactElement;
+  triggerHint: string;
   confirmLabel: string;
   onConfirm: () => void;
   align?: 'start' | 'end';
@@ -162,7 +169,10 @@ export function ConfirmBeforeRun({
 
   return (
     <Popover.Root open={isConfirming} onOpenChange={setIsConfirming}>
-      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      {/* The button's hint, quiet while its confirm is open. */}
+      <Hint text={triggerHint} align={align} focusable={false} disabled={isConfirming}>
+        <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      </Hint>
       <Popover.Portal>
         <Popover.Content
           align={align}
@@ -217,16 +227,12 @@ export function AnalyzeEveryHoldingControl({
     <div className="inline-flex min-w-0 items-center gap-3">
       <ConfirmBeforeRun
         trigger={
-          <button
-            type="button"
-            disabled={isRunning}
-            title={hintOf('every open holding', estimatedAnalysisCost, stockCount)}
-            className={PRIMARY_BUTTON_CLASS}
-          >
+          <button type="button" disabled={isRunning} className={PRIMARY_BUTTON_CLASS}>
             <RunningIcon isRunning={isRunning} size={16} />
             {isRunning ? 'Analyzing…' : 'Analyze'}
           </button>
         }
+        triggerHint={hintOf('every open holding', estimatedAnalysisCost, stockCount)}
         confirmLabel={`Analyze ${stockCount} holdings`}
         onConfirm={() => void run()}
       >
@@ -258,16 +264,17 @@ export function AnalyzeHoldingButton({
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       <RunOutcome isRunning={isRunning} runningText={null} lastRun={lastRun} errorMessage={errorMessage} />
-      <button
-        type="button"
-        onClick={() => void run()}
-        disabled={isRunning}
-        title={hintOf(symbol, estimatedAnalysisCost, 1)}
-        className={SMALL_SECONDARY_BUTTON_CLASS}
-      >
-        <RunningIcon isRunning={isRunning} size={14} />
-        {isRunning ? 'Analyzing…' : `Analyze ${symbol}`}
-      </button>
+      <Hint text={hintOf(symbol, estimatedAnalysisCost, 1)} align="end" focusable={false}>
+        <button
+          type="button"
+          onClick={() => void run()}
+          disabled={isRunning}
+          className={SMALL_SECONDARY_BUTTON_CLASS}
+        >
+          <RunningIcon isRunning={isRunning} size={14} />
+          {isRunning ? 'Analyzing…' : `Analyze ${symbol}`}
+        </button>
+      </Hint>
     </span>
   );
 }

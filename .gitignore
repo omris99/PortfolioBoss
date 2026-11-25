@@ -12,3 +12,6 @@ target/
 
 # local secrets / config (never commit real keys)
 config/local.env
+
+# the demo database's scripts and the screenshot tools: kept on this machine only
+scripts/demo/

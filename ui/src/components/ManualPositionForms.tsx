@@ -18,6 +18,7 @@ import type { ClosedPosition, ManualPositionRequest, NewManualPositionRequest } 
 import { ClosedPositionTags, NO_REALIZED_PNL_REASON } from './ClosedPositionsTable';
 import { CurrencyFigure } from './CurrencyFigure';
 import { DateInput, Field, FormError } from './FormFields';
+import { Hint } from './Hint';
 import { InvestorSelect } from './InvestorSelect';
 import { accountOwnerOf, hasSeveralInvestors, useInvestors } from './InvestorsContext';
 import { ConfirmDialog, Modal } from './Modal';
@@ -241,9 +242,10 @@ function TradeLegFields({
         <AmountInput value={priceText} onChange={onPriceChange} />
       </Field>
       <Field label="Commission" optional>
-        <span title={COMMISSION_HINT}>
+        {/* The keyboard reaches the field itself; its hint opens with it. */}
+        <Hint text={COMMISSION_HINT} focusable={false}>
           <AmountInput value={commissionText} placeholder="Default" onChange={onCommissionChange} />
-        </span>
+        </Hint>
       </Field>
     </fieldset>
   );
@@ -363,7 +365,7 @@ function ManualPositionLine({ closedPosition }: { closedPosition: ClosedPosition
       <b className="font-semibold">{closedPosition.symbol}</b>
       <ClosedPositionTags closedPosition={closedPosition} />· sold {formatDate(closedPosition.closeDate)} ·
       {closedPosition.realizedPnl === null ? (
-        <span title={NO_REALIZED_PNL_REASON}>no P&amp;L</span>
+        <Hint text={NO_REALIZED_PNL_REASON}>no P&amp;L</Hint>
       ) : (
         <CurrencyFigure value={closedPosition.realizedPnl} currency={closedPosition.currency} />
       )}

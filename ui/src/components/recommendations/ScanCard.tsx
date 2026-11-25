@@ -2,7 +2,8 @@ import { Fragment, type ReactNode } from 'react';
 import { Check, Info, TriangleAlert, Wallet } from 'lucide-react';
 import type { ReadingFromTwsState } from '../../hooks/useReadingFromTws';
 import { formatDateTime, formatMoney } from '../../lib/format';
-import { CARD_CLASS, EXPLAINED_CLASS } from '../../lib/styles';
+import { CARD_CLASS } from '../../lib/styles';
+import { Hint } from '../Hint';
 import { ReadingFromTwsButton } from '../ReadingFromTwsButton';
 import type { Recommendations } from '../../types/recommendations';
 import { hasSeveralInvestors, useInvestors } from '../InvestorsContext';
@@ -30,9 +31,9 @@ function ScanFigures({ recommendations }: { recommendations: Recommendations }) 
       <Separator />
       {recommendations.hotStocks.length} hot, {recommendations.tooHotStocks.length} too hot,{' '}
       {recommendations.correctingStocks.length} correcting,{' '}
-      <span title={NO_LIST_HINT} className={EXPLAINED_CLASS}>
+      <Hint text={NO_LIST_HINT} term>
         {inNoListCount} in no list
-      </span>
+      </Hint>
     </p>
   );
 }

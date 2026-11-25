@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import { formatSignedPercentOneDecimal } from '../../lib/format';
 import type { CompanyFacts, CompanyInfo, RiskSign } from '../../types/portfolio';
+import { Hint } from '../Hint';
 import { LabeledValue } from '../LabeledValue';
 import { TimingNoteWhenDue } from './TimingNote';
 
@@ -51,21 +52,24 @@ const RISK_SIGN_FIGURES: Record<RiskSign, (figures: FiguresBehindTheSigns) => st
 
 /**
  * One of the five company risks as words, not a tag (round 6, DESIGN_BRIEF.md §11.6, rule 2): its name bold in the loss
- * tone, then with `figure` the figure that raised it — "Expensive, P/E 52". Its hover names the rule it broke.
+ * tone, then with `figure` the figure that raised it — "Expensive, P/E 52". Its hint names the rule it broke.
  */
 export function RiskSignTag({ sign, figure = null }: { sign: RiskSign; figure?: string | null }) {
   const { name, rule } = RISK_SIGN_WORDS[sign];
   // The name and the figure each stay whole, and the line may break between them: in a narrow slot (the Averaging
-  // calculator's) "Losing money, net margin −3.8%" would otherwise run into the next one.
+  // calculator's) "Losing money, net margin −3.8%" would otherwise run into the next one. So the hint sits on the
+  // words themselves, which stay inline.
   return (
-    <span title={`${name} · a company risk: ${figure === null ? '' : `${figure}, `}${rule}`} className="text-negative">
-      <span className="whitespace-nowrap font-semibold">{name}</span>
-      {figure !== null && (
-        <>
-          , <span className="whitespace-nowrap">{figure}</span>
-        </>
-      )}
-    </span>
+    <Hint text={`${name} · a company risk: ${figure === null ? '' : `${figure}, `}${rule}`} wrapInSpan={false}>
+      <span className="rounded-sm text-negative">
+        <span className="whitespace-nowrap font-semibold">{name}</span>
+        {figure !== null && (
+          <>
+            , <span className="whitespace-nowrap">{figure}</span>
+          </>
+        )}
+      </span>
+    </Hint>
   );
 }
 
@@ -80,7 +84,7 @@ export function RecoveringTag() {
 }
 
 /**
- * The words, on hover, for the two ways a stock's signs go unchecked — which of the two it is, `RiskSigns` decides.
+ * The words, in a hint, for the two ways a stock's signs go unchecked — which of the two it is, `RiskSigns` decides.
  * They differ by stock: a holding's Finnhub is asked about on every run, a scanned stock's only on Analyze.
  */
 export interface NotCheckedHints {
@@ -127,16 +131,16 @@ export function RiskSignTagList({
 
 function NotChecked({ hint }: { hint: string }) {
   return (
-    <span title={hint} className="text-muted">
-      Not checked
-    </span>
+    <Hint text={hint}>
+      <span className="text-muted">Not checked</span>
+    </Hint>
   );
 }
 
 /**
  * A stock's company risks in a line, each with the figure that raised it when `showFigures`: "No company risks" when it
  * has none — in grey, not green: having none is not a forecast —, "Not checked" when Finnhub never answered or gave none
- * of its figures, `notCheckedHints` saying which on hover.
+ * of its figures, `notCheckedHints` saying which in its hint.
  */
 export function RiskSigns({
   companyInfo,
@@ -153,9 +157,9 @@ export function RiskSigns({
   if (notCheckedHint !== null) return <NotChecked hint={notCheckedHint} />;
   if ((companyInfo?.riskSigns ?? []).length === 0) {
     return (
-      <span title="None of the five rules raised a company risk" className="text-muted">
-        No company risks
-      </span>
+      <Hint text="None of the five rules raised a company risk">
+        <span className="text-muted">No company risks</span>
+      </Hint>
     );
   }
   return (

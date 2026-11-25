@@ -18,13 +18,20 @@ const EXCLAMATION_CLASSES: Record<WarningLevel, { line: string; dot: string }> =
 
 /**
  * The warning triangle: a bright yellow one with a dark outline and "!" for a minor warning, a solid orange one with a
- * white "!" for a real one. `title` is the warning's message, on hover and to screen readers.
+ * white "!" for a real one. `label` is what a screen reader says — the warning's message, when the triangle stands for
+ * one; whoever shows the message on hover puts the triangle in a `Hint`.
  */
-export function WarnMark({ level, title, size = 16 }: { level: WarningLevel; title?: string; size?: number }) {
-  const label = title ?? (level === 'real' ? 'Warning' : 'Minor warning');
+export function WarnMark({ level, label, size = 16 }: { level: WarningLevel; label?: string; size?: number }) {
+  const spokenLabel = label ?? (level === 'real' ? 'Warning' : 'Minor warning');
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" role="img" aria-label={label} className="inline-block shrink-0 overflow-visible">
-      {title && <title>{title}</title>}
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      role="img"
+      aria-label={spokenLabel}
+      className="inline-block shrink-0 overflow-visible"
+    >
       <path
         d="M7.13 1.95a1 1 0 0 1 1.74 0l6.3 11.05a1 1 0 0 1-.87 1.5H1.7a1 1 0 0 1-.87-1.5z"
         strokeWidth={1}

@@ -15,6 +15,7 @@ import {
   TAG_CLASS,
 } from '../lib/styles';
 import type { ClosedPosition, Holding, Investor, InvestorQuantity } from '../types/portfolio';
+import { Hint } from './Hint';
 import { accountOwnerOf, hasSeveralInvestors, useInvestors } from './InvestorsContext';
 
 const WITHOUT_REALIZED_PNL_HINT =
@@ -123,7 +124,9 @@ function RealizedPnlCell({ closedPositions }: { closedPositions: ClosedPosition[
   if (realizedPnl === null) {
     return (
       <FigureCell>
-        <span title={WITHOUT_REALIZED_PNL_HINT}>{EMPTY_VALUE}</span>
+        <Hint text={WITHOUT_REALIZED_PNL_HINT} align="end">
+          {EMPTY_VALUE}
+        </Hint>
       </FigureCell>
     );
   }

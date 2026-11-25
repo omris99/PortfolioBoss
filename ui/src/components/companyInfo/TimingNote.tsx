@@ -1,6 +1,7 @@
 import { EMPTY_VALUE, formatDate } from '../../lib/format';
 import { HIGHLIGHTER_CLASS } from '../../lib/styles';
 import type { CompanyInfo, EarningsDate } from '../../types/portfolio';
+import { Hint } from '../Hint';
 
 const MILLISECONDS_IN_A_DAY = 86_400_000;
 
@@ -57,9 +58,10 @@ export function TimingNoteWhenDue({ companyInfo }: { companyInfo: CompanyInfo | 
   const earningsDate = companyInfo?.nextEarningsDate ?? null;
   if (earningsDate === null || !companyInfo?.reportsWithin14Days) return null;
   return (
-    <span title={TIMING_NOTE_HINT} className={`${HIGHLIGHTER_CLASS} box-decoration-clone text-caption`}>
-      {timingNoteText(earningsDate)}
-    </span>
+    // On the highlighted words themselves, which wrap across lines in a line of the drawer.
+    <Hint text={TIMING_NOTE_HINT} align="start" wrapInSpan={false}>
+      <span className={`${HIGHLIGHTER_CLASS} box-decoration-clone text-caption`}>{timingNoteText(earningsDate)}</span>
+    </Hint>
   );
 }
 
@@ -71,20 +73,17 @@ export function NextEarnings({ companyInfo }: { companyInfo: CompanyInfo }) {
   return <span>{earningsText(earningsDate)}</span>;
 }
 
-/** "in 6 days" with the highlighter, the timing note in full on hover. */
+/** "in 6 days" with the highlighter, the timing note in full in its hint. */
 function ReportSoonMark({ earningsDate }: { earningsDate: EarningsDate }) {
   return (
-    <span
-      title={`${timingNoteText(earningsDate)}. ${TIMING_NOTE_HINT}`}
-      className={`${HIGHLIGHTER_CLASS} whitespace-nowrap text-caption`}
-    >
-      {reportDayText(earningsDate.date)}
-    </span>
+    <Hint text={`${timingNoteText(earningsDate)}. ${TIMING_NOTE_HINT}`}>
+      <span className={`${HIGHLIGHTER_CLASS} whitespace-nowrap text-caption`}>{reportDayText(earningsDate.date)}</span>
+    </Hint>
   );
 }
 
 /**
- * The next report's date for a table cell or a line — its hour on hover, "—" without one —, and when the API counts it
+ * The next report's date for a table cell or a line — its hour in its hint, "—" without one —, and when the API counts it
  * 0–14 days away "in 6 days" with the highlighter: `below` the date in a table cell, `beside` it in a line.
  */
 export function NextEarningsDate({
@@ -94,12 +93,12 @@ export function NextEarningsDate({
   companyInfo: CompanyInfo | null;
   markPlacement: 'below' | 'beside';
 }) {
-  if (companyInfo === null) return <span title="No answer from Finnhub">{EMPTY_VALUE}</span>;
+  if (companyInfo === null) return <Hint text="No answer from Finnhub">{EMPTY_VALUE}</Hint>;
   const earningsDate = companyInfo.nextEarningsDate;
   if (earningsDate === null) {
-    return <span title="No report in the next four months, in Finnhub’s calendar">{EMPTY_VALUE}</span>;
+    return <Hint text="No report in the next four months, in Finnhub’s calendar">{EMPTY_VALUE}</Hint>;
   }
-  const date = <span title={earningsText(earningsDate)}>{formatDate(earningsDate.date)}</span>;
+  const date = <Hint text={earningsText(earningsDate)}>{formatDate(earningsDate.date)}</Hint>;
   if (!companyInfo.reportsWithin14Days) return date;
   if (markPlacement === 'below') {
     return (

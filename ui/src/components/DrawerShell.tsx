@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useCloseAfterExitAnimation } from '../hooks/animation/useCloseAfterExitAnimation';
 import { LARGE_ICON_BUTTON_CLASS } from '../lib/styles';
+import { Hint } from './Hint';
 
 /** An Esc meant for a field — one being typed in — is not one that closes the drawer. */
 function isTypingInAField(target: EventTarget | null): boolean {
@@ -88,8 +89,10 @@ export function DrawerTitle({ children }: { children: ReactNode }) {
 /** ✕, in the drawer's header. */
 export function DrawerCloseButton() {
   return (
-    <Dialog.Close aria-label="Close" title="Close (Esc)" className={LARGE_ICON_BUTTON_CLASS}>
-      <X size={18} />
-    </Dialog.Close>
+    <Hint text="Close (Esc)" align="end" focusable={false}>
+      <Dialog.Close aria-label="Close" className={LARGE_ICON_BUTTON_CLASS}>
+        <X size={18} />
+      </Dialog.Close>
+    </Hint>
   );
 }

@@ -16,7 +16,8 @@ import { TargetUpside } from './AnalystTarget';
 import type { ColumnChoice } from './ColumnsMenu';
 import { NextEarningsDate } from './companyInfo/TimingNote';
 import { SkeletonBar } from './firstLoad/SkeletonBar';
-import { HelpPopover } from './HelpPopover';
+import { HelpOnHover } from './HelpOnHover';
+import { Hint, RowReachedAsAWhole } from './Hint';
 import { HoldingPeriod } from './HoldingPeriod';
 import { HoldingWarningMark } from './HoldingWarnings';
 import { accountOwnerOf, investorNameOf, useInvestors } from './InvestorsContext';
@@ -159,13 +160,13 @@ function QuantityWithSplit({ holding }: { holding: Holding }) {
     .map((part) => `${investorNameOf(investors, part.investorId)} ${formatQuantity(part.quantity)}`)
     .join(' · ');
   return (
-    <span title={namedSplit}>
+    <Hint text={namedSplit} align="end">
       <TwoFigures
         first={formatQuantity(holding.position)}
         second={partsInOrder.map((part) => formatQuantity(part.quantity)).join(' · ')}
         secondColorClass="text-faint"
       />
-    </span>
+    </Hint>
   );
 }
 
@@ -428,9 +429,9 @@ function SortableHeaderCell({
             ))}
         </button>
         {column.key === 'signal' && (
-          <HelpPopover label="How to read the Signal column" align="start">
+          <HelpOnHover label="How to read the Signal column">
             <SignalCellLegend />
-          </HelpPopover>
+          </HelpOnHover>
         )}
       </span>
     </th>
@@ -452,24 +453,26 @@ function HoldingRow({
     if (event.key === 'Enter') onOpen();
   };
   return (
-    <tr
-      tabIndex={0}
-      aria-label={`${holding.symbol}, open details`}
-      onClick={onOpen}
-      onKeyDown={openOnEnter}
-      className={`group ${tableRowClass(isSelected)}`}
-    >
-      {columns.map((column, columnIndex) => {
-        // A closed holding: every cell muted, not faded, so it still reads well; its figures are "—" anyway.
-        const colorClass = isClosed(holding) ? 'text-muted' : (column.valueColorClass?.(holding) ?? '');
-        const fillClass = columnIndex === 0 ? symbolCellFillClass(isSelected) : '';
-        return (
-          <td key={column.key} className={`${CELL_CLASS} ${alignmentClass(column)} ${colorClass} ${fillClass}`}>
-            {column.renderValue(holding)}
-          </td>
-        );
-      })}
-    </tr>
+    <RowReachedAsAWhole>
+      <tr
+        tabIndex={0}
+        aria-label={`${holding.symbol}, open details`}
+        onClick={onOpen}
+        onKeyDown={openOnEnter}
+        className={`group ${tableRowClass(isSelected)}`}
+      >
+        {columns.map((column, columnIndex) => {
+          // A closed holding: every cell muted, not faded, so it still reads well; its figures are "—" anyway.
+          const colorClass = isClosed(holding) ? 'text-muted' : (column.valueColorClass?.(holding) ?? '');
+          const fillClass = columnIndex === 0 ? symbolCellFillClass(isSelected) : '';
+          return (
+            <td key={column.key} className={`${CELL_CLASS} ${alignmentClass(column)} ${colorClass} ${fillClass}`}>
+              {column.renderValue(holding)}
+            </td>
+          );
+        })}
+      </tr>
+    </RowReachedAsAWhole>
   );
 }
 

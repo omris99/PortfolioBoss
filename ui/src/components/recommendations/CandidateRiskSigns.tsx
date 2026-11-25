@@ -1,6 +1,7 @@
 import { EMPTY_VALUE } from '../../lib/format';
 import type { HotStock } from '../../types/recommendations';
 import { RiskSigns } from '../companyInfo/RiskSigns';
+import { Hint } from '../Hint';
 import { CANDIDATE_NOT_CHECKED_HINTS } from './hotStockTexts';
 
 /**
@@ -9,7 +10,7 @@ import { CANDIDATE_NOT_CHECKED_HINTS } from './hotStockTexts';
  */
 export function CandidateRiskSigns({ stock, showFigures }: { stock: HotStock; showFigures: boolean }) {
   if (stock.analysis === null) {
-    return <span title="Not analyzed yet: the signs come with the analysis">{EMPTY_VALUE}</span>;
+    return <Hint text="Not analyzed yet: the signs come with the analysis">{EMPTY_VALUE}</Hint>;
   }
   return (
     <RiskSigns

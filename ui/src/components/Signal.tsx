@@ -1,6 +1,7 @@
 import { formatDateTime } from '../lib/format';
 import { dotClassOf } from '../lib/signalColors';
 import type { Holding, HoldingSignal, StockAnalysis } from '../types/portfolio';
+import { Hint } from './Hint';
 import { momentumText } from './Momentum';
 
 const SIGNAL_DESCRIPTIONS: Record<HoldingSignal, string> = {
@@ -47,7 +48,7 @@ export function SignalWords({ holding }: { holding: Holding }) {
   return <span className="text-ink">{warningSigns.join(' · ')}</span>;
 }
 
-/** A dot of one colour, `label` said on hover and to screen readers; an empty ring for `null`. */
+/** A dot of one colour, `label` said to screen readers; an empty ring for `null`. */
 export function SignalColorDot({
   signal,
   label,
@@ -61,16 +62,23 @@ export function SignalColorDot({
     <span
       role="img"
       aria-label={label}
-      title={label}
       style={{ width: size, height: size }}
       className={`inline-block shrink-0 rounded-full ${dotClassOf(signal)}`}
     />
   );
 }
 
-/** A holding's coloured dot, what it means on hover; an empty ring while there is none. */
+/**
+ * A holding's coloured dot, what it means in its hint; an empty ring while there is none. The keyboard doesn't stop on
+ * it: the signal's words stand beside it wherever it is, and a screen reader reads its label.
+ */
 export function SignalDot({ holding, size }: { holding: Holding; size?: number }) {
-  return <SignalColorDot signal={holding.signal} label={signalHint(holding)} size={size} />;
+  const hint = signalHint(holding);
+  return (
+    <Hint text={hint} focusable={false}>
+      <SignalColorDot signal={holding.signal} label={hint} size={size} />
+    </Hint>
+  );
 }
 
 /** What the colours mean, behind a "?": the warning signs, then each colour with its dot. */
@@ -143,15 +151,17 @@ function signalSummaryText(holding: Holding): string {
 /**
  * The Signal column: the dot and the warning signs it found in words ("Momentum weak · Analysts down"), wrapping inside
  * 132–160px so that the table fits its card (round 6); the momentum has a column of its own. It says why the dot has its
- * colour; hovering gives all three parts.
+ * colour; its hint gives all three parts — one hint for the dot and the words.
  */
 export function SignalCell({ holding }: { holding: Holding }) {
   return (
-    <span title={signalSummaryText(holding)} className="flex min-w-[132px] max-w-[160px] items-start gap-1.5 whitespace-normal">
-      <span className="mt-[5px] flex shrink-0">
-        <SignalColorDot signal={holding.signal} label={signalHint(holding)} />
+    <Hint text={signalSummaryText(holding)} align="start">
+      <span className="flex min-w-[132px] max-w-[160px] items-start gap-1.5 whitespace-normal">
+        <span className="mt-[5px] flex shrink-0">
+          <SignalColorDot signal={holding.signal} label={signalHint(holding)} />
+        </span>
+        <SignalWords holding={holding} />
       </span>
-      <SignalWords holding={holding} />
-    </span>
+    </Hint>
   );
 }

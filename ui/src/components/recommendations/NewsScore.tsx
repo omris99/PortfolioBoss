@@ -3,6 +3,8 @@ import { formatDate } from '../../lib/format';
 import type { NewsEventType } from '../../types/portfolio';
 import type { HotStock, WeighedAnalystMove, WeighedNewsEvent } from '../../types/recommendations';
 import { ratingChangeOf, siteOf, SourceLink, SubHeading, targetChangeOf } from '../AnalysisPanel';
+import { HelpOnHover } from '../HelpOnHover';
+import { Hint } from '../Hint';
 
 /**
  * A scanned stock's news score (RECOMMENDATIONS_TODO.md, decision 13) and what it is made of: each event Claude found in
@@ -56,15 +58,18 @@ function EventPart({ weighedEvent }: { weighedEvent: WeighedNewsEvent }) {
   const isNotInTheList = event.type === 'NOT_IN_THE_LIST';
   return (
     <>
-      <span
-        title={isNotInTheList ? 'No kind of event fits it: it weighs nothing.' : undefined}
-        className="font-medium"
-      >
-        {EVENT_NAMES[event.type]}
-        {event.magnitude !== null && ` · ${event.magnitude.toLowerCase()}`}
-      </span>
+      {isNotInTheList ? (
+        <Hint text="No kind of event fits it: it weighs nothing." term>
+          <span className="font-medium">{EVENT_NAMES[event.type]}</span>
+        </Hint>
+      ) : (
+        <span className="font-medium">
+          {EVENT_NAMES[event.type]}
+          {event.magnitude !== null && ` · ${event.magnitude.toLowerCase()}`}
+        </span>
+      )}
       : {event.summary}{' '}
-      <SourceLink url={event.url} title={event.title}>
+      <SourceLink url={event.url} hint={event.title}>
         {siteOf(event.url)}
       </SourceLink>
     </>
@@ -117,14 +122,20 @@ export function NewsScoreParts({ stock }: { stock: HotStock }) {
   );
 }
 
-/** The drawer's "News score +5" section, under the news: the total, then its parts. Nothing while never analyzed. */
+/**
+ * The drawer's "News score +5" section, under the news: the total with its "?" — how it is worked out —, then its parts.
+ * Nothing while never analyzed.
+ */
 export function NewsScoreSection({ stock }: { stock: HotStock }) {
   if (stock.newsScore === null) return null;
   return (
     <>
       <SubHeading>
-        <span title={NEWS_SCORE_HINT}>
-          News score <Points points={stock.newsScore} />
+        <span className="inline-flex items-center gap-1">
+          <span>
+            News score <Points points={stock.newsScore} />
+          </span>
+          <HelpOnHover label="How the news score is worked out">{NEWS_SCORE_HINT}</HelpOnHover>
         </span>
       </SubHeading>
       <NewsScoreParts stock={stock} />

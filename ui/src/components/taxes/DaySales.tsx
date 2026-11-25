@@ -8,6 +8,7 @@ import {
 } from '../../lib/format';
 import type { SettlementDay, TaxDeductibleExpense } from '../../types/taxes';
 import { HelpOnHover } from '../HelpOnHover';
+import { Hint } from '../Hint';
 import { SharesSoldFromEachBuyTable } from './SharesSoldFromEachBuyTable';
 import { FEES_TEXT, sharesText, stockSalesOfTheDay, type StockSalesOfTheDay } from './stockSalesOfTheDay';
 import { FIRST_IN_FIRST_OUT_TEXT } from './taxTexts';
@@ -65,16 +66,20 @@ function StockSalesLine({
   );
 }
 
-/** One of IB's fees in the opened day: "Fees · market data −₪35.76", its dollars, rate and IB's words in the "?". */
+/** The fee's hint: its amount in its own currency, the rate it was turned into shekels at, and IB's words. */
+function feeHintOf(fee: TaxDeductibleExpense): string {
+  const rateText = fee.rate === null ? ' · its rate isn’t stored yet' : ` at ${formatExchangeRate(fee.rate)}`;
+  return `${formatAmountInItsCurrency(fee.amount, fee.currency)}${rateText} · ${fee.description}`;
+}
+
+/** One of IB's fees in the opened day: "Fees · market data −₪35.76", its dollars, rate and IB's words in its hint. */
 function FeeLine({ fee }: { fee: TaxDeductibleExpense }) {
   return (
     <div className="flex h-10 items-center gap-2 border-b px-3 last:border-b-0">
       <span className="w-4 shrink-0" />
-      <span>{FEES_TEXT}</span>
-      <HelpOnHover label="The fee in its currency">
-        {formatAmountInItsCurrency(fee.amount, fee.currency)}
-        {fee.rate === null ? ' · its rate isn’t stored yet' : ` at ${formatExchangeRate(fee.rate)}`} · {fee.description}
-      </HelpOnHover>
+      <Hint text={feeHintOf(fee)} align="start">
+        {FEES_TEXT}
+      </Hint>
       <span className={`ml-auto tabular-nums ${profitLossColorClass(fee.amountInShekels)}`}>
         {formatSignedShekels(fee.amountInShekels)}
       </span>

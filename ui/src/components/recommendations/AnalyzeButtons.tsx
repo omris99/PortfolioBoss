@@ -9,6 +9,7 @@ import { PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS, SMALL_SECONDARY_BUTTON_CL
 import type { EstimatedAnalysisCost } from '../../types/portfolio';
 import type { HotStock } from '../../types/recommendations';
 import { ConfirmBeforeRun, CostSentence, estimatedCostText, RunningIcon, RunOutcome } from '../AnalyzeControls';
+import { Hint } from '../Hint';
 
 /**
  * The Recommendations page's paid buttons (DESIGN_BRIEF.md §8.4): Analyze & recommend for the short list, and Analyze
@@ -135,13 +136,13 @@ export function AnalyzeShortListControl({
           <button
             type="button"
             disabled={stockCount === 0 || isAnalysisRunning(analysisState)}
-            title={shortListHintOf(shortList, estimate, isOtherRunRunning)}
             className={`shrink-0 ${isPrimary ? PRIMARY_BUTTON_CLASS : SECONDARY_BUTTON_CLASS}`}
           >
             <RunningIcon isRunning={outcome.isRunning} size={16} />
             {outcome.isRunning ? 'Analyzing…' : 'Analyze & recommend'}
           </button>
         }
+        triggerHint={shortListHintOf(shortList, estimate, isOtherRunRunning)}
         confirmLabel={`Analyze ${stockCount} stocks`}
         onConfirm={() => onAnalyze(null)}
         align="end"
@@ -159,7 +160,7 @@ function keepFromTheRow(event: MouseEvent | KeyboardEvent) {
   event.stopPropagation();
 }
 
-/** The row's button on hover: what it does and costs — or that it runs, waits for another run, or failed and why. */
+/** The row's button's hint: what it does and costs — or that it runs, waits for another run, or failed and why. */
 function rowHintOf(
   stock: HotStock,
   estimate: EstimatedAnalysisCost | null,
@@ -172,7 +173,7 @@ function rowHintOf(
   return analyzeOneHint(stock.symbol, estimate);
 }
 
-/** The row's icon while its own run runs or failed: the spinner, or the triangle with the reason on hover. */
+/** The row's icon while its own run runs or failed: the spinner, or the triangle with the reason in its hint. */
 function RowAnalyzeIcon({ isRunning, failure }: { isRunning: boolean; failure: string | null }) {
   if (isRunning) {
     return (
@@ -184,8 +185,8 @@ function RowAnalyzeIcon({ isRunning, failure }: { isRunning: boolean; failure: s
 }
 
 /**
- * A row's Analyze (the lists' last column): a small icon button whose hover gives the estimate; a click asks first,
- * toward the left. Running: the spinner. Failed: the triangle, the reason on hover. Its clicks never open the row.
+ * A row's Analyze (the lists' last column): a small icon button whose hint gives the estimate; a click asks first,
+ * toward the left. Running: the spinner. Failed: the triangle, the reason in its hint. Its clicks never open the row.
  */
 export function RowAnalyzeButton({
   stock,
@@ -207,13 +208,13 @@ export function RowAnalyzeButton({
           <button
             type="button"
             aria-label={`Analyze ${stock.symbol}`}
-            title={rowHintOf(stock, estimate, analysisState, failure)}
             disabled={isAnalysisRunning(analysisState)}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-accent-soft hover:text-accent disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted"
           >
             <RowAnalyzeIcon isRunning={isRunning} failure={failure} />
           </button>
         }
+        triggerHint={rowHintOf(stock, estimate, analysisState, failure)}
         confirmLabel={`Analyze ${stock.symbol}`}
         onConfirm={() => onAnalyze(stock.candidateId)}
         align="end"
@@ -250,16 +251,21 @@ export function AnalyzeCandidateButton({
         lastRun={outcome.lastRun}
         errorMessage={outcome.errorMessage}
       />
-      <button
-        type="button"
-        onClick={() => onAnalyze(stock.candidateId)}
-        disabled={isAnalysisRunning(analysisState)}
-        title={isOtherRunRunning ? ANOTHER_RUN_HINT : analyzeOneHint(stock.symbol, estimate)}
-        className={SMALL_SECONDARY_BUTTON_CLASS}
+      <Hint
+        text={isOtherRunRunning ? ANOTHER_RUN_HINT : analyzeOneHint(stock.symbol, estimate)}
+        align="end"
+        focusable={false}
       >
-        <RunningIcon isRunning={outcome.isRunning} size={14} />
-        {outcome.isRunning ? 'Analyzing…' : `Analyze ${stock.symbol}`}
-      </button>
+        <button
+          type="button"
+          onClick={() => onAnalyze(stock.candidateId)}
+          disabled={isAnalysisRunning(analysisState)}
+          className={SMALL_SECONDARY_BUTTON_CLASS}
+        >
+          <RunningIcon isRunning={outcome.isRunning} size={14} />
+          {outcome.isRunning ? 'Analyzing…' : `Analyze ${stock.symbol}`}
+        </button>
+      </Hint>
     </span>
   );
 }

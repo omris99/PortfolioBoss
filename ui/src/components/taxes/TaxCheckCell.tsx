@@ -3,12 +3,12 @@ import { Check, Clock } from 'lucide-react';
 import { formatDateTime, formatShekels } from '../../lib/format';
 import { SMALL_SECONDARY_BUTTON_CLASS } from '../../lib/styles';
 import type { SettlementDay } from '../../types/taxes';
-import { HelpOnHover } from '../HelpOnHover';
+import { Hint } from '../Hint';
 import { BrokerRecordedAmountForm } from './BrokerRecordedAmountForm';
 import { isEverySaleCalculated, isSameAmount, waitingForARateText } from './taxTexts';
 
 /**
- * The ✓'s explanation: when it was confirmed and the note — and, when the broker recorded another amount than
+ * The ✓'s hint: when it was confirmed and the note — and, when the broker recorded another amount than
  * PortfolioBoss calculated, that amount too, without a color: the confirmed one is final (decision 7), this one is only
  * there to see.
  */
@@ -40,8 +40,8 @@ function keepFromTheDayRow(event: SyntheticEvent) {
  * The Check column of one of the account's settlement days — Portfolio's only: what the broker recorded, and the
  * controls to check it off. A day is waiting or confirmed (decision 7):
  * - calculated, waiting: Confirm (the amount PortfolioBoss calculated, as the broker recorded it) and the pencil;
- * - confirmed: a quiet ✓ — when and the note in its explanation — and the pencil;
- * - waiting for a rate: the clock, with why;
+ * - confirmed: a quiet ✓ — when and the note in its hint — and the pencil;
+ * - waiting for a rate: the clock, why in its hint;
  * - can't be calculated: the pencil, outlined — the way in;
  * - a 0, or a sale beyond its buys: nothing.
  */
@@ -78,17 +78,17 @@ export function TaxCheckCell({
       case 'CONFIRMED':
         return (
           <>
-            <HelpOnHover label="Confirmed" icon={<Check size={16} className="text-muted" />}>
-              <ConfirmedDayExplanation settlementDay={settlementDay} />
-            </HelpOnHover>
+            <Hint text={<ConfirmedDayExplanation settlementDay={settlementDay} />} align="end">
+              <Check size={16} role="img" aria-label="Confirmed" className="text-muted" />
+            </Hint>
             {pencil}
           </>
         );
       case 'WAITING_FOR_A_RATE':
         return (
-          <HelpOnHover label="Not calculated yet" icon={<Clock size={16} />}>
-            {waitingForARateText(settlementDay.settlementDay)}
-          </HelpOnHover>
+          <Hint text={waitingForARateText(settlementDay.settlementDay)} align="end">
+            <Clock size={16} role="img" aria-label="Not calculated yet" className="text-faint" />
+          </Hint>
         );
       case 'CANNOT_BE_CALCULATED':
         return (

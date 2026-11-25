@@ -1,7 +1,8 @@
 import { formatDayCount, formatHoldingPeriod } from '../lib/format';
+import { Hint } from './Hint';
 
-/** Months are approximate in the short form, so hovering shows the exact number of days. */
+/** Months are approximate in the short form, so its hint has the exact number of days. */
 export function HoldingPeriod({ days }: { days: number | null }) {
-  const exactDayCount = days === null ? undefined : formatDayCount(days);
-  return <span title={exactDayCount}>{formatHoldingPeriod(days)}</span>;
+  if (days === null) return <span>{formatHoldingPeriod(days)}</span>;
+  return <Hint text={formatDayCount(days)}>{formatHoldingPeriod(days)}</Hint>;
 }

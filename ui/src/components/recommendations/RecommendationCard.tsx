@@ -8,6 +8,8 @@ import type { HotStock, LatestRecommendation, PickedStock, Recommendations } fro
 import { TargetUpside } from '../AnalystTarget';
 import { costEstimateOf } from '../AnalyzeControls';
 import { earningsText, TimingNoteWhenDue } from '../companyInfo/TimingNote';
+import { Hint } from '../Hint';
+import { ShortenedText } from '../ShortenedText';
 import { AnalyzeShortListControl, shortListCountsOf, shortListWords, type ShortListCounts } from './AnalyzeButtons';
 import { CandidateRiskSigns } from './CandidateRiskSigns';
 import { formatPoints, NEWS_SCORE_HINT, NewsScoreParts, pointsColorClass } from './NewsScore';
@@ -84,11 +86,13 @@ function ScoreLine({ stock }: { stock: HotStock }) {
   if (stock.score === null || stock.newsScore === null) return null;
   return (
     <p className="text-caption text-muted">
-      <span title="The news score less the company risks’ weight: the picks are ordered by it">
-        Score <b className={`font-semibold ${pointsColorClass(stock.score)}`}>{formatPoints(stock.score)}</b>
-      </span>
+      <Hint text="The news score less the company risks’ weight: the picks are ordered by it" align="start">
+        <span>
+          Score <b className={`font-semibold ${pointsColorClass(stock.score)}`}>{formatPoints(stock.score)}</b>
+        </span>
+      </Hint>
       {' · '}
-      <span title={NEWS_SCORE_HINT}>news {formatPoints(stock.newsScore)}</span>
+      <Hint text={NEWS_SCORE_HINT}>news {formatPoints(stock.newsScore)}</Hint>
       {' · '}company risks weigh {stock.riskWeight}
     </p>
   );
@@ -136,9 +140,11 @@ function PickCard({
       <div className="flex min-w-0 items-center gap-2">
         <PickNumber position={position} />
         <SymbolButton stock={stock} onOpen={onOpen} className="text-[16px] leading-[22px]" />
-        <span title={stock.companyName ?? undefined} className="min-w-0 truncate text-[11px] uppercase text-muted">
-          {stock.companyName ?? EMPTY_VALUE}
-        </span>
+        {stock.companyName === null ? (
+          <span className="text-[11px] text-muted">{EMPTY_VALUE}</span>
+        ) : (
+          <ShortenedText text={stock.companyName} className="text-[11px] uppercase text-muted" />
+        )}
       </div>
       <p className="-mt-1.5 text-caption text-muted">{sectorText(stock)}</p>
       <div className="flex flex-wrap items-center gap-1.5 text-caption">

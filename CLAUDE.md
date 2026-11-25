@@ -52,14 +52,14 @@ and browser-checked (2026-10-11): the light theme, the four pages with their add
 holding's details (`/positions/:holdingId`) and for a closed position, a Columns menu, the Signal cell in words, a
 confirm before a paid Analyze run quoting the real average cost, every form and confirm-delete in a modal, and the two
 warning triangles. The Radix primitives (`@radix-ui/react-dialog`, `-popover`, `-dropdown-menu`, and since 2026-11-16
-`-tooltip` for the Taxes page's "?") bring the focus and keyboard handling; the date fields use the browser's own picker behind a calendar button, and the first load is still a
+`-tooltip`, since 2026-11-25 every hint and "?" of the app) bring the focus and keyboard handling; the date fields use the browser's own picker behind a calendar button, and the first load is still a
 "Loading…" box rather than the design's skeletons. Since 2026-10-13 the Overview also shows the money by sector (a ring)
 and by holding with the cash (bars), with the stocks against the cash under the account's figures, and a holding's
 drawer has a Weight tab that works out the shares to sell or buy for a target weight — built in the UI from figures
 `/api/portfolio` already sends (see the architecture below); both have a tab per investor (Portfolio · Omri · Shay …)
 that weighs that investor's own shares and cash. They were built first without Claude Design, then designed in its
 second round (DESIGN_BRIEF.md §7, 2026-10-25) and rebuilt from it the same day, browser-checked: one "Weights"
-card with the tabs in its header, the explanations in a small bubble (`Tip`) instead of the browser's tooltip, the
+card with the tabs in its header, the explanations in a small bubble (`Tip`; the app's `Hint` since 2026-11-25), the
 Weight tab's result in rows. Every trade has a price since 2026-10-13 too: the API, the form and the table (V8) all
 refuse one without.
 
@@ -198,13 +198,14 @@ backfill's prefill turned into the date's shares.
 [UI_POLISH_TODO.md](implementation-plans/UI_POLISH_TODO.md) (2026-11-24) is the current plan: the UI's small details
 polished for a calmer, clearer experience — **not a redesign**, no new feature —, from Claude Design's sixth round
 (DESIGN_BRIEF.md §11, his rules in §11.6), checked on a **demo database** of made-up positions (`portfolioboss_demo`,
-`scripts/demo/`, run with `SPRING_DATASOURCE_URL=…/portfolioboss_demo ./run.sh 7599`; never real data on screen). Stages
+`scripts/demo/` — git-ignored since 2026-11-25, on this machine only —, run with
+`SPRING_DATASOURCE_URL=…/portfolioboss_demo ./run.sh 7599`; never real data on screen). Stages
 א (the top bar in `components/topBar/`, `Hint`, dates dd/mm/yyyy), ב (words instead of tags, `MomentumMark`, Positions'
 columns, the drawer), ג (motion — the "Motion" block of `index.css`, `hooks/animation/useCloseAfterExitAnimation.ts` —
-and the first load's skeletons, `components/firstLoad/`) and ד (the alerts panel in two groups and the settings drawer;
-the alerts' words and group in Java; the top bar sticky) are built and browser-checked (2026-11-24/25); ה (`Hint` in
-place of every `title`) and ו (the rest of the findings) come next. Its file is the record
-of each stage's pieces and decisions.
+and the first load's skeletons, `components/firstLoad/`), ד (the alerts panel in two groups and the settings drawer;
+the alerts' words and group in Java; the top bar sticky) and ה (one way to explain on hover: `Hint` in place of every
+`title`, one "?" — see the hover explanations below) are built and browser-checked (2026-11-24/25); ו (the rest of the
+findings) comes next. Its file is the record of each stage's pieces and decisions.
 
 ## Hard invariant: read-only
 
@@ -1600,22 +1601,23 @@ The page (`ui/src/pages/TaxesPage.tsx`, `/taxes`, the seventh navigation item; i
   (`stockSalesOfTheDay`: a sale IB reported in parts is one line, "3 parts"), the FIFO note's "?" when the API flags it, and
   IB's fees —, a stock's line into `SharesSoldFromEachBuyTable` (Bought · Shares · Cost · Sold for · In dollars · In shekels
   · Counts). `TaxCheckCell` follows `status`: Confirm and the pencil (`BrokerRecordedAmountForm`: the amount in shekels,
-  Tax / Shield only when a sale wasn't calculated, a note, "Remove the confirmation"), the ✓ with its "?" (when, the note,
+  Tax / Shield only when a sale wasn't calculated, a note, "Remove the confirmation"), the ✓ with its hint (when, the note,
   and "PortfolioBoss calculated ₪…" when another amount was confirmed — the user's pick), the clock, the pencil outlined,
   or nothing. Confirm and Confirm the whole month send the calculated amounts (`confirmTaxDays`), the pencil
   `confirmTaxDays` / `correctTaxConfirmation` / `cancelTaxConfirmation`, each then a reload. The words are `taxTexts.ts`'s.
-- `components/HelpOnHover.tsx` is the page's "?" (or a ✓ / clock in its place): a Radix **Tooltip**, open while the
-  pointer or the keyboard is on it, closed by Esc or a click. It was a popover first, and the user's browser check found
-  it reopening by itself: a popover gives the focus back to its button when it closes, and the button opened on focus. A
-  tooltip never moves the focus.
+- `components/HelpOnHover.tsx` was the page's "?" (and the ✓ / clock), and is the whole app's since UI_POLISH_TODO.md's
+  stage ה (below: the ✓, the clock, ₪0.00 and a day's or a buy's date are `Hint`s on the item since, the "?" only by the
+  longer explanations): a Radix **Tooltip**, open while the pointer or the keyboard is on it, closed by Esc or a click. It
+  was a popover first, and the user's browser check found it reopening by itself: a popover gives the focus back to its
+  button when it closes, and the button opened on focus. A tooltip never moves the focus.
 - `components/InvestorTabs.tsx` replaced `graphs/WeightsTabs.tsx`: one tab row for the weights, the Weight tab, If I buy,
   the Averaging calculator and Taxes, each naming it (`ariaLabel`). `lib/format.ts` gained `formatShekels`,
   `formatSignedShekels`, `formatDollars`, `formatAmountInItsCurrency` and `formatExchangeRate` (3 decimals): the first page
   with two currencies side by side, every amount carries its sign.
 Things that are easy to break:
 - React passes a click inside a portal (a "?"'s bubble, the pencil's popover, a confirm) up to the rows around it in the
-  component tree: `HelpOnHover` and `TaxCheckCell` stop it, or the day's row would open or close (a month's heading row
-  opens nothing, so its button needs no such guard).
+  component tree: `HelpOnHover`, `Hint` and `TaxCheckCell` stop it, or the day's row would open or close (a month's
+  heading row opens nothing, so its button needs no such guard).
 - `BrokerRecordedAmountForm`'s two decimals copy `TaxConfirmationRequest`'s `@Digits(fraction = 2)`, and its 500 the
   note's limit: change both together.
 - `@radix-ui/react-tooltip` is pinned to 1.2.16, which shares its inner Radix parts with the installed dialog and
@@ -1754,10 +1756,9 @@ more for a commission of 5 — 46.70, +16.75% against +25%). At or above the ave
 price is 4.0% above the average"; without an average cost, or on the tab of an investor who holds none, there is no
 average to change and the rows are left out. Since the design's second round (2026-10-25) the two graphs are
 the halves of one "Weights" card (`graphs/WeightGraphs.tsx`) whose header holds the tab row; every row of the legend and
-of the bars can be reached with the keyboard and explains itself in `ui/src/components/Tip.tsx` — the design system's
-bubble, used only here (the Taxes page's "?" is `HelpOnHover`'s tooltip; the rest of the app still uses the browser's
-`title`) —, and the bars are drawn to scale
-by amount.
+of the bars can be reached with the keyboard and explains itself in a `Hint` on the row itself (`wrapInSpan={false}`; a
+`Tip` of its own until UI_POLISH_TODO.md's stage ה) — a slice of the ring lights its legend row without a bubble (the
+user's choice) —, and the bars are drawn to scale by amount.
 Things that are easy to break:
 - `ui/src/lib/orderCommission.ts` copies `calculation.OrderCommission`'s rule (1¢ a share, at least $5) by hand: change
   both together.
@@ -1766,8 +1767,6 @@ Things that are easy to break:
   `chart-3` is the design system's darker pink, `#db6898` (the first, `#ec7fa9`, was 2.6:1 on white, under the 3:1 a
   mark needs). The validator (2026-10-25) passes the four colors and every pair that touches but one: the grey "Other"
   next to the teal 1st sector, where the ring closes on itself when there is no "No sector" slice — known, not fixed.
-- A `Tip` is placed over its parent, which must be `relative` and must not clip it: a `truncate` (or any
-  `overflow-hidden`) element around it hides the bubble — the legend's name truncates inside its own inner span.
 
 The Averaging calculator (`ui/src/pages/AveragingCalculatorPage.tsx`, `/averaging`, the third navigation item;
 MY_HOLDINGS_TODO.md session 3ב, decision 13; built from Claude Design's fourth round, DESIGN_BRIEF.md §9, arrangement A)
@@ -1792,11 +1791,12 @@ if it were the only one, and the one thing they share is the cash. The pieces, i
 warning "626.60 short: …"), `AveragingSection` (the heading and its count; the second section folds, with "1 purchase
 planned" while folded), `AveragingTable` (eleven columns in one row under Now · Plan a purchase · After the purchase, the
 two fields `NumberInputWithUnit` — exported from `WeightCalculatorPanel.tsx` with a `widthClass` and an `ariaLabel` —, a
-3px accent edge on a row that buys, the row's message above its line), `WhatToKnowLine` (under each row:
-`HoldingWarningSigns`, `MomentumChip`, `MedianTargetWithUpside` from `AnalystTarget.tsx`, and `NextEarningsDate`) and
-`NotOnThisPage`. Four deliberate departures from the design (his OK): the highlighter on "in 5 days" as everywhere else,
-not on the date; the cash's hint in `title` (a `Tip` opens upward, and the card sticks to the top); the Weight tab's own
-sentences in "Not on this page"; 32px fields like every other.
+3px accent edge on a row that buys, the row's message above its line), `WhatToKnowLine` (under each row, five stacked
+slots since UI_POLISH_TODO.md's stage ב: `SignalWords`, `HoldingCompanyRisks`, `MomentumMark`, `MedianTargetWithUpside`
+from `AnalystTarget.tsx`, and `NextEarningsDate`) and `NotOnThisPage`. Three deliberate departures from the design (his
+OK): the highlighter on "in 5 days" as everywhere else, not on the date; the Weight tab's own sentences in "Not on this
+page"; 32px fields like every other. (A fourth, the cash's hint in `title`, ended with stage ה: its `Hint` opens below
+"Cash", since the card sticks to the top.)
 
 The Recommendations page (`ui/src/pages/RecommendationsPage.tsx`, `/recommendations`, the sixth navigation item; its
 pieces in `ui/src/components/recommendations/`, built from Claude Design's third round — DESIGN_BRIEF.md §8, which
@@ -1896,6 +1896,34 @@ skeletons beside their cards (`AccountSummarySkeleton`, `PositionsTableSkeleton`
 `barWidthsWhileLoading`, `HoldingDrawerSkeleton`, …, on `components/firstLoad/SkeletonBar.tsx`), the other pages nothing
 until the data comes; `EmptyBox` is a plain card — dashed means "add".
 
+The hover explanations (UI_POLISH_TODO.md's stage ה, 2026-11-25, browser-checked by him): **no `title` anywhere** — the
+browser's own tooltip shows in no screenshot or video —, only two ways, both Radix tooltips (drawn over the page, so no
+card or scrolling table cuts them, and never moving the focus; one `HintsProvider` around the app in `main.tsx`: 400ms,
+and no skipping the delay after a hint closes). **One sentence about one thing is a `Hint` on the thing**
+(`components/Hint.tsx`): after 400ms of hover, at once on keyboard focus, gone on leaving or Esc; `placement` (`above` /
+`below`), `align`, `term` (the dotted underline — only a term in running text: "Cash", "7 in no list", never a figure in a
+table), `focusable` (false on a button or a link, which is its own stop), `wrapInSpan={false}` (the hint on the element
+itself: a weights row, and text that must stay inline to wrap — the highlighted timing note, a company risk, "Why it
+moves"), `disabled` (the bell while its panel is open; `ConfirmBeforeRun`'s `triggerHint` while its confirm is open). An
+icon button keeps its `aria-label` and gets a `Hint` with the same words (the drawer's ‹ › ✕, the bell, ⚙, edit and
+delete). **Two sentences or more, a list, or how a heading's figures are worked out is the one "?"**, `HelpOnHover` (20px,
+opens at once — the user's choice over the design's click-to-pin popover; `HelpPopover.tsx` and the weights' `Tip.tsx`
+are gone), 4px after the words it explains, never at a card's far edge: `CardHeading`'s, `ListHeading`'s and the tax
+year card's `YearCardCell`'s `help`. **A table row the keyboard reaches as a whole** (Positions, Closed, the
+Recommendations lists with their detail line, a tax day) wraps itself in `RowReachedAsAWhole`: its hints are no Tab stops
+of their own (the user's choice; ten rows would be some sixty stops) — the same figures are stops in a drawer or a card.
+`ShortenedText` is a text cut with "…", whole in its hint (a note, the Averaging sector, IB's company name);
+`WarnMark` takes a `label` (its aria-label) and goes inside a `Hint` for its message.
+Things that are easy to break:
+- A disabled button gets no pointer events, so its hint — often the reason it is disabled — would never open: `Hint`'s
+  span lets the pointer through (`[&_button:disabled]:pointer-events-none`).
+- A `Hint` around a Radix trigger (a popover's, a dialog's) goes outside it, never as its `asChild` child: Radix's `Slot`
+  hands its props to the child, and a component that drops them breaks the trigger (`ConfirmBeforeRun` puts the `Hint`
+  around `Popover.Trigger`).
+- Radix keeps a bubble open while the pointer is on its way to it and checks that only on the next pointer move: a test
+  that jumps the pointer in one step sees a bubble stay open and the next one not open — move in steps
+  (`page.mouse.move(x, y, { steps: 15 })`).
+
 What a holding and a scanned stock both show (MY_HOLDINGS_TODO.md session 3, 2026-11-05/07) is outside
 `recommendations/`, each piece taking only the part of a stock it shows — never a whole `HotStock` or `Holding`, whose
 same-named fields can mean different things (a scanned stock's `analysis` is when Finnhub was asked, a holding's isn't).
@@ -1911,11 +1939,11 @@ it when Finnhub never answered; `children` after it). `components/AnalystTarget.
 (`TargetUpside`, `TargetCell`, `AnalystTargetSection({analystTarget, ruleText})` — the rule line is the caller's:
 `TARGET_RULE_FOR_A_PICK` in `hotStockTexts.ts`, `TARGET_RULE_FOR_A_HOLDING` in `HoldingDrawer.tsx`). The holding's side:
 the Positions table's Analysts' target (`TargetCell`) and Earnings (`NextEarningsDate`, below) — under Columns, "—" on a
-closed holding —, and an open holding's drawer: `HoldingWarningSignsLine` under the key figures — "Warning signs", then
-`HoldingWarningSigns` (`components/HoldingWarningSigns.tsx` since session 3ב, shared with the Averaging calculator: the
-dot's three — `SignalWarningSignTags` in `Signal.tsx`, from `warningSignsOf` — and the risk signs in the same red tags,
-"—" for none, "risk signs not checked" with `HOLDING_NOT_CHECKED_HINTS`' reason), then the timing note; shown together
-only, the dot still counts its three —, `AnalystTargetSection` first in Analysts & news, and a Company tab
+closed holding —, and an open holding's drawer: the line under the key figures — since UI_POLISH_TODO.md's stage ב
+`HoldingSignsAndRisks` (`components/HoldingWarningSigns.tsx`): "Signal" with the dot's three in words (`SignalWords`, from
+`warningSignsOf`) and "Company risks" (`HoldingCompanyRisks`, shared with the Averaging calculator: each with its figure,
+"No company risks", or "Not checked" with `HOLDING_NOT_CHECKED_HINTS`' reason) — the user's two names, so that they can't
+be confused; the dot still counts its three —, then the timing note, `AnalystTargetSection` first in Analysts & news, and a Company tab
 (`CompanyPanel`, no children); a closed holding gets none of them, its company info and targets no longer read.
 
 The drawers' "Analysts & news" tab is one `AnalysisPanel` for a holding and a scanned stock (`HoldingAnalysisPanel` adds

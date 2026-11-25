@@ -1,7 +1,7 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { formatMoney, formatPercent } from '../../lib/format';
 import { SkeletonBar } from '../firstLoad/SkeletonBar';
-import { Tip } from '../Tip';
+import { Hint } from '../Hint';
 import { DonutChart, DonutChartSkeleton, type DonutSlice } from './DonutChart';
 import { PORTFOLIO_STOCKS_NAME, type InvestmentsAndCash } from './investmentsAndCash';
 import { heaviestWeightsOf, type NoSectorWeight, type SectorWeight, type Weight } from './portfolioWeights';
@@ -38,7 +38,7 @@ interface SectorSlice {
   key: string;
   name: string;
   weight: Weight;
-  /** What the row's Tip says. */
+  /** What the row's hint says. */
   hint: string;
   paint: SlicePaint;
 }
@@ -125,7 +125,8 @@ function RingCenter({ highlightedSlice, sectorCount }: { highlightedSlice: Secto
 
 /**
  * One row of the legend: swatch · name · percent · value. Pointing at it or reaching it with the keyboard highlights it
- * and its slice, and opens its Tip above the name.
+ * and its slice, and its hint says what it holds. Pointing at the slice highlights the row only (the user's choice): a
+ * hint shows on the item pointed at.
  */
 function LegendRow({
   slice,
@@ -136,27 +137,24 @@ function LegendRow({
   isHighlighted: boolean;
   onHighlight: (key: string | null) => void;
 }) {
-  const tipId = useId();
   return (
-    <li
-      tabIndex={0}
-      aria-describedby={tipId}
-      onMouseEnter={() => onHighlight(slice.key)}
-      onMouseLeave={() => onHighlight(null)}
-      onFocus={() => onHighlight(slice.key)}
-      onBlur={() => onHighlight(null)}
-      className={`-mx-1.5 grid h-[30px] grid-cols-[10px_minmax(0,1fr)_48px_84px] items-center gap-x-2 rounded-sm px-1.5 text-[13px] ${
-        isHighlighted ? 'bg-subtle' : ''
-      }`}
-    >
-      <span className={`h-2.5 w-2.5 rounded-[2px] ${slice.paint.swatchClass}`} />
-      <span className="relative min-w-0">
-        <span className="block truncate">{slice.name}</span>
-        <Tip id={tipId} text={slice.hint} isOpen={isHighlighted} />
-      </span>
-      <span className="text-right font-semibold">{formatPercent(slice.weight.percentOfStocks)}</span>
-      <span className="text-right text-muted">{formatMoney(slice.weight.marketValue)}</span>
-    </li>
+    <Hint text={slice.hint} wrapInSpan={false}>
+      <li
+        tabIndex={0}
+        onMouseEnter={() => onHighlight(slice.key)}
+        onMouseLeave={() => onHighlight(null)}
+        onFocus={() => onHighlight(slice.key)}
+        onBlur={() => onHighlight(null)}
+        className={`-mx-1.5 grid h-[30px] grid-cols-[10px_minmax(0,1fr)_48px_84px] items-center gap-x-2 rounded-sm px-1.5 text-[13px] ${
+          isHighlighted ? 'bg-subtle' : ''
+        }`}
+      >
+        <span className={`h-2.5 w-2.5 rounded-[2px] ${slice.paint.swatchClass}`} />
+        <span className="min-w-0 truncate">{slice.name}</span>
+        <span className="text-right font-semibold">{formatPercent(slice.weight.percentOfStocks)}</span>
+        <span className="text-right text-muted">{formatMoney(slice.weight.marketValue)}</span>
+      </li>
+    </Hint>
   );
 }
 
@@ -166,7 +164,7 @@ const RING_AND_LEGEND_CLASS = 'flex items-start gap-6';
 
 /**
  * The money in stocks by sector — the tab's: an investor's own on their tab —: a ring, and beside it a legend naming every
- * slice with its percent and value. Pointing at a slice or at its row highlights both and opens the row's Tip.
+ * slice with its percent and value. Pointing at a slice or at its row highlights both; the row's hint says what it holds.
  */
 export function SectorWeightsCard({
   tab,

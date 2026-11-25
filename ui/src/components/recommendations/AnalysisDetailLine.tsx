@@ -4,6 +4,7 @@ import { RATING_TONES, textClassOf, TREND_TONES } from '../../lib/signalColors';
 import type { HotStock } from '../../types/recommendations';
 import { siteOf } from '../AnalysisPanel';
 import { NextEarningsDate } from '../companyInfo/TimingNote';
+import { Hint } from '../Hint';
 import { CandidateRiskSigns } from './CandidateRiskSigns';
 import { formatPoints, NEWS_SCORE_HINT, pointsColorClass } from './NewsScore';
 
@@ -36,9 +37,9 @@ function AnalystsPart({ stock }: { stock: HotStock }) {
 function NewsPart({ stock }: { stock: HotStock }) {
   if (stock.newsScore === null) return <>{EMPTY_VALUE}</>;
   return (
-    <span title={NEWS_SCORE_HINT} className={`font-semibold ${pointsColorClass(stock.newsScore)}`}>
-      {formatPoints(stock.newsScore)}
-    </span>
+    <Hint text={NEWS_SCORE_HINT}>
+      <span className={`font-semibold ${pointsColorClass(stock.newsScore)}`}>{formatPoints(stock.newsScore)}</span>
+    </Hint>
   );
 }
 
@@ -66,15 +67,18 @@ function NamedParts({ parts }: { parts: NamedPart[] }) {
   );
 }
 
-/** Why the price moves, from the week's news, in full — its source after it, the result's title on hover. */
+/** Why the price moves, from the week's news, in full — its source after it, the result's title in its hint. */
 function WhyItMovesLine({ stock }: { stock: HotStock }) {
   const moveReason = stock.analysis?.moveReason ?? null;
   if (moveReason === null) return null;
   return (
-    <p title={moveReason.title} className="max-w-[880px]">
-      <span className="text-muted">Why it moves: </span>
-      {moveReason.reason} <span className="text-muted">{siteOf(moveReason.url)}</span>
-    </p>
+    // On the paragraph itself, which wraps as a paragraph.
+    <Hint text={moveReason.title} align="start" wrapInSpan={false}>
+      <p className="max-w-[880px]">
+        <span className="text-muted">Why it moves: </span>
+        {moveReason.reason} <span className="text-muted">{siteOf(moveReason.url)}</span>
+      </p>
+    </Hint>
   );
 }
 
