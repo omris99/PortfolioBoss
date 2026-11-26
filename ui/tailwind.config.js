@@ -37,6 +37,8 @@ export default {
       'warn-real': { DEFAULT: role('warn-real'), soft: role('warn-real-soft') },
       'on-warn-real': role('on-warn-real'),
       highlight: role('highlight'),
+      // The Averaging calculator's box of what to know: `bg-gradient-to-b from-what-to-know-top to-what-to-know-bottom`.
+      'what-to-know': { top: role('what-to-know-top'), bottom: role('what-to-know-bottom') },
       signal: { green: role('signal-green'), yellow: role('signal-yellow'), red: role('signal-red'), none: role('signal-none') },
       // The sector ring's colors, in ring order (`fill-chart-1` for a slice, `bg-chart-1` for its legend swatch).
       chart: { 1: role('chart-1'), 2: role('chart-2'), 3: role('chart-3'), 4: role('chart-4'), rest: role('chart-rest') },

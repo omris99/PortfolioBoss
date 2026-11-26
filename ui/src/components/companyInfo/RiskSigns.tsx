@@ -104,25 +104,42 @@ export function notCheckedHintOf(companyInfo: CompanyInfo | null, notCheckedHint
 /**
  * The tags of a stock's risk signs, each with the figure that raised it when `showFigures` — `yearReturnPercent` is
  * Recovering's —, with no row of their own, so that a row of other warning signs can hold them too; nothing when it
- * has none, or they were never checked.
+ * has none, or they were never checked. `stacked` puts each on a line of its own, without the dot between them — for a
+ * narrow slot, where "Losing money, net margin −3.8% · Recovering, year −12.2%" would break in the middle of a risk.
  */
 export function RiskSignTagList({
   companyInfo,
   yearReturnPercent,
   showFigures,
+  stacked = false,
 }: {
   companyInfo: CompanyInfo | null;
   yearReturnPercent: number | null;
   showFigures: boolean;
+  stacked?: boolean;
 }) {
   if (companyInfo === null || companyInfo.riskSigns === null) return null;
   const figuresBehindTheSigns = { companyFacts: companyInfo.companyFacts, yearReturnPercent };
+  const drawTagOf = (sign: RiskSign) => (
+    <RiskSignTag sign={sign} figure={showFigures ? RISK_SIGN_FIGURES[sign](figuresBehindTheSigns) : null} />
+  );
+  if (stacked) {
+    return (
+      <>
+        {companyInfo.riskSigns.map((sign) => (
+          <span key={sign} className="block">
+            {drawTagOf(sign)}
+          </span>
+        ))}
+      </>
+    );
+  }
   return (
     <>
       {companyInfo.riskSigns.map((sign, signIndex) => (
         <Fragment key={sign}>
           {signIndex > 0 && <RiskSeparator />}
-          <RiskSignTag sign={sign} figure={showFigures ? RISK_SIGN_FIGURES[sign](figuresBehindTheSigns) : null} />
+          {drawTagOf(sign)}
         </Fragment>
       ))}
     </>
@@ -140,18 +157,21 @@ function NotChecked({ hint }: { hint: string }) {
 /**
  * A stock's company risks in a line, each with the figure that raised it when `showFigures`: "No company risks" when it
  * has none — in grey, not green: having none is not a forecast —, "Not checked" when Finnhub never answered or gave none
- * of its figures, `notCheckedHints` saying which in its hint.
+ * of its figures, `notCheckedHints` saying which in its hint. `stacked`: each risk on a line of its own
+ * (`RiskSignTagList`).
  */
 export function RiskSigns({
   companyInfo,
   yearReturnPercent,
   showFigures,
   notCheckedHints,
+  stacked = false,
 }: {
   companyInfo: CompanyInfo | null;
   yearReturnPercent: number | null;
   showFigures: boolean;
   notCheckedHints: NotCheckedHints;
+  stacked?: boolean;
 }) {
   const notCheckedHint = notCheckedHintOf(companyInfo, notCheckedHints);
   if (notCheckedHint !== null) return <NotChecked hint={notCheckedHint} />;
@@ -164,7 +184,12 @@ export function RiskSigns({
   }
   return (
     <span>
-      <RiskSignTagList companyInfo={companyInfo} yearReturnPercent={yearReturnPercent} showFigures={showFigures} />
+      <RiskSignTagList
+        companyInfo={companyInfo}
+        yearReturnPercent={yearReturnPercent}
+        showFigures={showFigures}
+        stacked={stacked}
+      />
     </span>
   );
 }

@@ -205,7 +205,9 @@ columns, the drawer), ג (motion — the "Motion" block of `index.css`, `hooks/a
 and the first load's skeletons, `components/firstLoad/`), ד (the alerts panel in two groups and the settings drawer;
 the alerts' words and group in Java; the top bar sticky) and ה (one way to explain on hover: `Hint` in place of every
 `title`, one "?" — see the hover explanations below) are built and browser-checked (2026-11-24/25); ו (the rest of the
-findings) comes next. Its file is the record of each stage's pieces and decisions.
+findings) is under way: the Averaging calculator's rows (the box of what to know, fixed columns, the amount's 7 digits)
+and the bell right of Sync now are built (2026-11-25/26), and its Recommendations items are on hold (his call,
+2026-11-26). Its file is the record of each stage's pieces and decisions.
 
 ## Hard invariant: read-only
 
@@ -1747,7 +1749,10 @@ and, for a sale, the realized P&L at the tab's average cost — on the same whol
 doesn't change (cash and shares trade places). On the tab of an investor who holds none of the holding it starts from 0
 shares, so only buying is worked out (`investmentIn`). Since MY_HOLDINGS_TODO.md's session 1 (2026-11-04) the tab has a
 second field, "Or buy for an amount" (`buildPurchasePlanForAmount`: the whole shares the amount buys at IB's last price,
-`calculateWholeSharesForAmount`, shared with If I buy; typing in one field empties the other), and every purchase —
+`calculateWholeSharesForAmount`, shared with If I buy; typing in one field empties the other; since 2026-11-25, his rule,
+every amount field — this one, the Averaging calculator's and If I buy's — refuses a key or a paste past 7 digits of
+dollars or 2 of cents, commas not counted: `isAmountWithinDigitLimit` in `ifIBuy.ts`, through `NumberInputWithUnit`'s
+`isTypedTextAllowed`; a longer amount ran the calculator's figures past their columns), and every purchase —
 from the target or the amount, one `buildPurchasePlan` — carries an `AverageCostAfterPurchase`
 (`calculateAverageCostAfterPurchase`): the new average = (shares held × the tab's average cost + shares bought × the
 price + the commission) ÷ every share after — the commission counted in, as IB counts it in its average cost —, and how
@@ -1790,13 +1795,23 @@ if it were the only one, and the one thing they share is the cash. The pieces, i
 `AveragingCashCard` (sticky at the top of the screen: the cash with its hint, the plan's sum and Clear, or the real
 warning "626.60 short: …"), `AveragingSection` (the heading and its count; the second section folds, with "1 purchase
 planned" while folded), `AveragingTable` (eleven columns in one row under Now · Plan a purchase · After the purchase, the
-two fields `NumberInputWithUnit` — exported from `WeightCalculatorPanel.tsx` with a `widthClass` and an `ariaLabel` —, a
-3px accent edge on a row that buys, the row's message above its line), `WhatToKnowLine` (under each row, five stacked
+two fields `NumberInputWithUnit` — exported from `WeightCalculatorPanel.tsx` with a `widthClass` and an `ariaLabel` —, the
+row's message above its line; no edge marks a row that buys since round 6; since 2026-11-25 every column's width is
+**fixed** — `table-fixed` and a `<colgroup>` from `COLUMNS`' `widthClass`, 150 · 54 · 122 · 96 · 54 · 107 · 144 · 155 · 74
+· 108 · 70 = the table's 1134px at 1280–1440, the same proportions wider —: measured, the empty Buy column was 40px and a
+purchase made it 147px, taken from every other column, so the row moved while typing, and the two sections' tables came
+out of different widths; a six-digit amount wraps after the "≈"; a weight after over 100% — only a purchase bigger than
+the whole account, which the cash card already says — reads ">100%"), `WhatToKnowLine` (under each row, five stacked
 slots since UI_POLISH_TODO.md's stage ב: `SignalWords`, `HoldingCompanyRisks`, `MomentumMark`, `MedianTargetWithUpside`
-from `AnalystTarget.tsx`, and `NextEarningsDate`) and `NotOnThisPage`. Three deliberate departures from the design (his
-OK): the highlighter on "in 5 days" as everywhere else, not on the date; the Weight tab's own sentences in "Not on this
-page"; 32px fields like every other. (A fourth, the cash's hint in `title`, ended with stage ה: its `Hint` opens below
-"Cash", since the card sticks to the top.)
+from `AnalystTarget.tsx`, and `NextEarningsDate`; since 2026-11-25, his note "no separation between the row's two parts",
+in a box of its own — `rounded-md`, a grey from top to bottom, `bg-gradient-to-b from-what-to-know-top to-what-to-know-bottom`
+(the app's one gradient, lighter than the table's head so it doesn't read as another header row), Company risks the widest
+slot (1 · 1.5 · 0.8 · 1.2 · 0.9), the Signal's warning signs and the company risks each on a line of its own (`stacked` on
+`SignalWords` and `HoldingCompanyRisks` → `RiskSigns` → `RiskSignTagList`; everywhere else they stay one line with a "·")
+— a departure from the design's bare line, his pick of five looks) and `NotOnThisPage`. Three deliberate departures from
+the design (his OK): the highlighter on "in 5 days" as everywhere else, not on the date; the Weight tab's own sentences in
+"Not on this page"; 32px fields like every other. (A fourth, the cash's hint in `title`, ended with stage ה: its `Hint`
+opens below "Cash", since the card sticks to the top.)
 
 The Recommendations page (`ui/src/pages/RecommendationsPage.tsx`, `/recommendations`, the sixth navigation item; its
 pieces in `ui/src/components/recommendations/`, built from Claude Design's third round — DESIGN_BRIEF.md §8, which
@@ -1862,16 +1877,20 @@ TWS — Scan again here, Sync now in the top bar: it runs the call then the relo
 runs; size `regular` here, `small` in the top bar). `lib/drawerAddress.ts` (`idFromAddress`, `OPENED_FROM_TABLE`) is
 shared with Positions.
 
-The top bar (`components/topBar/TopBar.tsx` since UI_POLISH_TODO.md's stage א; `AppShell.tsx` until then): the alerts
-bell first, **left of the "PortfolioBoss" wordmark** (his place, after two tries: right of Sync now, then right of the
-name), the tabs after them, and on the right the sync in words and Sync now — the stage's file has the rest. Since stage
+The top bar (`components/topBar/TopBar.tsx` since UI_POLISH_TODO.md's stage א; `AppShell.tsx` until then): the
+"PortfolioBoss" wordmark, the tabs, and on the right the sync in words, Sync now and, last, **the alerts bell, 16px right
+of Sync now** (his place since 2026-11-26, after right of Sync now, right of the name, then left of it) — the stage's file
+has the rest. Since stage
 ד (2026-11-25, his ask) it is **sticky** (`sticky top-0 z-30`): scrolled down, a drawer opened under a bar that had
 scrolled away "hung in the air"; `html`'s `scroll-padding-top` keeps what the keyboard reaches out from under it, and the
 Averaging cash card sticks 8px under it. A Sync now that fails or finds another reading running shows the shared
 `ErrorBanner` with the server's words, "The figures below are from the last sync." and Try again.
 `components/alerts/` (decision 17; redesigned in Claude Design's sixth round, stage ד): `AlertsBell` (`useAlerts
-(portfolioSyncedAt)` — `GET /api/alerts` on mount and on every new `asOf` —; a Radix popover opening 8px under the bar,
-its left edge on the bell's — `PANEL_OFFSET_UNDER_THE_BELL` —; the badge is the unseen count in the accent blue, not red —
+(portfolioSyncedAt)` — `GET /api/alerts` on mount and on every new `asOf` —; a Radix popover opening 8px under the bar
+— `PANEL_OFFSET_UNDER_THE_BELL` —, centred under the bell and never closer than 16px to the screen's edge
+(`collisionPadding`; at 1280–1440 that edge decides), the "Alerts" hint from the bell's right edge; opening focuses the
+panel itself, not its ⚙ (`onOpenAutoFocus`) — the ⚙'s hint "Alert settings" showed on every opening; the badge is the
+unseen count in the accent blue, not red —
 red is loss and the signal's tones only, his pick; opening marks the shown alerts seen at once (`markAlertsAsSeen`, then a
 reload), and the ones new at the opening stay new while the panel is open), `AlertsPanel` (in place of `AlertList`:
 "Alerts · 36 new · ⚙", then the server's two groups — `alertGroups.ts`: Your holdings, then The short list — each with its
@@ -2099,7 +2118,8 @@ Things that are easy to break:
   cash keep one color each wherever they appear side by side (`STOCKS_COLOR_CLASS`, `CASH_COLOR_CLASS`). One yellow is
   not a warning: `highlight` (#ffe94d, `HIGHLIGHTER_CLASS`), a highlighter over a date to look at — the next report 0–14
   days away (MY_HOLDINGS_TODO.md session 3, the user's choice) —, brighter and more saturated than the minor warning's
-  pale band so the two read apart.
+  pale band so the two read apart. The UI is flat but for one gradient, the Averaging calculator's box of what to know
+  (`what-to-know-top` #f5f7fa → `what-to-know-bottom` #fcfdfe, 2026-11-25, his pick): a new color role there too.
 - One entry point: `Main` starts the Spring Boot app, and `TwsPortfolioRunner` runs the startup (its sync is
   `api.SyncService`'s, shared with Sync now). `ib.TwsReader` owns the TWS host/port/client id and opens each `IbGateway`,
   one at a time — the startup, Sync now and the Scan again button all read through it. Don't add a second entry point or

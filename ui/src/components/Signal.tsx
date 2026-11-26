@@ -40,11 +40,24 @@ export function warningSignsOf(holding: Holding): string[] {
  * The signal in words, the one form every page uses (round 6) — the Positions table, the Overview's Needs attention, the
  * drawer, the Averaging calculator: the warning signs it found, "Momentum weak · Analysts down", in the text's own color —
  * the dot beside it carries the red —; "No warning signs" when it found none; "Not analyzed" before the first analysis.
+ * `stacked` puts each sign on a line of its own, without the dot between them — for a narrow slot (the Averaging
+ * calculator's), where "Momentum weak · Analysts down" broke after the dot.
  */
-export function SignalWords({ holding }: { holding: Holding }) {
+export function SignalWords({ holding, stacked = false }: { holding: Holding; stacked?: boolean }) {
   if (holding.analysis === null) return <span className="text-faint">Not analyzed</span>;
   const warningSigns = warningSignsOf(holding);
   if (warningSigns.length === 0) return <span className="text-muted">No warning signs</span>;
+  if (stacked) {
+    return (
+      <span className="text-ink">
+        {warningSigns.map((warningSign) => (
+          <span key={warningSign} className="block">
+            {warningSign}
+          </span>
+        ))}
+      </span>
+    );
+  }
   return <span className="text-ink">{warningSigns.join(' · ')}</span>;
 }
 

@@ -16,15 +16,16 @@ export const HOLDING_NOT_CHECKED_HINTS: NotCheckedHints = {
 
 /**
  * An open holding's company risks with their figures ("Expensive, P/E 52"), "No company risks", or "Not checked" when
- * Finnhub couldn't check them.
+ * Finnhub couldn't check them. `stacked`: each risk on a line of its own — the Averaging calculator's narrow slot.
  */
-export function HoldingCompanyRisks({ holding }: { holding: Holding }) {
+export function HoldingCompanyRisks({ holding, stacked = false }: { holding: Holding; stacked?: boolean }) {
   return (
     <RiskSigns
       companyInfo={holding.companyInfo}
       yearReturnPercent={holding.momentum?.yearReturnPercent ?? null}
       showFigures
       notCheckedHints={HOLDING_NOT_CHECKED_HINTS}
+      stacked={stacked}
     />
   );
 }

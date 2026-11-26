@@ -198,6 +198,30 @@ of the sector ring only lights its legend row** — the bubble shows on the row 
 
 ### Stage ו — the rest of the findings
 
+- **Averaging's line of what to know** (his note, 2026-11-25 — "no separation between the row's two parts"; built, browser
+  check open): the line is a box of its own, `WhatToKnowLine`'s `rounded-md` with a grey from top to bottom
+  (`--color-what-to-know-top` / `-bottom`, `#f5f7fa` → `#fcfdfe`, his pick of five looks shot on the demo database — the
+  app's one gradient, lighter than the table's head so it doesn't read as another header row); Company risks the widest
+  slot (1 · 1.5 · 0.8 · 1.2 · 0.9), each risk on a line of its own (`stacked` on `HoldingCompanyRisks` / `RiskSigns` /
+  `RiskSignTagList`; the drawer's line unchanged). A departure from AvgRow's bare line, with his OK. A field's red reason
+  stays above the box.
+- **Averaging's columns stay put while typing** (his note, 2026-11-25; built, browser check open): measured, the empty
+  Buy column was 40px and a purchase made it 147px, taken from every other column — and the two sections' tables had
+  different widths. Now `table-fixed` with a `<colgroup>` from `COLUMNS`' `widthClass` (150 · 54 · 122 · 96 · 54 · 107 ·
+  144 · 155 · 74 · 108 · 70 = 1134px at 1280–1440, the same proportions at 1920; both tables alike); a six-digit amount
+  wraps after the "≈". His rule: an amount field refuses more than 7 digits of dollars and 2 of cents
+  (`isAmountWithinDigitLimit` in `ifIBuy.ts`, `NumberInputWithUnit`'s `isTypedTextAllowed`; the Averaging calculator, the
+  Weight tab and If I buy), and a weight after over 100% reads ">100%". In the box, the Signal's warning signs each on a
+  line of their own too (`SignalWords`' `stacked`): "Momentum weak · Analysts down" broke after the dot.
+- **The bell right of Sync now** (his ask, 2026-11-25/26; built, browser-checked by him): the bar's last item, 16px from
+  Sync now; its hint opens from its right edge (`align="end"`), its panel centred under it, never closer than 16px to the
+  screen's edge (`collisionPadding`; at 1280–1440 that edge decides). Opening the panel focuses the panel itself, not its
+  ⚙ (`onOpenAutoFocus`): the ⚙'s hint "Alert settings" showed on every opening — already so before the move.
+- **On hold — don't build** (his call, 2026-11-26: the Recommendations page is to be reworked as a whole): the next two
+  items, and the open points about it found on 2026-11-26 — Recovering shown three times in a scanned stock's drawer (in
+  the Year box, where it runs out of the box, in the Company risks line and in The year table), its name ("Below a year
+  ago" in his words) and whether it is a company risk at all, and "Analysts HOLD IMPROVING" in words ("Analysts Hold ·
+  targets 3 raised, 1 cut").
 - **Recommendations' Hot table** (his note 1; HotTable README; R1–R4): one-line heads, no second head row; Pulled back
   and Moves together as small icons beside their figures with a `Hint`; no "In the portfolio" column — a small "held"
   pill by the symbol; the line under an analyzed row as four labeled slots on a grid (Company risks · Why it moves ·

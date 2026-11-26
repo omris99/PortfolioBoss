@@ -18,7 +18,7 @@ import { Field, FormError, InfoBand } from '../FormFields';
 import { weightsTabOf, type InvestmentsAndCash } from '../graphs/investmentsAndCash';
 import { InvestorTabs } from '../InvestorTabs';
 import { WarnMark } from '../WarnMark';
-import { amountOf } from './ifIBuy';
+import { amountOf, isAmountWithinDigitLimit } from './ifIBuy';
 import {
   buildPurchasePlanForAmount,
   holdingInAccountOf,
@@ -235,6 +235,7 @@ function PlanResult({
 /**
  * A field for a number with its unit after it ("%", "USD"), its border red while what is typed can't be used.
  * `widthClass`: narrower in a table row than in a form. `ariaLabel`: what the field is for, when no label shows above it.
+ * `isTypedTextAllowed`: a key or a paste that would make a text it rejects is refused — the field keeps what it had.
  */
 export function NumberInputWithUnit({
   typedText,
@@ -243,6 +244,7 @@ export function NumberInputWithUnit({
   onTypedTextChange,
   widthClass = 'w-24',
   ariaLabel,
+  isTypedTextAllowed,
 }: {
   typedText: string;
   unit: string;
@@ -250,7 +252,12 @@ export function NumberInputWithUnit({
   onTypedTextChange: (typedText: string) => void;
   widthClass?: string;
   ariaLabel?: string;
+  isTypedTextAllowed?: (typedText: string) => boolean;
 }) {
+  const changeTypedText = (newText: string) => {
+    if (isTypedTextAllowed !== undefined && !isTypedTextAllowed(newText)) return;
+    onTypedTextChange(newText);
+  };
   return (
     <span className="flex items-center gap-1.5">
       <input
@@ -259,7 +266,7 @@ export function NumberInputWithUnit({
         value={typedText}
         aria-label={ariaLabel}
         aria-invalid={isUnusable}
-        onChange={(event) => onTypedTextChange(event.target.value)}
+        onChange={(event) => changeTypedText(event.target.value)}
         className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} ${widthClass} aria-[invalid=true]:border-negative`}
       />
       <span className="font-medium text-muted">{unit}</span>
@@ -308,6 +315,7 @@ function WeightCalculator({
             unit={ACCOUNT_CURRENCY}
             isUnusable={isAmountUnusable}
             onTypedTextChange={onAmountTextChange}
+            isTypedTextAllowed={isAmountWithinDigitLimit}
           />
         </Field>
       </div>

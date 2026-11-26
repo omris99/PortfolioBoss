@@ -115,9 +115,9 @@ function SyncLine({
 }
 
 /**
- * The bar on every page (DESIGN_BRIEF.md §11, round 6): the alerts bell left of the name (the user's place for it), the
- * mark and the name, the seven pages — on one line from 1280px —, then on the right when the figures were synced, in
- * words, and Sync now.
+ * The bar on every page (DESIGN_BRIEF.md §11, round 6): the mark and the name, the seven pages — on one line from
+ * 1280px —, then on the right when the figures were synced, in words, Sync now, and last the alerts bell (the user's
+ * place for it since 2026-11-25, after left of the name).
  *
  * @param syncedAt the portfolio's `asOf`, as the API sends it; the bell loads its alerts again when it changes
  */
@@ -140,13 +140,10 @@ export function TopBar({
     // Always on screen (the user's ask): a drawer opens right under it at any scroll, rather than floating with a gap.
     <header className="sticky top-0 z-30 border-b bg-surface">
       <div className={`${containerClass} flex h-topbar items-stretch gap-6`}>
-        <div className="flex items-center gap-6">
-          <AlertsBell portfolioSyncedAt={syncedAt} />
-          <Link to="/" className="flex items-center gap-2 whitespace-nowrap text-wordmark text-ink">
-            <BrandMark size={20} />
-            PortfolioBoss
-          </Link>
-        </div>
+        <Link to="/" className="flex items-center gap-2 whitespace-nowrap text-wordmark text-ink">
+          <BrandMark size={20} />
+          PortfolioBoss
+        </Link>
         <nav aria-label="Main" className="flex min-w-0">
           <ul className="flex items-stretch gap-0.5">
             {NAVIGATION.map((page) => (
@@ -172,6 +169,10 @@ export function TopBar({
               onClick={onSyncNow}
             />
           </Hint>
+          {/* 16px from Sync now: a control of another kind, not a second button of the sync. */}
+          <div className="ml-2 flex">
+            <AlertsBell portfolioSyncedAt={syncedAt} />
+          </div>
         </div>
       </div>
     </header>

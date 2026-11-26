@@ -36,6 +36,27 @@ export interface Purchase {
   isCoveredByCash: boolean;
 }
 
+/**
+ * The most an amount field takes (2026-11-25, his rule): 7 digits of dollars — up to 9,999,999 — and 2 of cents. A longer
+ * amount made the Averaging calculator's figures after the purchase run past their columns; the field refuses the key
+ * that would pass it, rather than explaining afterwards.
+ */
+export const AMOUNT_WHOLE_DIGITS_LIMIT = 7;
+export const AMOUNT_CENTS_DIGITS_LIMIT = 2;
+
+function countDigits(text: string): number {
+  return (text.match(/\d/g) ?? []).length;
+}
+
+/**
+ * Whether a text typed in an amount field keeps to the limits above; the commas are not counted. Anything else that
+ * isn't an amount — a letter, a second point — passes, for `amountOf` to say why it can't be used.
+ */
+export function isAmountWithinDigitLimit(typedText: string): boolean {
+  const [dollars, cents = ''] = typedText.replace(/,/g, '').split('.');
+  return countDigits(dollars) <= AMOUNT_WHOLE_DIGITS_LIMIT && countDigits(cents) <= AMOUNT_CENTS_DIGITS_LIMIT;
+}
+
 /** The amount typed in, in dollars; or why it can't be used. Empty is neither: nothing is calculated yet. */
 export function amountOf(typedText: string): number | CannotCalculate | null {
   const withoutCommas = typedText.replace(/,/g, '').trim();

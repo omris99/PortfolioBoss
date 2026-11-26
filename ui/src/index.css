@@ -55,6 +55,14 @@
    */
   --color-highlight: #ffe94d;
 
+  /*
+   * The Averaging calculator's box of what to know, under each holding's figures: a soft grey from top to bottom (the
+   * user's pick, 2026-11-25), lighter than the table's head (`subtle`) so that it doesn't read as another header row. The
+   * app's one gradient: everything else is flat.
+   */
+  --color-what-to-know-top: #f5f7fa;
+  --color-what-to-know-bottom: #fcfdfe;
+
   --color-signal-green: #1f8a47;
   --color-signal-yellow: #b88400;
   --color-signal-red: #c8322a;

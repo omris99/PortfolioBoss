@@ -8,7 +8,15 @@ import { Field, FormError, InfoBand, SelectInput } from '../FormFields';
 import { weightsTabOf, type InvestmentsAndCash } from '../graphs/investmentsAndCash';
 import { InvestorTabs } from '../InvestorTabs';
 import { sectorText } from '../recommendations/hotStockTexts';
-import { amountOf, matchingSectorOf, purchaseOf, sectorsOfHoldings, type Purchase, type SectorChoice } from './ifIBuy';
+import {
+  amountOf,
+  isAmountWithinDigitLimit,
+  matchingSectorOf,
+  purchaseOf,
+  sectorsOfHoldings,
+  type Purchase,
+  type SectorChoice,
+} from './ifIBuy';
 import { CashCoverage, PlanRow, shareCountText } from './WeightCalculatorPanel';
 
 /** The select's value for "A sector not held yet"; every other value is one of the user's sectors, or '' for none. */
@@ -149,7 +157,9 @@ export function IfIBuyPanel({
             inputMode="decimal"
             value={amountText}
             aria-invalid={isAmountUnusable}
-            onChange={(event) => setAmountText(event.target.value)}
+            onChange={(event) => {
+              if (isAmountWithinDigitLimit(event.target.value)) setAmountText(event.target.value);
+            }}
             className={`${INPUT_CLASS} ${NUMBER_INPUT_CLASS} w-full aria-[invalid=true]:border-negative`}
           />
         </Field>

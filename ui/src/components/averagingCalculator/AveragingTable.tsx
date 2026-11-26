@@ -10,6 +10,7 @@ import {
 import { ShortenedText } from '../ShortenedText';
 import { SignalDot } from '../Signal';
 import { percentOfAccountOf, type PurchasePlan } from '../weightCalculator/targetWeight';
+import { isAmountWithinDigitLimit } from '../weightCalculator/ifIBuy';
 import { NumberInputWithUnit, shareCountText } from '../weightCalculator/WeightCalculatorPanel';
 import type { AveragingRow, RowResult, TypedTexts } from './averagingPlan';
 import { WhatToKnowLine } from './WhatToKnowLine';
@@ -29,18 +30,26 @@ const COLUMN_GROUPS: { title: string; columnCount: number }[] = [
   { title: 'After the purchase', columnCount: 4 },
 ];
 
-const COLUMNS: { title: string; isFigure: boolean }[] = [
-  { title: 'Holding', isFigure: false },
-  { title: 'Shares', isFigure: true },
-  { title: 'Average / Price', isFigure: true },
-  { title: 'To reach the average', isFigure: true },
-  { title: 'Weight', isFigure: true },
-  { title: 'Target weight', isFigure: false },
-  { title: 'Or buy for', isFigure: false },
-  { title: 'Buy', isFigure: true },
-  { title: 'New average', isFigure: true },
-  { title: 'To reach it', isFigure: true },
-  { title: 'Weight after', isFigure: true },
+/**
+ * Every column's width is fixed, never measured from what is in it (2026-11-25, his note): measured, the empty Buy column
+ * was 40px and a purchase typed made it 147px, taken from every other column, so the whole row moved while typing — and
+ * the two sections' tables came out of different widths. Each width holds the widest text its column shows ("Already
+ * reached", "120 shares ≈ 25,200.00", a field with its unit), and they add up to the table's 1134px at 1280–1440px; a
+ * wider screen widens them all in the same proportion. Both sections use the same widths, so they line up.
+ */
+const COLUMNS: { title: string; isFigure: boolean; widthClass: string }[] = [
+  { title: 'Holding', isFigure: false, widthClass: 'w-[150px]' },
+  { title: 'Shares', isFigure: true, widthClass: 'w-[54px]' },
+  { title: 'Average / Price', isFigure: true, widthClass: 'w-[122px]' },
+  { title: 'To reach the average', isFigure: true, widthClass: 'w-[96px]' },
+  { title: 'Weight', isFigure: true, widthClass: 'w-[54px]' },
+  { title: 'Target weight', isFigure: false, widthClass: 'w-[107px]' },
+  { title: 'Or buy for', isFigure: false, widthClass: 'w-[144px]' },
+  { title: 'Buy', isFigure: true, widthClass: 'w-[155px]' },
+  { title: 'New average', isFigure: true, widthClass: 'w-[74px]' },
+  { title: 'To reach it', isFigure: true, widthClass: 'w-[108px]' },
+  // Over 100% when a purchase is bigger than the account ("280.9%"; the cash card says it can't be bought).
+  { title: 'Weight after', isFigure: true, widthClass: 'w-[70px]' },
 ];
 
 /** Eleven columns at 1280px: narrower side padding than the other tables, and headers that wrap. */
@@ -63,12 +72,31 @@ function toReachTheAverageText(averagingRow: AveragingRow): string {
   return `${formatPercent(averagingRow.priceAboveAveragePercent)} above`;
 }
 
+/**
+ * The weight after the purchase; ">100%" past the whole account — only a purchase that costs more than all of it gets
+ * there, which the cash card already says, and "11020.3%" ran past its column (2026-11-25, his OK).
+ */
+function weightAfterText(purchasePlan: PurchasePlan): string {
+  return purchasePlan.percentAfter > 100 ? '>100%' : formatPercent(purchasePlan.percentAfter);
+}
+
 /** "+17.6%": how far the price must rise to reach the new average; "Already reached" when it is at or above it. */
 function toReachTheNewAverageText(purchasePlan: PurchasePlan): string {
   const averageCostAfterPurchase = purchasePlan.averageCostAfterPurchase;
   if (averageCostAfterPurchase === null) return EMPTY_VALUE;
   const riseNeeded = averageCostAfterPurchase.riseNeededToReachNewAveragePercent;
   return riseNeeded > 0 ? formatSignedPercentOneDecimal(riseNeeded) : 'Already reached';
+}
+
+/** The columns' fixed widths, which the table takes from its first row (`table-fixed`). */
+function ColumnWidths() {
+  return (
+    <colgroup>
+      {COLUMNS.map((column) => (
+        <col key={column.title} className={column.widthClass} />
+      ))}
+    </colgroup>
+  );
 }
 
 function ColumnHeaders() {
@@ -130,14 +158,16 @@ function PurchaseCells({ rowResult }: { rowResult: RowResult }) {
   return (
     <>
       <td className={resultCellClass}>
-        <span className="block font-semibold">
-          {shareCountText(purchasePlan.shareCount)} ≈ {formatMoney(purchasePlan.amount)}
+        {/* The column is sized for an amount of five digits: a bigger one goes under the shares, after the "≈". */}
+        <span className="block whitespace-normal font-semibold">
+          <span className="whitespace-nowrap">{shareCountText(purchasePlan.shareCount)} ≈</span>{' '}
+          <span className="whitespace-nowrap">{formatMoney(purchasePlan.amount)}</span>
         </span>
         <span className="block text-caption text-muted">+ {formatMoney(purchasePlan.commission)} commission</span>
       </td>
       <td className={resultCellClass}>{formatMoney(newAverageCost)}</td>
       <td className={resultCellClass}>{toReachTheNewAverageText(purchasePlan)}</td>
-      <td className={resultCellClass}>{formatPercent(purchasePlan.percentAfter)}</td>
+      <td className={resultCellClass}>{weightAfterText(purchasePlan)}</td>
     </>
   );
 }
@@ -194,7 +224,7 @@ function AveragingTableRows({
   return (
     <>
       <tr>
-        <td className={`${ROW_CELL_CLASS} w-[150px]`}>
+        <td className={ROW_CELL_CLASS}>
           <HoldingCell averagingRow={averagingRow} />
         </td>
         <td className={figureCellClass}>{formatQuantity(holdingInAccount.quantity)}</td>
@@ -223,6 +253,7 @@ function AveragingTableRows({
             onTypedTextChange={(amountText) => onTypedTextsChange({ targetText: '', amountText })}
             widthClass="w-[78px]"
             ariaLabel={`${holding.symbol} amount to buy for, ${ACCOUNT_CURRENCY}`}
+            isTypedTextAllowed={isAmountWithinDigitLimit}
           />
         </td>
         <PurchaseCells rowResult={rowResult} />
@@ -251,7 +282,8 @@ export function AveragingTable({
   onTypedTextsChange: (holdingId: number, typedTexts: TypedTexts) => void;
 }) {
   return (
-    <table className="w-full border-collapse">
+    <table className="w-full table-fixed border-collapse">
+      <ColumnWidths />
       <ColumnHeaders />
       <tbody>
         {entries.map((entry) => (

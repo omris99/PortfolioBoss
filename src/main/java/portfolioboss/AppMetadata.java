@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.41.0";
+    public static final String VERSION = "0.41.1";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,15 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.41.1: [Steadier Averaging rows, the bell on the right]
+ * WhatToKnowLine: the line under each Averaging row is a box of its own, a light grey from top to bottom, so it no longer reads as a second header row of the table.
+ * WhatToKnowLine: Company risks has the widest slot, and each company risk and each Signal warning sign has a line of its own, so none breaks mid-phrase.
+ * AveragingTable: every column has a fixed width, so typing an amount no longer moves the columns, and the two sections' columns now line up.
+ * AveragingTable: a six-digit purchase wraps after the "≈" in Buy, and a weight after above 100% (a purchase larger than the whole account) reads ">100%".
+ * Amount fields: the Averaging calculator, the Weight tab and If I buy refuse more than 7 digits of dollars or 2 of cents, typed or pasted.
+ * AlertsBell: moved to the right end of the top bar, after Sync now; its panel opens centred under it and keeps 16px from the screen's edge.
+ * AlertsBell: opening the panel focuses the panel itself, so the "Alert settings" hint no longer pops up on every opening.
+ *
  * VERSION 0.41.0: [One way to explain on hover]
  * Hint everywhere: the browser's own tooltip is gone from every screen; figures, marks, notes, dates and icon buttons explain themselves in the app's bubble.
  * HelpOnHover is the app's one "?": it opens on hover or keyboard focus, 4px after the words it explains; HelpPopover and the weights' Tip are removed.
