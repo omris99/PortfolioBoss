@@ -10,7 +10,7 @@ import org.hibernate.type.SqlTypes;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.ai.StockSearches;
 import portfolioboss.db.recommendations.ScanCandidateEntity;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.Stock;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,7 +22,7 @@ import java.time.Instant;
  * {@code TradeEntity.investorId}: nothing here needs the holding or the scanned stock itself.
  *
  * <p>{@code @JdbcTypeCode(SqlTypes.JSON)} has Hibernate store {@code result}, {@code searchResults} and
- * {@code finnhubStock} as JSON in their {@code JSONB} columns and read them back into the records.
+ * {@code companyFigures} as JSON in their {@code JSONB} columns and read them back into the records.
  */
 @Entity
 @Table(name = "stock_analysis")
@@ -50,11 +50,12 @@ public class StockAnalysisEntity {
     private StockSearches searchResults;
 
     /**
-     * What Finnhub answered about a scanned stock — its next earnings date and four of the company's figures
-     * (RECOMMENDATIONS_TODO.md, decision 8); {@code null} when it didn't answer, and for a holding's analysis.
+     * A scanned stock's company figures — its next earnings date and four of the company's figures
+     * (RECOMMENDATIONS_TODO.md, decision 8), from Finviz or Finnhub, the first that answered
+     * (RECOMMENDATIONS_FINVIZ_TODO.md, decision 9); {@code null} when no source answered, and for a holding's analysis.
      */
     @JdbcTypeCode(SqlTypes.JSON)
-    private Stock finnhubStock;
+    private Stock companyFigures;
 
     private int inputTokens;
     private int outputTokens;
@@ -82,21 +83,21 @@ public class StockAnalysisEntity {
      * A scanned stock's analysis. It takes the stored row itself, not its id, so that a holding's id can't be passed
      * by mistake.
      *
-     * @param finnhubStock {@code null} when Finnhub didn't answer
+     * @param companyFigures {@code null} when no source of the company figures answered
      */
-    public StockAnalysisEntity(ScanCandidateEntity candidate, Stock finnhubStock, Instant analyzedAt, String model,
+    public StockAnalysisEntity(ScanCandidateEntity candidate, Stock companyFigures, Instant analyzedAt, String model,
                                StockAnalysisResult result, StockSearches searchResults, int inputTokens,
                                int outputTokens, int tavilyCredits, BigDecimal costUsd) {
-        this(null, candidate.id(), finnhubStock, analyzedAt, model, result, searchResults, inputTokens, outputTokens,
+        this(null, candidate.id(), companyFigures, analyzedAt, model, result, searchResults, inputTokens, outputTokens,
                 tavilyCredits, costUsd);
     }
 
-    private StockAnalysisEntity(Long holdingId, Long scanCandidateId, Stock finnhubStock, Instant analyzedAt,
+    private StockAnalysisEntity(Long holdingId, Long scanCandidateId, Stock companyFigures, Instant analyzedAt,
                                 String model, StockAnalysisResult result, StockSearches searchResults,
                                 int inputTokens, int outputTokens, int tavilyCredits, BigDecimal costUsd) {
         this.holdingId = holdingId;
         this.scanCandidateId = scanCandidateId;
-        this.finnhubStock = finnhubStock;
+        this.companyFigures = companyFigures;
         this.analyzedAt = analyzedAt;
         this.model = model;
         this.result = result;
@@ -137,8 +138,8 @@ public class StockAnalysisEntity {
         return searchResults;
     }
 
-    public Stock finnhubStock() {
-        return finnhubStock;
+    public Stock companyFigures() {
+        return companyFigures;
     }
 
     public int tavilyCredits() {

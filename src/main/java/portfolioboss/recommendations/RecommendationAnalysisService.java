@@ -15,14 +15,16 @@ import portfolioboss.db.recommendations.InvestmentRecommendationEntity;
 import portfolioboss.db.recommendations.InvestmentRecommendationRepository;
 import portfolioboss.exceptions.AnalysisOffException;
 import portfolioboss.exceptions.CandidateNotFoundException;
-import portfolioboss.stocks.FinnhubClient;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFiguresSource;
+import portfolioboss.sources.SourcesInOrder;
+import portfolioboss.sources.Stock;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -31,15 +33,16 @@ import java.util.stream.Collectors;
 /**
  * The Recommendations page's paid run (RECOMMENDATIONS_TODO.md, session 3), started only by the user's button: the
  * short list — the first HOT candidates of the latest scan whose analysts' target is at least 15% above the last close
- * (decision 14) — or one candidate of its lists goes through {@link StockAnalysisPipeline}, Finnhub is asked about each
- * beside it, and every analysis that succeeded is stored as a {@code stock_analysis} row of its candidate. After the
- * short list the code picks the recommendation ({@link RecommendationCalculator}) and stores it as an
- * {@code investment_recommendation} row — an empty one too, when no stock had enough upside and nothing was paid for;
- * one candidate's analysis picks nothing. It writes nothing else, and never reaches Interactive Brokers.
+ * (decision 14) — or one candidate of its lists goes through {@link StockAnalysisPipeline}, their company figures are
+ * asked for beside it (Finviz first, then Finnhub: RECOMMENDATIONS_FINVIZ_TODO.md, decision 9), and every analysis that
+ * succeeded is stored as a {@code stock_analysis} row of its candidate. After the short list the code picks the
+ * recommendation ({@link RecommendationCalculator}) and stores it as an {@code investment_recommendation} row — an empty
+ * one too, when no stock had enough upside and nothing was paid for; one candidate's analysis picks nothing. It writes
+ * nothing else, and never reaches Interactive Brokers.
  *
- * <p>Not {@code @Transactional}, like {@code AnalysisService}: no database connection waits on the network. Finnhub and
- * Tavily are sent only the symbol, and Claude the symbol, the currency and the last close — never anything about the
- * portfolio (decision 6).
+ * <p>Not {@code @Transactional}, like {@code AnalysisService}: no database connection waits on the network. The sources
+ * of the company figures and Tavily are sent only the symbol, and Claude the symbol, the currency and the last close —
+ * never anything about the portfolio (decision 6).
  */
 @Service
 public class RecommendationAnalysisService {
@@ -48,19 +51,22 @@ public class RecommendationAnalysisService {
     private static final String CURRENCY = "USD";
 
     private final AiKeys aiKeys;
-    private final FinnhubClient finnhubClient;
+    private final SourcesInOrder<Stock> companyFigures;
     private final StockAnalysisPipeline stockAnalysisPipeline;
     private final ScanListsService scanListsService;
     private final StockAnalysisRepository stockAnalysisRepository;
     private final InvestmentRecommendationRepository investmentRecommendationRepository;
 
-    public RecommendationAnalysisService(AiKeys aiKeys, FinnhubClient finnhubClient,
+    /**
+     * @param companyFiguresSources every source of the company figures, in their {@code @Order} — Spring hands them so
+     */
+    public RecommendationAnalysisService(AiKeys aiKeys, List<CompanyFiguresSource> companyFiguresSources,
                                          StockAnalysisPipeline stockAnalysisPipeline,
                                          ScanListsService scanListsService,
                                          StockAnalysisRepository stockAnalysisRepository,
                                          InvestmentRecommendationRepository investmentRecommendationRepository) {
         this.aiKeys = aiKeys;
-        this.finnhubClient = finnhubClient;
+        this.companyFigures = new SourcesInOrder<>("company figures", companyFiguresSources);
         this.stockAnalysisPipeline = stockAnalysisPipeline;
         this.scanListsService = scanListsService;
         this.stockAnalysisRepository = stockAnalysisRepository;
@@ -84,19 +90,21 @@ public class RecommendationAnalysisService {
         Instant analyzedAt = Instant.now();
         LocalDate today = analyzedAt.atZone(ZoneId.systemDefault()).toLocalDate();
 
-        List<Future<Stock>> pendingFinnhubStocks;
+        Future<Map<String, Stock>> pendingCompanyFigures;
         StockAnalysisRun run;
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            // Finnhub answers in a second; it runs beside the analysis, which takes far longer
-            pendingFinnhubStocks = candidates.stream()
-                    .map(candidateWithItsList -> executor.submit(() -> finnhubStockOf(candidateWithItsList, today)))
-                    .toList();
+            // the company figures come in seconds; they are asked for beside the analysis, which takes far longer
+            pendingCompanyFigures = executor.submit(() -> companyFiguresOf(candidates, today));
             run = stockAnalysisPipeline.analyzeAll(candidates.stream().map(this::stockToAnalyze).toList(), today);
         }
-        List<Stock> finnhubStocks = pendingFinnhubStocks.stream().map(Future::resultNow).toList();
+        Map<String, Stock> companyFiguresBySymbol = pendingCompanyFigures.resultNow();
+        List<Stock> companyFiguresOfEachCandidate = candidates.stream()
+                .map(candidateWithItsList -> companyFiguresBySymbol.get(candidateWithItsList.candidate().symbol()))
+                .toList();
 
-        stockAnalysisRepository.saveAll(analysesToStore(candidates, finnhubStocks, run, analyzedAt));
-        List<RecommendationPick> picks = recommending ? pick(shortList, finnhubStocks, run, today) : null;
+        stockAnalysisRepository.saveAll(analysesToStore(candidates, companyFiguresOfEachCandidate, run, analyzedAt));
+        List<RecommendationPick> picks =
+                recommending ? pick(shortList, companyFiguresOfEachCandidate, run, today) : null;
         if (recommending && shortList.scanId() != null) {
             storeTheRecommendation(shortList.scanId(), picks, analyzedAt);
         }
@@ -113,17 +121,17 @@ public class RecommendationAnalysisService {
                 new InvestmentRecommendationEntity(scanId, recommendedAt, pickedCandidateIds));
     }
 
-    /** The recommendation needs Finnhub's figures too: without them no stock can be picked (decision 5). */
+    /** The recommendation needs the company figures too: without them no stock can be picked (decision 5). */
     private void refuseWhileAKeyIsMissing(boolean recommending) {
         String missingKeyName = aiKeys.findMissingKeyName();
         if (missingKeyName != null) {
             throw new AnalysisOffException(
                     "The analysis is off: " + missingKeyName + " is not set in config/local.env");
         }
-        if (recommending && !finnhubClient.hasApiKey()) {
+        if (recommending && !companyFigures.isAnySourceConnected()) {
             throw new AnalysisOffException(
-                    "The recommendation is off: FINNHUB_API_KEY is not set in config/local.env, and without the "
-                            + "company figures no stock can be picked");
+                    "The recommendation is off: neither FINVIZ_TOKEN nor FINNHUB_API_KEY is set in config/local.env, "
+                            + "and without the company figures no stock can be picked");
         }
     }
 
@@ -141,28 +149,33 @@ public class RecommendationAnalysisService {
     }
 
     /**
-     * Never throws: without the key, or when a call fails, the stock is analyzed all the same, without Finnhub's
-     * answer — and can't be picked.
+     * By symbol; never throws. Without a source connected, or when no source answers for a stock, the stock is analyzed
+     * all the same, without its company figures — and can't be picked.
      */
-    private Stock finnhubStockOf(CandidateWithItsList candidateWithItsList, LocalDate today) {
-        if (!finnhubClient.hasApiKey()) {
-            return null;
+    private Map<String, Stock> companyFiguresOf(List<CandidateWithItsList> candidates, LocalDate today) {
+        if (!companyFigures.isAnySourceConnected()) {
+            return Map.of();
         }
-        return finnhubClient.stockOrNullOnFailure(candidateWithItsList.candidate().symbol(), today);
+        List<String> symbols = candidates.stream()
+                .map(candidateWithItsList -> candidateWithItsList.candidate().symbol())
+                .toList();
+        return companyFigures.answersFor(symbols, today);
     }
 
     /**
-     * The candidates, Finnhub's answers and the run's outcomes are in the same order; a stock that failed stores
+     * The candidates, their company figures and the run's outcomes are in the same order; a stock that failed stores
      * nothing.
      */
-    private List<StockAnalysisEntity> analysesToStore(List<CandidateWithItsList> candidates, List<Stock> finnhubStocks,
+    private List<StockAnalysisEntity> analysesToStore(List<CandidateWithItsList> candidates,
+                                                      List<Stock> companyFiguresOfEachCandidate,
                                                       StockAnalysisRun run, Instant analyzedAt) {
         List<StockAnalysisEntity> analyses = new ArrayList<>();
         for (int index = 0; index < candidates.size(); index++) {
             StockAnalysisOutcome outcome = run.outcomes().get(index);
             if (outcome.succeeded()) {
                 ClaudeReply reply = outcome.reply();
-                analyses.add(new StockAnalysisEntity(candidates.get(index).candidate(), finnhubStocks.get(index),
+                analyses.add(new StockAnalysisEntity(candidates.get(index).candidate(),
+                        companyFiguresOfEachCandidate.get(index),
                         analyzedAt, reply.model(), reply.result(), outcome.searches(),
                         Math.toIntExact(reply.inputTokens()), Math.toIntExact(reply.outputTokens()),
                         outcome.tavilyCredits(), reply.costUsd()));
@@ -172,8 +185,8 @@ public class RecommendationAnalysisService {
     }
 
     /** Only the stocks analyzed can be picked: one that failed has no analysis to show beside the pick. */
-    private List<RecommendationPick> pick(ShortList shortList, List<Stock> finnhubStocks, StockAnalysisRun run,
-                                          LocalDate today) {
+    private List<RecommendationPick> pick(ShortList shortList, List<Stock> companyFiguresOfEachCandidate,
+                                          StockAnalysisRun run, LocalDate today) {
         List<CandidateWithItsList> candidates = shortList.candidates();
         List<RecommendationCandidate> analyzedCandidates = new ArrayList<>();
         for (int index = 0; index < candidates.size(); index++) {
@@ -181,7 +194,8 @@ public class RecommendationAnalysisService {
             if (outcome.succeeded()) {
                 CandidateWithItsList candidateWithItsList = candidates.get(index);
                 analyzedCandidates.add(new RecommendationCandidate(candidateWithItsList.candidate().id(),
-                        candidateWithItsList.hotStock(), candidateWithItsList.analystTarget(), finnhubStocks.get(index),
+                        candidateWithItsList.hotStock(), candidateWithItsList.analystTarget(),
+                        companyFiguresOfEachCandidate.get(index),
                         outcome.reply().result()));
             }
         }
@@ -192,7 +206,7 @@ public class RecommendationAnalysisService {
     }
 
     /**
-     * A pick always has Finnhub's answer and a target with enough upside: a stock without either is never picked.
+     * A pick always has its company figures and a target with enough upside: a stock without either is never picked.
      */
     private RecommendationPick recommendationPickOf(RecommendationCandidate pick,
                                                     RecommendationCalculator recommendationCalculator,

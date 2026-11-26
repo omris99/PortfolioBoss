@@ -22,7 +22,7 @@ import portfolioboss.ib.Scan;
 import portfolioboss.ib.StockContractDetails;
 import portfolioboss.ib.TwsReading;
 import portfolioboss.model.portfolio.HoldingStatus;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.Stock;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -42,7 +42,7 @@ import java.util.TreeMap;
  * created or refreshed, its sector and industry from its contract details; an open holding TWS no longer reports is
  * marked closed, never deleted, so the trades entered by hand survive. The daily closes read on the same connection
  * (for the momentum), the scan for hot stocks when one ran, the analysts' price targets of its stocks and of the
- * holdings, and what Finnhub answered about the holdings are stored with it.
+ * holdings, and the holdings' company figures — Finviz's or Finnhub's — are stored with it.
  *
  * <p>Everything happens in one transaction: either the whole snapshot is stored or nothing is.
  */
@@ -87,8 +87,8 @@ public class PortfolioSyncService {
     }
 
     /**
-     * A sync without the holdings' contract details, analysts' price targets and Finnhub data: what is stored of them
-     * stays as it is.
+     * A sync without the holdings' contract details, analysts' price targets and company figures: what is stored of
+     * them stays as it is.
      *
      * @param dailyCloses by IB contract id — the holdings', SPY's and the scanned stocks', as many as IB sent this
      *                    connection
@@ -100,15 +100,15 @@ public class PortfolioSyncService {
     }
 
     /**
-     * Everything one {@code ./run.sh} connection read, and what Finnhub answered about the holdings after it.
+     * Everything one {@code ./run.sh} connection read, and the holdings' company figures asked for after it.
      *
      * @param reading            the portfolio, the closes, the scan ({@code null} when none ran or answered), and each
      *                           holding's contract details — its sector — and analysts' price targets
-     * @param finnhubDataByConId by contract id, what Finnhub answered about each holding it answered for
-     *                           (MY_HOLDINGS_TODO.md, decision 10); a holding missing from it keeps what was stored
+     * @param companyFiguresByConId by contract id, the company figures of each holding a source answered for
+     *                              (MY_HOLDINGS_TODO.md, decision 10); a holding missing from it keeps what was stored
      */
     @Transactional
-    public SyncResult sync(TwsReading reading, Map<Integer, Stock> finnhubDataByConId) {
+    public SyncResult sync(TwsReading reading, Map<Integer, Stock> companyFiguresByConId) {
         PortfolioSnapshot snapshot = reading.snapshot();
         String account = snapshot.account();
         Instant syncedAt = snapshot.asOf();
@@ -142,7 +142,7 @@ public class PortfolioSyncService {
         storeDailyCloses(reading.dailyCloses());
         storeScan(reading.scan(), reading.dailyCloses());
         storeAnalystPriceTargets(analystPriceTargetsOfScanAndHoldings(reading));
-        storeFinnhubData(finnhubDataByConId);
+        storeCompanyFigures(companyFiguresByConId);
         return new SyncResult(addedCount, updatedCount, closedCount);
     }
 
@@ -186,19 +186,20 @@ public class PortfolioSyncService {
     }
 
     /**
-     * A contract Finnhub answered for gets the answer in place of the one stored before; one it didn't answer for (a
+     * A contract a source answered for gets the answer in place of the one stored before; one no source answered for (a
      * failed call, no key, not in USD) keeps its old one, like the closes.
      */
-    private void storeFinnhubData(Map<Integer, Stock> finnhubDataByConId) {
-        if (finnhubDataByConId.isEmpty()) {
+    private void storeCompanyFigures(Map<Integer, Stock> companyFiguresByConId) {
+        if (companyFiguresByConId.isEmpty()) {
             return;
         }
         Instant fetchedAt = Instant.now();
-        stockRepository.deleteForContracts(finnhubDataByConId.keySet());
+        stockRepository.deleteForContracts(companyFiguresByConId.keySet());
         List<StockEntity> rows = new ArrayList<>();
-        finnhubDataByConId.forEach((conId, finnhubData) -> rows.add(new StockEntity(conId, finnhubData, fetchedAt)));
+        companyFiguresByConId.forEach(
+                (conId, companyFigures) -> rows.add(new StockEntity(conId, companyFigures, fetchedAt)));
         stockRepository.saveAll(rows);
-        System.out.printf("[db] stored Finnhub's data for %d holdings%n", rows.size());
+        System.out.printf("[db] stored the company figures of %d holdings%n", rows.size());
     }
 
     /**

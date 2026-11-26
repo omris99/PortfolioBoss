@@ -28,8 +28,8 @@ import portfolioboss.model.recommendations.HotStockLabel;
 import portfolioboss.model.recommendations.NotPickableReason;
 import portfolioboss.model.recommendations.WeighedAnalystMove;
 import portfolioboss.model.recommendations.WeighedNewsEvent;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.EarningsDate;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -107,7 +107,8 @@ class RecommendationsControllerTest {
                 .andExpect(jsonPath("$.hotStocks[0].analysis.sentiment").value("POSITIVE"))
                 .andExpect(jsonPath("$.hotStocks[0].analysis.moveReason.reason")
                         .value("A new contract lifted the shares."))
-                .andExpect(jsonPath("$.hotStocks[0].companyInfo.finnhubAnsweredAt").value("2026-10-26T18:30:00Z"))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.answeredBy").value("Finnhub"))
+                .andExpect(jsonPath("$.hotStocks[0].companyInfo.answeredAt").value("2026-10-26T18:30:00Z"))
                 .andExpect(jsonPath("$.hotStocks[0].companyInfo.nextEarningsDate.date").value("2026-11-05"))
                 .andExpect(jsonPath("$.hotStocks[0].companyInfo.nextEarningsDate.hour").value("amc"))
                 .andExpect(jsonPath("$.hotStocks[0].companyInfo.reportsWithin14Days").value(true))
@@ -189,7 +190,8 @@ class RecommendationsControllerTest {
         return new HotStockResponse(11, 9001, "HOTA", "HOTA INC", "NASDAQ", "Technology", "Software",
                 HotStockLabel.HOT, momentumAt(110.0), 6.5, true, false,
                 List.of(new CorrelationResponse(7, "AAPL", 0.82, true)), List.of(1L), analysis,
-                new CompanyInfoResponse(analysis.analyzedAt(), new EarningsDate(LocalDate.of(2026, 11, 5), "amc"), true,
+                new CompanyInfoResponse("Finnhub", analysis.analyzedAt(),
+                        new EarningsDate(LocalDate.of(2026, 11, 5), "amc"), true,
                         new CompanyFacts(-4.5, 12.0, 0.6, 38.0), List.of(RiskSign.REVENUE_FALLING)),
                 0,
                 List.of(new WeighedNewsEvent(analysis.newsEvents().getFirst(), 2)),

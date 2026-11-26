@@ -1,8 +1,8 @@
 package portfolioboss.calculation.marketdata;
 
 import portfolioboss.model.marketdata.RiskSign;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.Stock;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;

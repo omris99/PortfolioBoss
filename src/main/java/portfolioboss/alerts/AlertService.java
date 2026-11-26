@@ -153,7 +153,7 @@ public class AlertService {
                     holding,
                     holdingEntity.status(),
                     dailyCloses.momentumOf(holding.conId()),
-                    stock == null ? null : stock.finnhubData(),
+                    stock == null ? null : stock.companyFigures(),
                     analystPriceTargetsByConId.getOrDefault(holding.conId(), List.of()),
                     holdingEntity.tradeHistory(stockSplits).warnings(holdingEntity.status(), holding.position()),
                     portfolioWeights.percentOfAccountOf(holding),

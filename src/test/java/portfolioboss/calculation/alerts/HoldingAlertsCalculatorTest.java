@@ -8,8 +8,8 @@ import portfolioboss.model.alerts.AlertType;
 import portfolioboss.model.portfolio.HoldingStatus;
 import portfolioboss.model.portfolio.HoldingWarning;
 import portfolioboss.model.portfolio.HoldingWarningType;
-import portfolioboss.stocks.EarningsDate;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.EarningsDate;
+import portfolioboss.sources.Stock;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -208,7 +208,7 @@ class HoldingAlertsCalculatorTest {
     }
 
     private HoldingAlertsCalculator calculatorWithReportOn(LocalDate reportDate, AlertSettings settings) {
-        Stock finnhubData = new Stock("ABCD", new EarningsDate(reportDate, "amc"), null);
+        Stock finnhubData = new Stock("ABCD", new EarningsDate(reportDate, "amc"), null, "Finnhub");
         return new HoldingAlertsCalculator(holdingWithUnrealizedPnl(0), HoldingStatus.OPEN, null, finnhubData, List.of(),
                 List.of(), null, settings, SYNC_DATE);
     }

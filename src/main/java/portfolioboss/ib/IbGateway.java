@@ -148,6 +148,38 @@ public class IbGateway {
         return contractDetailsByConId;
     }
 
+    // ── contracts by symbol ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Asks IB for the contracts of each symbol, as IB writes it ("BRK B") — a stock known by its symbol alone, as the
+     * Recommendations page's lists are (RECOMMENDATIONS_FINVIZ_TODO.md, session 2): a share in dollars, through SMART.
+     */
+    public void requestContractsBySymbol(Collection<String> symbols) {
+        Map<Integer, String> symbolByRequestId = wrapper.contractDetailsBySymbolRequests().expect(symbols);
+        System.out.printf("[ib] requesting the contracts of %d stocks by their symbols%n", symbols.size());
+        symbolByRequestId.forEach((requestId, symbol) -> client.reqContractDetails(requestId, contractOf(symbol)));
+    }
+
+    /** Blocks until every contract request by symbol has ended, or the timeout elapses. */
+    public boolean awaitContractsBySymbol(long timeout, TimeUnit unit) throws InterruptedException {
+        return wrapper.contractDetailsBySymbolRequests().awaitAllFinished(timeout, unit);
+    }
+
+    /**
+     * By symbol, the contract id of the one contract found on a US stock exchange. A symbol with none is left out, and so
+     * is one with two different contracts there, which can't be told apart.
+     */
+    public Map<String, Integer> conIdsBySymbol() {
+        Map<String, Integer> conIdBySymbol = new LinkedHashMap<>();
+        wrapper.contractDetailsBySymbolRequests().answersOfFinishedRequests().forEach((symbol, answers) -> {
+            List<Integer> conIds = answers.stream().map(StockContractDetails::conId).distinct().toList();
+            if (conIds.size() == 1) {
+                conIdBySymbol.put(symbol, conIds.getFirst());
+            }
+        });
+        return conIdBySymbol;
+    }
+
     // ── Dow Jones's headlines ───────────────────────────────────────────────────────────────────
 
     /**
@@ -182,11 +214,11 @@ public class IbGateway {
 
     /**
      * Asks IB for a year of daily closing prices of each contract, by contract id — a read, like the portfolio. One
-     * request per contract; the bars arrive on the reader thread, and {@link #awaitDailyCloses} waits for them.
+     * request per contract; the bars arrive on the reader thread, and {@link #awaitDailyCloses} waits for them. IB takes
+     * at most 50 at once, so {@code TwsReader} sends them in rounds; a later round's requests number on from the first's.
      */
     public void requestDailyCloses(Collection<Integer> conIds) {
         Map<Integer, Integer> conIdByRequestId = wrapper.dailyCloseRequests().expect(conIds);
-        System.out.printf("[ib] requesting a year of daily closes for %d contracts%n", conIds.size());
         conIdByRequestId.forEach((requestId, conId) -> client.reqHistoricalData(
                 requestId, contractOf(conId), "", "1 Y", "1 day", "TRADES",
                 1,       // regular trading hours only
@@ -209,6 +241,16 @@ public class IbGateway {
     private Contract contractOf(int conId) {
         Contract contract = new Contract();
         contract.conid(conId);
+        contract.exchange("SMART");
+        return contract;
+    }
+
+    /** A symbol may have contracts of several kinds and currencies: a share in dollars, through SMART. */
+    private Contract contractOf(String symbol) {
+        Contract contract = new Contract();
+        contract.symbol(symbol);
+        contract.secType("STK");
+        contract.currency("USD");
         contract.exchange("SMART");
         return contract;
     }

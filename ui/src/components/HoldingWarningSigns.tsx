@@ -4,14 +4,15 @@ import { LabeledValue } from './LabeledValue';
 import { SignalWords } from './Signal';
 
 /**
- * Why a holding's company risks are unknown: Finnhub is asked on every run that reaches TWS, about the holdings in
- * dollars only (MY_HOLDINGS_TODO.md, decision 10).
+ * Why a holding's company risks are unknown: the company figures are asked for on every run that reaches TWS — from
+ * Finviz, then Finnhub —, about the holdings in dollars only (MY_HOLDINGS_TODO.md, decision 10). The words name no
+ * source: either may be the one that answered, or that has no key.
  */
 export const HOLDING_NOT_CHECKED_HINTS: NotCheckedHints = {
   finnhubDidNotAnswer:
-    'No answer from Finnhub: it is asked on every run that reaches TWS, about the holdings in dollars only — on ' +
-    'another exchange IB’s symbol isn’t Finnhub’s —, and only when its key is set.',
-  finnhubHadNoFigures: 'Finnhub has none of the company’s four figures, so the company risks could not be checked.',
+    'No company figures yet: they are asked for on every run that reaches TWS, about the holdings in dollars only — ' +
+    'on another exchange IB’s symbol isn’t the sources’ —, and only when a source’s key is set.',
+  finnhubHadNoFigures: 'The answer has none of the company’s four figures, so the company risks could not be checked.',
 };
 
 /**

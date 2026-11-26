@@ -238,7 +238,7 @@ public class PortfolioReadService {
         if (stock == null) {
             return null;
         }
-        RiskSignsCalculator riskSignsCalculator = new RiskSignsCalculator(stock.finnhubData(), momentum);
+        RiskSignsCalculator riskSignsCalculator = new RiskSignsCalculator(stock.companyFigures(), momentum);
         return new CompanyInfoResponse(riskSignsCalculator, stock.fetchedAt(), snapshotDate);
     }
 

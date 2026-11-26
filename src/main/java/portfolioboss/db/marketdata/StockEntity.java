@@ -7,15 +7,16 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.Stock;
 
 import java.time.Instant;
 
 /**
- * One row of the {@code stock} table: what Finnhub answered about one holding (MY_HOLDINGS_TODO.md, decision 10).
- * Written only by the sync, which replaces it whenever Finnhub answers again.
+ * One row of the {@code stock} table: the company figures of one holding (MY_HOLDINGS_TODO.md, decision 10), from
+ * Finviz or Finnhub, the first that answered (RECOMMENDATIONS_FINVIZ_TODO.md, decision 9). Written only by the sync,
+ * which replaces it whenever a source answers again.
  *
- * <p>{@code @JdbcTypeCode(SqlTypes.JSON)} has Hibernate store {@code finnhubData} as JSON in its {@code JSONB} column
+ * <p>{@code @JdbcTypeCode(SqlTypes.JSON)} has Hibernate store {@code companyFigures} as JSON in its {@code JSONB} column
  * and read it back into the record, as in {@code StockAnalysisEntity}.
  */
 @Entity
@@ -31,28 +32,28 @@ public class StockEntity {
     private Instant fetchedAt;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    private Stock finnhubData;
+    private Stock companyFigures;
 
     /** Required by JPA, which creates entities by reflection. */
     protected StockEntity() {
     }
 
-    public StockEntity(int conId, Stock finnhubData, Instant fetchedAt) {
+    public StockEntity(int conId, Stock companyFigures, Instant fetchedAt) {
         this.conId = conId;
-        this.symbol = finnhubData.symbol();
+        this.symbol = companyFigures.symbol();
         this.fetchedAt = fetchedAt;
-        this.finnhubData = finnhubData;
+        this.companyFigures = companyFigures;
     }
 
     public int conId() {
         return conId;
     }
 
-    public Stock finnhubData() {
-        return finnhubData;
+    public Stock companyFigures() {
+        return companyFigures;
     }
 
-    /** When Finnhub gave this answer: the sync that stored it. */
+    /** When the source gave this answer: the sync that stored it. */
     public Instant fetchedAt() {
         return fetchedAt;
     }

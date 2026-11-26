@@ -7,7 +7,7 @@ import portfolioboss.model.alerts.AlertType;
 import portfolioboss.model.marketdata.MomentumLabel;
 import portfolioboss.model.portfolio.HoldingStatus;
 import portfolioboss.model.portfolio.HoldingWarning;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.Stock;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;

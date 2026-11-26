@@ -4,7 +4,7 @@ import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.calculation.marketdata.AnalystTargetCalculator;
 import portfolioboss.calculation.marketdata.RiskSignsCalculator;
 import portfolioboss.model.marketdata.RiskSign;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.Stock;
 
 import java.time.LocalDate;
 import java.util.List;

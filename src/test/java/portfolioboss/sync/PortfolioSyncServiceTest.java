@@ -17,9 +17,9 @@ import portfolioboss.ib.Scan;
 import portfolioboss.ib.ScanRow;
 import portfolioboss.ib.StockContractDetails;
 import portfolioboss.ib.TwsReading;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.EarningsDate;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
+import portfolioboss.sources.Stock;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -389,12 +389,12 @@ class PortfolioSyncServiceTest {
         syncService.sync(secondReading, Map.of(APPLE_CON_ID, finnhubDataOf("AAPL", LocalDate.of(2026, 10, 30), 31.0)));
 
         assertThat(countOf("select count(*) from stock")).isEqualTo(2);
-        assertThat(jdbc.queryForMap("select symbol, finnhub_data -> 'nextEarningsDate' ->> 'date' as report_date, "
-                + "finnhub_data -> 'companyFacts' ->> 'peRatio' as pe_ratio from stock where con_id = ?", APPLE_CON_ID))
+        assertThat(jdbc.queryForMap("select symbol, company_figures -> 'nextEarningsDate' ->> 'date' as report_date, "
+                + "company_figures -> 'companyFacts' ->> 'peRatio' as pe_ratio from stock where con_id = ?", APPLE_CON_ID))
                 .containsEntry("symbol", "AAPL")
                 .containsEntry("report_date", "2026-10-30")
                 .containsEntry("pe_ratio", "31.0");
-        assertThat(jdbc.queryForObject("select finnhub_data -> 'companyFacts' ->> 'peRatio' from stock "
+        assertThat(jdbc.queryForObject("select company_figures -> 'companyFacts' ->> 'peRatio' from stock "
                 + "where con_id = ?", String.class, MICROSOFT_CON_ID)).isEqualTo("35.0");
     }
 
@@ -415,7 +415,7 @@ class PortfolioSyncServiceTest {
 
     /** Growing, profitable, little debt: only the P/E changes between the tests' answers. */
     private Stock finnhubDataOf(String symbol, LocalDate nextReportDate, double peRatio) {
-        return new Stock(symbol, new EarningsDate(nextReportDate, "amc"), new CompanyFacts(8.0, 25.0, 1.2, peRatio));
+        return new Stock(symbol, new EarningsDate(nextReportDate, "amc"), new CompanyFacts(8.0, 25.0, 1.2, peRatio), "Finnhub");
     }
 
     /**

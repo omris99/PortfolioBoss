@@ -48,9 +48,9 @@ import portfolioboss.model.portfolio.HoldingStatus;
 import portfolioboss.model.portfolio.HoldingWarning;
 import portfolioboss.model.portfolio.HoldingWarningType;
 import portfolioboss.model.portfolio.TradeSide;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.EarningsDate;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
+import portfolioboss.sources.Stock;
 import portfolioboss.sync.PortfolioSyncService;
 
 import java.math.BigDecimal;
@@ -454,7 +454,7 @@ class PortfolioReadServiceTest {
                 Map.of(APPLE_CON_ID, List.of(priceTargetOf("Firm A", 250.0), priceTargetOf("Firm B", 240.0),
                         priceTargetOf("Firm C", 230.0))));
         Stock appleFinnhubData = new Stock("AAPL", new EarningsDate(syncDate.plusDays(10), "amc"),
-                new CompanyFacts(8.0, 25.0, 1.2, 55.0));
+                new CompanyFacts(8.0, 25.0, 1.2, 55.0), "Finnhub");
         syncService.sync(reading, Map.of(APPLE_CON_ID, appleFinnhubData));
 
         PortfolioResponse portfolio = readPortfolio().orElseThrow();
@@ -465,7 +465,8 @@ class PortfolioReadServiceTest {
         assertThat(apple.analystTarget().hasEnoughUpside()).isTrue();
         assertThat(apple.analystTarget().firmCount()).isEqualTo(3);
         CompanyInfoResponse appleCompanyInfo = apple.companyInfo();
-        assertThat(appleCompanyInfo.finnhubAnsweredAt()).isBetween(beforeTheSync, Instant.now());
+        assertThat(appleCompanyInfo.answeredBy()).isEqualTo("Finnhub");
+        assertThat(appleCompanyInfo.answeredAt()).isBetween(beforeTheSync, Instant.now());
         assertThat(appleCompanyInfo.nextEarningsDate().date()).isEqualTo(syncDate.plusDays(10));
         assertThat(appleCompanyInfo.reportsWithin14Days()).isTrue();
         assertThat(appleCompanyInfo.companyFacts().peRatio()).isEqualTo(55.0);
@@ -485,7 +486,7 @@ class PortfolioReadServiceTest {
     void aHoldingFinnhubGaveNoFiguresForHasNoRiskSigns() {
         TwsReading reading = new TwsReading(snapshotOf(FIRST_RUN, 100_000.0, 25_000.0, apple(10, 150.0)),
                 Map.of(APPLE_CON_ID, risingCloses(0.003)), null, Map.of(), Map.of());
-        Stock withoutFigures = new Stock("AAPL", null, new CompanyFacts(null, null, null, null));
+        Stock withoutFigures = new Stock("AAPL", null, new CompanyFacts(null, null, null, null), "Finnhub");
         syncService.sync(reading, Map.of(APPLE_CON_ID, withoutFigures));
 
         CompanyInfoResponse companyInfo = readPortfolio().orElseThrow().holdings().getFirst().companyInfo();

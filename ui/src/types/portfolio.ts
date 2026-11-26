@@ -429,18 +429,20 @@ export interface CompanyFacts {
 }
 
 /**
- * What Finnhub answered about a stock's company, with the risk signs and the timing note the API worked out from it —
- * the same for a holding and a scanned stock.
+ * What a source of company figures answered about a stock's company — Finviz first, then Finnhub —, with the risk signs
+ * and the timing note the API worked out from it — the same for a holding and a scanned stock.
  */
 export interface CompanyInfo {
-  /** ISO instant: a holding's on the last run Finnhub answered for it, a scanned stock's with its analysis. */
-  finnhubAnsweredAt: string;
-  /** null when Finnhub's calendar has no report in the next four months. */
+  /** The source that answered, as the screens name it: "Finviz", "Finnhub". */
+  answeredBy: string;
+  /** ISO instant: a holding's on the last run a source answered for it, a scanned stock's with its analysis. */
+  answeredAt: string;
+  /** null when the source knows no report in the next four months. */
   nextEarningsDate: EarningsDate | null;
   /** The timing note: the next report is 0–14 days after a holding's last sync, or after the latest scan. */
   reportsWithin14Days: boolean;
   companyFacts: CompanyFacts;
-  /** null when Finnhub gave none of the four figures: then they were never checked, which an empty list would hide. */
+  /** null when the source gave none of the four figures: then they were never checked, which an empty list would hide. */
   riskSigns: RiskSign[] | null;
 }
 

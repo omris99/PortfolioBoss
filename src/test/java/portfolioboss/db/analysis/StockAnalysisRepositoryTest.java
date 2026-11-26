@@ -24,9 +24,9 @@ import portfolioboss.ai.SourceConsensus;
 import portfolioboss.ai.StockAnalysisResult;
 import portfolioboss.ai.StockSearches;
 import portfolioboss.db.recommendations.ScanCandidateEntity;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.EarningsDate;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
+import portfolioboss.sources.Stock;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -159,18 +159,18 @@ class StockAnalysisRepositoryTest {
     void aScannedStocksAnalysisComesBackWithFinnhubsAnswer() {
         ScanCandidateEntity candidate = insertScanCandidate(9001, "HOTA");
         Stock finnhubStock = new Stock("HOTA", new EarningsDate(LocalDate.of(2026, 11, 18), "amc"),
-                new CompanyFacts(62.5, 55.6, 0.12, 48.3));
+                new CompanyFacts(62.5, 55.6, 0.12, 48.3), "Finnhub");
         StockAnalysisEntity stored = stockAnalysisRepository.save(
                 candidateAnalysisOf(candidate, finnhubStock, MONDAY));
         startReadingFromTheDatabase();
 
         StockAnalysisEntity readBack = stockAnalysisRepository.findById(stored.id()).orElseThrow();
         String earningsDate = jdbc.queryForObject(
-                "select finnhub_stock -> 'nextEarningsDate' ->> 'date' from stock_analysis", String.class);
+                "select company_figures -> 'nextEarningsDate' ->> 'date' from stock_analysis", String.class);
 
         assertThat(readBack.scanCandidateId()).isEqualTo(candidate.id());
         assertThat(readBack.holdingId()).isNull();
-        assertThat(readBack.finnhubStock()).isEqualTo(finnhubStock);
+        assertThat(readBack.companyFigures()).isEqualTo(finnhubStock);
         assertThat(readBack.result()).isEqualTo(appleResult());
         assertThat(earningsDate).isEqualTo("2026-11-18");
     }
@@ -182,7 +182,7 @@ class StockAnalysisRepositoryTest {
         StockAnalysisEntity stored = stockAnalysisRepository.save(candidateAnalysisOf(candidate, null, MONDAY));
         startReadingFromTheDatabase();
 
-        assertThat(stockAnalysisRepository.findById(stored.id()).orElseThrow().finnhubStock()).isNull();
+        assertThat(stockAnalysisRepository.findById(stored.id()).orElseThrow().companyFigures()).isNull();
     }
 
     @Test

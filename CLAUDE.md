@@ -71,7 +71,7 @@ classifies in the news and the analysts' moves (decision 13) —, and a measurem
 (the page, designed first in Claude Design's third round — DESIGN_BRIEF.md §8, every piece marked [now] or [later] — and
 the Scan again button, `POST /api/scans`) are done and were checked against TWS and in the browser on 2026-10-26: 992
 stocks passed the scan's filters, the two scans found 73, all 73 on NYSE or NASDAQ by their contract details'
-`primaryExch`. Session 2 (2026-10-27) added Finnhub's client, `stocks.FinnhubClient`. Session 3's backend (2026-10-27) is
+`primaryExch`. Session 2 (2026-10-27) added Finnhub's client, `stocks.FinnhubClient` (`sources.finnhub` since 2026-11-26). Session 3's backend (2026-10-27) is
 built: `POST /api/recommendations/analysis` (the short list's analysis, Finnhub beside it, the pick, V10 and V11),
 `moveReason` and `newsEvents` in every analysis, and the GET side; V10 is on the real database and one paid full run went
 through (10 stocks, 38 s, $0.47) before decision 13. Session 4 (2026-10-27) built the UI — the [later] pieces of the
@@ -209,6 +209,23 @@ findings) is under way: the Averaging calculator's rows (the box of what to know
 and the bell right of Sync now are built (2026-11-25/26), and its Recommendations items are on hold (his call,
 2026-11-26). Its file is the record of each stage's pieces and decisions.
 
+The **Recommendations page is being rebuilt on Finviz** (2026-11-26; the user's plan is kept outside git, his ask — never
+name its file in a tracked file): Hot / Too hot / Correcting become three lists of long-term investments — **fast growth,
+slow growth and value** —, each one of Finviz Elite's screens (IB's scanner refuses every fundamental filter on this
+account), with IB's momentum beside each stock: it counts in the pick and never takes a stock off a list. A mock-up was
+made in Claude Design and approved. **Everything is built and tested before the subscription is bought**; only then is
+Finviz's real CSV checked. And **a socket (interface) per kind of data, Finviz first** (his ask: "if one day there is no
+Finviz subscription, the app must not lose its value"): each source of a kind of data implements its socket, marked
+`@Order(1)` (Finviz) or `@Order(2)` (today's source), and `sources.SourcesInOrder` asks them in that order, a whole stock
+moving to the next source when one is off, fails or doesn't know it. Built on 2026-11-26, not checked live yet:
+session 1 — the `sources` package (below), with the company figures from Finviz first and Finnhub after it, and the UI
+saying who answered; session 2 — the three lists downloaded once a trading day before TWS
+(`recommendationlists.RecommendationListsDownloadService`, V21), their stocks' contracts found by symbol on the same TWS
+connection, their closes read once a trading day whether Finviz is connected or not, every sync's closes asked in
+rounds of 50, and the two `finnhub_*` columns renamed `company_figures`. Next: the live check of the TWS part on a
+scratch copy, then the sort of each list (the user's rules — sales growth, PEG, P/B; a value stock with a P/B over 1.2
+leaves the list; **no averages of places**, he rejected them), then the page. Today's page works unchanged until then.
+
 ## Hard invariant: read-only
 
 PortfolioBoss reads the account and **never places, modifies, or cancels an order**. `IbGateway`
@@ -229,17 +246,24 @@ through `ManualPositionWriteController`, the investors with their deposits and w
 `InvestorWriteController`, the stock analyses (`stock_analysis` rows), through `AnalysisController` and
 `RecommendationAnalysisController` — the second also the recommendations (`investment_recommendation` rows) —, and a new
 scan (`scan` / `scan_candidate` rows and its stocks' daily closes), through `ScanController`, a sync (what the startup
-writes, the splits it finds in the Flex reports among it — `stock_split`), through `SyncController`, the alerts' "seen" and their settings (`alert`, `alert_setting`), through
+writes, the splits it finds in the Flex reports among it — `stock_split` —, and the Recommendations lists it downloads
+from Finviz with their stocks' contracts — `stock_lists_download`, `listed_stock`), through `SyncController`, the alerts' "seen" and their settings (`alert`, `alert_setting`), through
 `alerts.AlertController`, and the confirmations of the capital gains tax (`tax_confirmation`), through
 `tax.TaxController` — and never creates or deletes a holding (only the sync does). `AnalysisController` and `RecommendationAnalysisController` are the two
 endpoints that reach outside the machine: they send each stock's symbol to Tavily, and the symbol, currency, the price
 (IB's, or a scanned stock's last close), today's date and the search results to Claude — **never** a quantity, a cost, an
 investor or the account number (AI_ANALYSIS_TODO.md, decision 8), and nothing about the portfolio
-(RECOMMENDATIONS_TODO.md, decision 6) — and they run only when the user presses the button. `stocks.FinnhubClient`
-sends Finnhub only a symbol (RECOMMENDATIONS_TODO.md, decision 8), from two callers: the second endpoint, on its button,
-and `api.SyncService`, for each open holding in USD (MY_HOLDINGS_TODO.md, decision 10: on a foreign exchange IB's symbol
-is not Finnhub's and may be another company's) — **without a button press** on every `./run.sh` that reached TWS, and
-on Sync now. `tax.FlexClient` (CAPITAL_GAINS_TAX_TODO.md, session 1) downloads reports from IB's Flex Web Service, over
+(RECOMMENDATIONS_TODO.md, decision 6) — and they run only when the user presses the button. The company figures come
+through their socket (`sources.SourcesInOrder` of `CompanyFiguresSource`s), Finviz first: `sources.finviz.FinvizClient`
+sends Finviz Elite only its token, a screen's filters and order and the symbols asked about, and
+`sources.finnhub.FinnhubClient` sends Finnhub only a symbol (RECOMMENDATIONS_TODO.md, decision 8) — from two callers: the
+second endpoint, on its button, and `sync.SyncService`, for each open holding in USD (MY_HOLDINGS_TODO.md, decision 10:
+on a foreign exchange IB's symbol is not theirs and may be another company's) — **without a button press** on every
+`./run.sh` that reached TWS, and on Sync now. The sync also downloads Finviz's three screens of the Recommendations
+lists once a trading day (`recommendationlists.RecommendationListsDownloadService`), before TWS — filters only, nothing
+about the portfolio. Finviz takes the token in the address (`auth=`, as third-party code does — the address and the
+parameter are one constant each, to be checked against Finviz's documentation once subscribed), so no error of
+`FinvizClient` prints the address (`FinvizClientTest` checks the token is in none). `tax.FlexClient` (CAPITAL_GAINS_TAX_TODO.md, session 1) downloads reports from IB's Flex Web Service, over
 HTTPS — read only: the service gives reports and nothing else, no way to trade or move money — and sends it only the
 token, the query's number and the two dates of a period, nothing about the portfolio; **without a button press**, from
 `api.SyncService` after every sync that reached TWS, and only for the days not stored yet (none after a day's first sync).
@@ -303,7 +327,9 @@ npm run build            # tsc -b && vite build; the type check is the only UI c
 A change to `ui/tailwind.config.js` (a new color role, say) reaches a running dev server only after a restart — stop
 the app and run it again: the CSS variables in `index.css` reload, but the classes built from the config don't (the
 sector ring came up black on 2026-10-13, its fill classes missing; on 2026-11-05 the new highlighter showed no yellow
-until the restart).
+until the restart). Likewise a change to the Java code reaches nothing until `./run.sh` runs again, while the dev server
+reloads the UI at once — a UI that reads a renamed key then gets `undefined` from the old server (2026-11-26: the
+Company tab showed "From , answered NaN/NaN/NaN" until the restart).
 
 The UI shows the portfolio as of the last sync. It reloads `/api/portfolio` after every write (trades,
 manual positions, investors, deposits) and after every analysis run; new figures from IB come with a new `run.sh` or
@@ -319,8 +345,10 @@ the derived math; `PortfolioWrapperTest` feeds `PortfolioWrapper` IB callbacks d
 the scans' (only a scan's first answer kept, an error ending it, code 165 not ending it, the cancel's confirmation after
 the end ignored), the contract details' (a second send on the same connection — the holdings' after the scan's —
 numbered on, the first one's answers kept) and the daily closes' (an error ending one request, a request still running at
-the timeout, an unreadable bar date), and Dow Jones's headlines (each contract's with their time, a late headline of an
-earlier round dropped, an unreadable time skipped); `ScanTest` how two scans' rows and the contract details become
+the timeout, an unreadable bar date), Dow Jones's headlines (each contract's with their time, a late headline of an
+earlier round dropped, an unreadable time skipped), and the contracts asked for by symbol (the one on a US stock exchange
+kept with its own conId, one over the counter left out, an unknown symbol's error 200 ending it, a request by contract id
+and one by symbol kept apart); `ScanTest` how two scans' rows and the contract details become
 candidates (one per stock, NYSE / NASDAQ only, the left-out ones named); `PriceTargetHeadlineReaderTest` the four forms of
 a target headline (copied from the real feed), a thousands separator and an `&amp;`, the company matched by the start of
 each word of IB's name (HPE's "Ent", "The Trade Desk"), another company's target left out (Asset Entities in ASST's feed,
@@ -355,8 +383,8 @@ it builds, and ten database test classes at the default 10, with a running `./ru
 codes, validation messages and the JSON-only rule, the `*WriteServiceTest`s for what is stored. `ClosedPositionTest`
 and `HoldingHistoryTest` cover the average-cost math, `InvestorSummaryCalculatorTest` (INVESTORS_TODO.md's worked
 example among them) and `PositionTradesTest` the split between investors, `OrderCommissionTest` the default commission,
-`UtilsTest` the trimming of typed text. The analysis: **no test calls Tavily, Claude or Finnhub** (it costs money or
-credits and needs the network). `ConsensusCalculatorTest` (AAPL and TTWO of the live check, MarketBeat first, the 1–5 scale's limits),
+`UtilsTest` the trimming of typed text. The analysis: **no test calls Tavily, Claude, Finviz or Finnhub** (it costs money
+or credits and needs the network). `ConsensusCalculatorTest` (AAPL and TTWO of the live check, MarketBeat first, the 1–5 scale's limits),
 `AnalystTrendCalculatorTest` (price-target moves only, on NVDA, INTC and TTWO of the first run from the UI) and
 `SignalCalculatorTest` cover the decisions; `SearchResultsTest` the symbol filter and the addresses it leaves out,
 `StockSearchesTest` the four searches together (credits, filter); `TavilyClientTest` the four searches
@@ -388,10 +416,31 @@ pick, the picks stored in order (an empty list too), 503 without a key — the f
 **no test connects to TWS**) a scan stored with its closes, nothing stored while busy or when TWS can't be read (the
 exceptions pass through; their 409 / 503 are `ApiErrorHandler`'s); `ScanControllerTest` the status codes — the app's two
 TWS exceptions turned into 409 and 503 with the user's message — and the JSON-only rule; `SyncServiceTest` (`@DataJpaTest`,
-`TwsReader` and `FinnhubClient` `@MockitoBean`s, `@RecordApplicationEvents`) Sync now storing the holdings with Finnhub's
-answer, only the holdings in USD asked about, no key no Finnhub, the scan asked for only when due, busy and unreachable
-storing nothing, the startup's sync and TWS off at startup, and `PortfolioSyncedEvent` published once per stored sync and
-never for a failed one; `SyncControllerTest` 200, 415, 503, 409, 405. The alerts (package `alerts`):
+`TwsReader`, `FinvizClient`, `FinnhubClient` and `FinvizScreens` `@MockitoBean`s — the two sources of the company figures
+the real ones, in their order —, `@RecordApplicationEvents`) Sync now storing the holdings with Finnhub's answer, only the
+holdings in USD asked about, no key no Finnhub, with Finviz's token Finviz answering first and Finnhub not asked, the scan
+asked for only when due, busy and unreachable storing nothing, the startup's sync and TWS off at startup,
+`PortfolioSyncedEvent` published once per stored sync and never for a failed one, and the Recommendations lists:
+downloaded before TWS is read and their stocks found on the same connection, the stored lists' closes read while Finviz
+is off, a Finviz that fails not failing the sync, TWS off at startup leaving their closes to read;
+`SyncControllerTest` 200, 415, 503, 409, 405. The sources (package `sources`; **no test calls Finviz or Finnhub**):
+`SourcesInOrderTest` (made-up sources: the first answers and the second is asked only about the rest, a source off never
+asked, one that fails sending every stock to the next, a stock no source knows left out, the answers in the symbols'
+order, the console line), `FinvizScreenerReaderTest` (made-up stocks: every column of the export read by its name, the
+screen's short names in another order, a percent with or without "%", a thousands separator, a market cap in millions or
+with its letter, "-" never 0, the earnings date with its time — before, during and after the session —, without it, and
+the screen's "Nov 20/a" in the year nearest the download, quotes and commas in a company's name, a byte-order mark and
+carriage returns, an empty screen, a needed column missing, a value that isn't a figure or a date, a line of another
+length, a web page, an empty answer), `FinvizClientTest` (a fake Finviz: the filters, order, columns and token sent, the
+symbols in `t=` with no filter or order, a refused token, a 429 tried once more after its `Retry-After` and twice failing,
+another status, no answer — the token in no message —, a token of spaces), `FinvizCompanyFiguresTest` (one request for
+every stock, IB's "BRK B" asked as "BRK-B" and answered under IB's symbol, the four figures out of Finviz's columns, a stock
+without a row left out, 150 stocks in two requests), `FinvizScreensTest` (each screen's filters and order — the user's —,
+its rows read) and `FinnhubCompanyFiguresTest` (each stock from its own call, a failed one left out); the lists (package
+`recommendationlists`): `RecommendationListsDownloadServiceTest` (`@DataJpaTest`, `FinvizScreens` a `@MockitoBean`: the
+three lists stored under IB's symbols, a stock sent twice stored once, nothing asked while Finviz is off, once a trading
+day, a list that fails storing none, nothing to read before the first download, every symbol to find after one, the
+contracts found stored and the closes read once a trading day, a symbol found before getting its contract at once). The alerts (package `alerts`):
 `HoldingAlertsCalculatorTest` each rule at its limit (a report in 7 days counts, 8 doesn't, today counts, past doesn't, the
 settings' number of days; a cut 7 days back counts, 8 doesn't, a raise and a target without an earlier one don't, two
 firms two conditions; exactly −15% counts, −14.9% doesn't; exactly the 15% weight limit doesn't, 15.1% does, a limit of
@@ -407,7 +456,7 @@ not), `AlertsReadServiceTest` (`@DataJpaTest`: the newest first with each holdin
 groups — a held stock's short-list alert in Your holdings, a sold one's in The short list, a sold holding's warning still a
 holding's —, a type off not shown, each type's setting) and `AlertControllerTest` (the JSON — `group` too — and
 `no-store`, 204, a number out of range or for a type without one, days not
-whole, a type missing — 400 naming the line —, 415, 405); `FinnhubClientTest` Finnhub's two calls against a fake Finnhub (`MockRestServiceServer`,
+whole, a type missing — 400 naming the line —, 415, 405); `sources.finnhub.FinnhubClientTest` Finnhub's two calls against a fake Finnhub (`MockRestServiceServer`,
 shortened copies of its real answers): the earliest report of a calendar out of order, an hour not known yet, a missing
 figure, an unknown symbol, a refused call, a key of spaces. The Flex reports (package `tax`; **no test calls IB**):
 `FlexReportReaderTest` (a report of the real query's shape, made-up values, no account: a sale and a buy with IB's signs, a
@@ -515,9 +564,13 @@ environment variable of the same name wins. A missing key turns only the analysi
 /api/analysis` answers 503 with that name. Claude never reads or prints the file — only checks a key's name and length.
 Tavily's free plan has 1,000 credits a month; a full run of 7 stocks is 35 credits and about $0.30 of Claude, so a run
 every day would pass the free plan and a few a week would not. **Finnhub's key**, `FINNHUB_API_KEY`, goes in the same
-file and is optional too: without it the app prints `[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)`
+file and is optional too: without it the app prints `[finnhub] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)`
 and only Finnhub's part is off — a scanned stock's on Analyze, and a holding's on every `./run.sh` (their stored answers
 stay). Its free plan allows 60 calls a minute; a stock is 2, so a portfolio of 10 holdings is 20 calls a run.
+**Finviz Elite's token**, `FINVIZ_TOKEN`, goes in the same file and is optional too: without it the app prints
+`[finviz] Finviz off: FINVIZ_TOKEN is not set (config/local.env)`, the company figures come from Finnhub alone, and no
+Recommendations list is downloaded (the lists stored before stay, their closes still read). Elite allows 10 requests in 5
+seconds (a 429 is tried once more after its `Retry-After`); the holdings are one request, the three lists three.
 **IB's Flex Web Service** (CAPITAL_GAINS_TAX_TODO.md, session 1) needs `FLEX_TOKEN` (made in IB's Client Portal under
 Flex Web Service, valid up to a year, can be locked to the home IP address) and `FLEX_QUERY_ID` (the number of the
 Activity Flex Query — XML, Trades as executions with `fifoPnlRealized`, Cash Transactions and Corporate Actions, its
@@ -563,19 +616,26 @@ what delivers real quantity and **average cost** from the broker.
 
 ```
 Main (Spring Boot: brings the web server up, then Spring runs the runner)
-  └──> TwsPortfolioRunner ──> api.SyncService.syncAtStartup() (the same sync as Sync now's syncNow())
+  └──> TwsPortfolioRunner ──> sync.SyncService.syncAtStartup() (the same sync as Sync now's syncNow())
+        ├──first──> recommendationlists.RecommendationListsDownloadService ──once a trading day──> sources.finviz
+        │            .FinvizScreens ──HTTPS──> Finviz (the three screens) ──writes──> Postgres (stock_lists_download ·
+        │            listed_stock), then says what TWS is asked for them: the symbols without a contract, the closes
         │   SyncService ──asks ScanSchedule whether a scan is due, then──> TwsReader (the one place that connects;
         │                                                                     one reading at a time)
         │        TwsReader ──> IbGateway ──owns──> PortfolioWrapper ──> Holding (+conId), PortfolioSnapshot, Scan
         │                      (socket + reader loop)  (EWrapper callbacks,  (rows + contract details + the analysts'
         │                                               RequestBatches)       price targets in Dow Jones's headlines),
         │                                                                     DailyClose (a year per holding, SPY and
-        │                                                                     scanned stock), and the holdings' contract
-        │                                                                     details and analysts' price targets
-        ├──after TWS, asks──> FinnhubClient ──HTTPS──> Finnhub (each holding in USD, the symbol only)
+        │                                                                     scanned stock), the holdings' contract
+        │                                                                     details and analysts' price targets, and
+        │                                                                     the lists' contracts found by symbol
+        ├──after TWS, asks──> sources.SourcesInOrder (company figures) ──@Order(1)──> FinvizCompanyFigures ──HTTPS──>
+        │                     Finviz (every holding in USD, one request) ──@Order(2), for the rest──> FinnhubCompanyFigures
+        │                     ──> FinnhubClient ──HTTPS──> Finnhub (one stock at a time, the symbol only)
         ├──syncs──> PortfolioSyncService ──writes──> Postgres (holding · trade · account_state · daily_close · scan ·
         │                                                      analyst_price_target · stock)
         ├──publishes PortfolioSyncedEvent──> alerts.AlertsAfterSync ──> AlertService.checkAlerts() (alert rows)
+        ├──then──> RecommendationListsDownloadService.storeContractsFound (listed_stock.con_id, closes_read_at)
         ├──then──> tax.FlexDownloadService ──> FlexClient ──HTTPS──> IB's Flex Web Service (the days not stored yet)
         │                                  └──> FlexReportStorageService ──writes──> Postgres (flex_trade ·
         │                                                 flex_cash_transaction · flex_corporate_action · flex_report)
@@ -632,7 +692,7 @@ AnalysisController ──> AnalysisService ──> StockAnalysisPipeline ──p
         └──JSON── POST /api/analysis — only from ui/'s Analyze buttons (every open holding, or one), then a reload
 
 RecommendationAnalysisController ──> RecommendationAnalysisService ──> StockAnalysisPipeline (the same, per stock)
-        ▲                            (the short list: the first 10 HOT ──> FinnhubClient ──HTTPS──> Finnhub (beside it)
+        ▲                            (the short list: the first 10 HOT ──> SourcesInOrder: Finviz, then Finnhub (beside it)
         │                             with the analysts' target 15%+,   then RecommendationCalculator: the pick (code)
         │                             RecommendationsReadService
         │                             .shortListOfLatestScan)
@@ -680,15 +740,22 @@ The sync-at-connection lifecycle, which is the part worth knowing:
    round back in time — `ib.NewsHeadlinePaging`, at most 8 rounds of 20s; a stock without a company name isn't read) and
    the analysts' price targets in them (`ib.PriceTargetHeadlineReader`, decision 14), split back into the scan's
    (`Scan.withAnalystPriceTargets`) and the holdings' (`TwsReading.holdingAnalystPriceTargetsByConId`); then the
-   daily closes: `IbGateway.requestDailyCloses` sends one `reqHistoricalData` per contract
+   contracts of the Recommendations lists' stocks known only by their symbol (`IbGateway.requestContractsBySymbol`:
+   `reqContractDetails` with the symbol as IB writes it, `STK`, `USD`, `SMART`, request ids from 30,000 — the one on
+   NYSE, NASDAQ or AMEX kept, a symbol with none or with two different ones not found —, `TwsReading
+   .conIdsFoundBySymbol`; `[ib] contracts found for N of M symbols; not found: …`); then the
+   daily closes: `IbGateway.requestDailyCloses` sends one `reqHistoricalData` per contract, **in rounds of at most 50**
+   (IB's documented limit of historical requests open at once; a round's ids number on from the one before)
    — every holding, SPY (`ib.Benchmark.SPY_CON_ID` = 756733, IB's fixed id, requested whether or not SPY is
-   held) and every stock the scan kept, by conId + `SMART`, `"1 Y"` of `"1 day"` `TRADES` bars, regular hours, dates as
-   `yyyyMMdd` — and waits up to 20s (`awaitDailyCloses`); late or failed contracts are just left out (`[ib] daily closes
+   held), every stock the scan kept and the lists' stocks when their closes are due, by conId + `SMART`, `"1 Y"` of
+   `"1 day"` `TRADES` bars, regular hours, dates as
+   `yyyyMMdd` — and waits up to 20s a round (`awaitDailyCloses`); late or failed contracts are just left out (`[ib] daily closes
    received for N of M contracts`). Then it disconnects and returns a `TwsReading` (the snapshot, the closes, the scan —
-   `null` when none was due or none answered —, the holdings' contract details and targets). `api.SyncService` asks
-   Finnhub about every holding in USD, all at once on virtual threads (`readFinnhubDataOfHoldings`, through
-   `FinnhubClient.stockOrNullOnFailure`: a failed call prints `[stocks error]` and leaves that holding out; nothing
-   without the key), hands both to `PortfolioSyncService.sync(reading, finnhubDataByConId)`, which upserts them into
+   `null` when none was due or none answered —, the holdings' contract details and targets, the contracts found by
+   symbol). `sync.SyncService` asks for the company figures of every holding in USD through `sources.SourcesInOrder`
+   (`readCompanyFiguresOfHoldings`: Finviz first, one request for all, then Finnhub for the rest, one stock at a time on
+   virtual threads; a source that fails prints why and passes its stocks on; nothing while no source is connected),
+   hands both to `PortfolioSyncService.sync(reading, companyFiguresByConId)`, which upserts them into
    the database (see below), and publishes `api.PortfolioSyncedEvent` — the alerts are checked on it, in the same
    thread, before the sync returns (a failed check prints `[alerts error]` and keeps the sync). `TwsPortfolioRunner`
    (`syncAtStartupOrExit`), synced or not, then launches the UI and returns; Tomcat's non-daemon threads keep the
@@ -822,7 +889,8 @@ and its closes without a portfolio —, and `lastScannedAt()` is what `ScanSched
 `V10__candidate_analysis.sql` (2026-10-27, on the real database since then) let `stock_analysis` hold a scanned stock's
 analysis too: `holding_id` may be `NULL`, a new `scan_candidate_id`, and the table checks that exactly one of the two is
 set (`num_nonnulls`, like `trade`'s); `finnhub_stock` (`JSONB`, the plan's `company_facts` renamed — it holds the whole
-`stocks.Stock`, the earnings date too) is what Finnhub answered, `NULL` when it didn't and for a holding's analysis.
+`sources.Stock`, the earnings date too; `company_figures` since V21) is what Finnhub answered, `NULL` when it didn't and
+for a holding's analysis.
 `StockAnalysisEntity` has two public constructors: a holding's (`long holdingId`) and a scanned stock's, which takes the
 `ScanCandidateEntity` itself, not its id, so a holding's id can't be passed by mistake; `holdingId()` is a `Long` now.
 `ScanCandidateEntity.scanId()` maps `scan_id` a second time, as a plain id read only (`insertable` / `updatable` false),
@@ -839,9 +907,9 @@ length can fail a scan; an index on `con_id`, no `UNIQUE`): one row per target h
 found too is stored once (`analystPriceTargetsOfScanAndHoldings`), and `syncScan` the scan's: a stock whose headlines
 were read gets them in place of the old ones (an empty list too), one whose headlines didn't come keeps its old ones.
 `V13__stocks.sql` (MY_HOLDINGS_TODO.md, session 2, decision 10) added `stock` (`StockEntity`: `con_id` `UNIQUE`,
-`symbol`, `fetched_at`, `finnhub_data` — `JSONB`, the `stocks.Stock` as it is; the user named the table and the column):
-what Finnhub answered about each holding in USD, replaced per contract by every sync that has an answer for it
-(`storeFinnhubData`), kept when the call failed. `V14__holding_industry.sql` added `holding.industry`, IB's `category`
+`symbol`, `fetched_at`, `finnhub_data` — `JSONB`, the `sources.Stock` as it is; `company_figures` since V21; the user named
+the table): what Finnhub answered about each holding in USD — since V21 Finviz or Finnhub, the first that answered —,
+replaced per contract by every sync that has an answer for it (`storeCompanyFigures`), kept when no source answered. `V14__holding_industry.sql` added `holding.industry`, IB's `category`
 ("Semiconductors"; the holding's `sector` is IB's `industry`, "Technology" — the market's names, which IB has the other
 way round; `scan_candidate` keeps IB's). Both reached the real database on 2026-11-04 and 05 in runs that missed TWS,
 before a backup — harmless, a table and a column added empty; the 2026-11-05 backup (14 of 14 tables equal) came before
@@ -886,7 +954,19 @@ stored. Its entity and repository live in the `tax` package too. `V20__stock_spl
 New York's time —, `shares_before_the_split` / `shares_after_the_split` — IB's "SPLIT 4 FOR 1" as 1 and 4, two whole
 numbers since 1 for 3 has no exact decimal, each `CHECK > 0` —, `stored_at`): written only by
 `sync.StockSplitDetectionService`, never changed. `StockSplitEntity` and `StockSplitRepository` (its default method
-`storedStockSplits()`, a `calculation.splits.StoredStockSplits`) live in `db/splits`.
+`storedStockSplits()`, a `calculation.splits.StoredStockSplits`) live in `db/splits`. `V21__stock_lists.sql` (the
+Recommendations lists from Finviz, 2026-11-26; **not on the real database yet — back up before the `./run.sh` that
+applies it**) added `stock_lists_download` (`StockListsDownloadEntity`: `source` — "Finviz" —, `downloaded_at`,
+`closes_read_at` — when the daily closes of its stocks were last read, `NULL` before the first reading —; every download
+kept, saved with its stocks, `cascade = PERSIST`) and `listed_stock` (`ListedStockEntity`: `download_id`,
+`recommendation_list` — `model.recommendations.RecommendationList` by name —, `symbol` as IB writes it, `con_id` — `NULL`
+until TWS finds the symbol's contract, taken from an earlier download when it was found before —, `figures` — `JSONB`, the
+`model.recommendations.ScreenedStock` —; `UNIQUE (download_id, recommendation_list, symbol)`, an index on `symbol`). **No
+order is stored**: the app sorts each list itself, from the figures (the user's call). V21 also renamed
+`stock.finnhub_data` and `stock_analysis.finnhub_stock` to `company_figures` (their entities' `companyFigures()`): Finviz
+fills them first since. Both entities and their repositories (`StockListsDownloadRepository
+.findFirstByOrderByDownloadedAtDesc`, `ListedStockRepository.knownConIdBySymbol` — empty without a query for no symbol)
+live in `db/recommendationlists`.
 `HoldingRepository`
 (also `findByStatusOrderById`, the open holdings an analysis of everything runs on), `TradeRepository`,
 `ManualPositionRepository`, `InvestorRepository` (`findAllByOrderById` with the cash movements in the same query, and the
@@ -909,7 +989,7 @@ analysis or a pick of an earlier scan was of), `InvestmentRecommendationReposito
 `deleteForContracts`) are the repositories.
 Things that are easy to break:
 - Flyway runs the migrations at startup, and a migration that has run is never edited (Flyway checks its
-  checksum): a schema change is a new `V21__….sql`.
+  checksum): a schema change is a new `V22__….sql`.
 - `db.JsonColumnMapper` (named in `application.properties`, `hibernate.type.json_format_mapper`) is how Hibernate writes
   and reads a `JSONB` column: the newer Jackson, the API's, with its own defaults. Left to itself Hibernate picked the
   older Jackson the Anthropic SDK brings and stored a date as `[2026, 10, 5]`; now it is `"2026-10-05"`. It wraps
@@ -932,13 +1012,14 @@ Things that are easy to break:
   `RecommendationsReadServiceTest`, `RecommendationAnalysisServiceTest`, `ScanServiceTest`, `SyncServiceTest`,
   `alerts.AlertServiceTest`, `tax.FlexReportStorageServiceTest`, `tax.FlexDownloadServiceTest`,
   `tax.SettlementDayRatesServiceTest`, `tax.CapitalGainsTaxServiceTest`, `tax.TaxConfirmationServiceTest`,
-  `tax.TaxesReadServiceTest`, `exchangerates.ExchangeRateDownloadServiceTest`, `sync.StockSplitDetectionServiceTest`)
+  `tax.TaxesReadServiceTest`, `exchangerates.ExchangeRateDownloadServiceTest`, `sync.StockSplitDetectionServiceTest`,
+  `recommendationlists.RecommendationListsDownloadServiceTest`)
   are `@DataJpaTest`s
   against the real `portfolioboss_test` (see Build & run) — never PostgreSQL is mocked out.
 - A migration that moves real data (V3, V4) is tried first on a scratch database holding a copy of the real one, and
   `scripts/backup-db.sh` runs before the `./run.sh` that applies it (for V4 the backup was also restored into a scratch
   database and compared table by table first). One that only adds a table or a column (V5, V6, V7, V9, V10, V11, V12,
-  V13, V14, V15, V16, V17, V18, V19, V20) or
+  V13, V14, V15, V16, V17, V18, V19, V20, V21 — whose two renamed columns keep their data) or
   a constraint (V8, after counting the rows it would refuse: none; V10's, which every stored row met) still gets the
   backup first, checked for the same row counts as the database (V12's: each table's `COPY` rows in the dump against a
   `count(*)`, 12 of 12 equal, 2026-10-29). `backup-db.sh` names a backup by the day, so a second backup
@@ -956,7 +1037,8 @@ scanned stock's and a holding's), `OrderCommission` (the default commission), an
 the whole account — the dollar holdings worth more than 0 plus IB's cash, not `netLiquidation` —, the twin of
 `wholeAccountOf` in `ui/src/components/graphs/portfolioWeights.ts`: change both together) — pure Java, no
 Spring and no database, so it is unit tested directly. What it computes on comes from four packages of plain data:
-`ib` (what IB reports, above), `ai` (Claude's answer, below), `stocks` (Finnhub's) and **`model`** — the values the
+`ib` (what IB reports, above), `ai` (Claude's answer, below), `sources` (the company figures, Finviz's or Finnhub's) and
+**`model`** — the values the
 whole app shares: the enums the entities and the JSON share with the computation (`TradeSide`, `HoldingStatus`,
 `CashMovementType`), the warnings (`HoldingWarning`, `HoldingWarningType`, `InvestorWarning`, `InvestorWarningType`), the
 labels (`MomentumLabel`, `AnalystTrend`, `HoldingSignal`, `HotStockLabel`, `RiskSign`, `NotPickableReason`),
@@ -1164,14 +1246,15 @@ one `saveAll` — each with the very `StockSearches` Claude read (decision 22). 
 `analyze(null)` takes the short list — `RecommendationsReadService.shortListOfLatestScan()`: the first 10 `HOT` with the
 analysts' target 15%+ above the last close, in the page's own order (`api.CandidateWithItsList`: a candidate, its list —
 the user's name for it — and, since decision 14, its `AnalystTargetCalculator`) —, `analyze(id)` one
-candidate of any list (not in the latest scan's lists: 404). Keys missing: 503 — and for the full run a missing
-`FINNHUB_API_KEY` too, before anything is sent, since without Finnhub no stock can be picked. Claude is told the symbol,
-`"USD"` (NYSE / NASDAQ only) and the last stored close. Finnhub runs beside the pipeline on its own virtual threads (it
-answers in a second); without the key, or when a call fails (`[stocks error] SYMBOL: why`), the stock is analyzed and
-stored without Finnhub's answer — and can't be picked. A separate Finnhub stage before the paid analysis was planned and
+candidate of any list (not in the latest scan's lists: 404). Keys missing: 503 — and for the full run when neither
+`FINVIZ_TOKEN` nor `FINNHUB_API_KEY` is set too, before anything is sent, since without the company figures no stock can be
+picked. Claude is told the symbol, `"USD"` (NYSE / NASDAQ only) and the last stored close. The company figures are asked
+for beside the pipeline, on a virtual thread of their own, through `sources.SourcesInOrder` — Finviz first, then
+Finnhub (they answer in seconds); a stock no source answers for is analyzed and stored without them — and can't be
+picked. A separate Finnhub stage before the paid analysis was planned and
 dropped (the user's choice, 2026-10-29): the target already cuts the list to a handful, and it would have saved only a
 stock that passes the target and fails on its signs, at the cost of a table for Finnhub's answers without an analysis.
-The analyses are stored with `finnhub_stock`; after the full run `RecommendationCalculator` picks, the `[ai] recommended
+The analyses are stored with `company_figures`; after the full run `RecommendationCalculator` picks, the `[ai] recommended
 ABCD, WXYZ (of 7 analyzed; 7 of 41 hot stocks have the analysts' target 15% above the price)` or `[ai] no recommendation:
 none of 7 qualified (…)` line is printed, and an `investment_recommendation` row is stored whenever a scan exists — an
 empty one too when no stock had enough upside, with nothing searched or asked (the pipeline prints `[ai] analyzed 0 of
@@ -1216,15 +1299,38 @@ fewer than two of the three are known. Things that are easy to break:
 - Tavily doesn't return the same chunks of a page every time, so a figure in a stored analysis may not show in a later
   search of the same page.
 
-Finnhub (RECOMMENDATIONS_TODO.md, session 2) lives in `portfolioboss.stocks` (console `[stocks]`) — its own package
-rather than `ai` (the user's call, 2026-10-27): its figures don't come from Claude, and the code computes on them (the risk
-signs of decision 5), not only Claude. `FinnhubClient` holds its own key (`@Value("${FINNHUB_API_KEY:}")`,
-`hasApiKey()`, the `[stocks] Finnhub off` line at startup) and has two public methods — `stockOrNullOnFailure(symbol,
-today)` is the second, the same answer with a failed call printed as `[stocks error] SYMBOL: why` and given as `null`,
-what both callers use — and the first, `stock(symbol, today)`: two GETs
+**The sources** (2026-11-26) live in `portfolioboss.sources`, the sources layer's home for the data that has more than one
+source: at its root the sockets and the records every source fills, and **a folder per source**, `sources/finviz` and
+`sources/finnhub` (the user's structure; `ib`, `ai`, `flex` and `exchangerates` are to move under it too, as a step of its
+own). The pieces:
+- `DataSource` — what every source says about itself: `sourceName()` ("Finviz", "Finnhub") and `isConnected()` (its key
+  is set) —, `StockDataSource<Answer>` — a socket for data asked by stock: `answersFor(symbols, today)`, a stock the
+  source doesn't know left out, a failure thrown — and `CompanyFiguresSource`, the socket of the company figures.
+- `SourcesInOrder<Answer>(kindOfData, sourcesInOrder)` — built by its caller from the `List` Spring hands it in
+  `@Order`: asks the sources one after another, a source off skipped without a word, one that fails printed (`[sources
+  error] Finviz could not give the company figures: …`) and its stocks passed on, the next asked only about the stocks
+  still without an answer — **a whole stock moves, never one figure**. Prints `[sources] company figures of 10 stocks:
+  Finviz 7, Finnhub 2, no answer 1` while a source is connected.
+- `Stock(symbol, nextEarningsDate, companyFacts, answeredBy)`, `CompanyFacts`, `EarningsDate` (moved from Finnhub's old
+  `stocks` package): `answeredBy` is read as "Finnhub" in an answer stored before it existed.
+- `sources/finviz` (console `[finviz]`): `FinvizClient` (`FINVIZ_TOKEN`, `hasToken()`; `screenAsCsv(filters, order,
+  symbols)` — the custom view 151 with the columns of `COLUMNS`, the user's `c=` plus PEG (9) and P/B (11) —; a 429 tried
+  once more), `FinvizScreenerReader(today).stocksIn(csv)` → `FinvizStock`s (the CSV's column names live only here and in
+  `FinvizColumn`, each column under every name it may have), `FinvizCompanyFigures` (`@Order(1)`: a screen without filters
+  of only the stocks asked about, `t=`, a hundred a request; the four figures out of Finviz's columns), `FinvizScreen` (the
+  three screens' filters and order, from the user's addresses) and `FinvizScreens.stocksOf(screen, today)`.
+- `sources/finnhub` (console `[finnhub]`): `FinnhubCompanyFigures` (`@Order(2)`: each stock from its own call, all at once
+  on virtual threads) over `FinnhubClient`, below.
+
+Finnhub (RECOMMENDATIONS_TODO.md, session 2) lives in `sources/finnhub` (until 2026-11-26 the package `stocks`, its own
+rather than `ai` — the user's call, 2026-10-27: its figures don't come from Claude, and the code computes on them, the risk
+signs of decision 5). `FinnhubClient` holds its own key (`@Value("${FINNHUB_API_KEY:}")`,
+`hasApiKey()`, the `[finnhub] Finnhub off` line at startup) and has two public methods — `stockOrNullOnFailure(symbol,
+today)` is the second, the same answer with a failed call printed as `[finnhub error] SYMBOL: why` and given as `null`,
+what `FinnhubCompanyFigures` uses — and the first, `stock(symbol, today)`: two GETs
 through Spring's `RestClient` (10 s each), with the key in the `X-Finnhub-Token` header, never in the address —
 `/calendar/earnings` from `today` (the caller's, so the tests don't depend on the clock) to four months ahead, and
-`/stock/metric?metric=all`. It returns a `Stock(symbol, nextEarningsDate, companyFacts)`: an `EarningsDate(date, hour)`,
+`/stock/metric?metric=all`. It returns a `Stock(symbol, nextEarningsDate, companyFacts, "Finnhub")`: an `EarningsDate(date, hour)`,
 read straight from Finnhub's JSON (`hour` is `bmo` / `amc` / `dmh`, or `null`), and `CompanyFacts(revenueGrowthPercent,
 netMarginPercent, debtToEquity, peRatio)`, from Finnhub's `revenueGrowthTTMYoy`, `netProfitMarginTTM`,
 `totalDebt/totalEquityQuarterly` and `peTTM` (private records under Finnhub's names, the one with a "/" through
@@ -1233,10 +1339,20 @@ name or exchange, which come from IB (`ib.StockContractDetails`, renamed from `S
 as "the details of a `Stock`"). The two are deliberately not one type: IB's come with every scan for every stock found,
 Finnhub's only on Analyze for the short list, so half of a merged type would always be empty; they meet side by side in
 `calculation.RecommendationCandidate` — a candidate and its `Stock` —, and the `Stock` is stored in
-`stock_analysis.finnhub_stock`. `api.RecommendationAnalysisService` calls it (since 2026-10-27) from the Recommendations
-page's Analyze, and `TwsPortfolioRunner` (since 2026-11-05, MY_HOLDINGS_TODO.md decision 10) for every open holding in
-USD on each `./run.sh` that reached TWS — that `Stock` stored in the `stock` table's `finnhub_data`, read by
+`stock_analysis.company_figures`. The Recommendations page's Analyze (since 2026-10-27) and the sync (since 2026-11-05,
+MY_HOLDINGS_TODO.md decision 10, every open holding in USD on each `./run.sh` that reached TWS) ask for it through
+`SourcesInOrder`, Finviz first — that `Stock` stored in the `stock` table's `company_figures`, read by
 `PortfolioReadService` (a holding's `calculation.RiskSignsCalculator`). Things that are easy to break:
+- **Finviz's CSV was not seen before the subscription**: the export's address and the token's parameter
+  (`export.ashx`, `auth=`) are one constant each in `FinvizClient`, and `FinvizScreenerReader` takes both forms of each
+  value — "27.5%" or 27.5, "10.33B" or millions, "-" or nothing, the export's earnings date with its time or the screen's
+  "Nov 20/a" (the year nearest the download). Anything else fails the screen naming the column and the line, and the
+  company figures fall back to Finnhub. The column numbers 38, 62, 68, 69 (and 9, 11) are checked against the CSV's
+  headers once subscribed.
+- Finviz writes a share class with a "-" where IB writes a space ("BRK-B", "BRK B"): `FinvizCompanyFigures` asks Finviz's
+  and answers under IB's, and the lists are stored under IB's.
+- Finviz has no revenue growth of the last 12 months: `FinvizCompanyFigures` gives its latest quarter against the same
+  quarter a year before in its place (the "revenue falling" risk sign reacts sooner; the user's explicit OK still pending).
 - The units, read on AAPL (2026-10-27): the margin and the growth are **percent** (`27.62` is 27.62%), the debt to equity
   a **ratio** (`0.7844`; "twice the equity" is `2.0`), the P/E a ratio.
 - The calendar is **not in date order** (AAPL's January report came before November's): the earliest is taken, not the
@@ -1293,13 +1409,15 @@ query. Appended after them (MY_HOLDINGS_TODO.md, session 2, 2026-11-04/05), what
 it changes the dot: `analystTarget` (the same `AnalystTargetResponse` as the Recommendations page's, from the holding's
 stored Dow Jones targets against IB's latest price, counted back from the last sync's day — `account_state.as_of`),
 `companyInfo` and `industry` (IB's `category`; `sector` is IB's `industry` — the market's names, decision 11). A
-`CompanyInfoResponse(finnhubAnsweredAt, nextEarningsDate, reportsWithin14Days, companyFacts, riskSigns)` (session 3, the
-same record a `HotStockResponse` has) is what Finnhub answered — its records as they are — with the risk signs and the
+`CompanyInfoResponse(answeredBy, answeredAt, nextEarningsDate, reportsWithin14Days, companyFacts, riskSigns)` (session 3,
+the same record a `HotStockResponse` has; `answeredBy` — "Finviz" or "Finnhub", the Company tab's "From Finviz, answered
+…" — and `answeredAt` in place of `finnhubAnsweredAt` since 2026-11-26) is what the first source answered — its records
+as they are — with the risk signs and the
 timing note worked out on this read, built once, by its copy constructor from a `RiskSignsCalculator` (which holds
-Finnhub's answer and the closes; the calculator knows nothing of the response), the answer's time and the day the note
-counts from; `riskSigns` is `null` when Finnhub gave none of the four figures (not checked, which `[]` would hide — an
-ETF), and `companyInfo` itself `null` while Finnhub never answered for the holding (not in USD, no key, every call
-failed). For a holding, `finnhubAnsweredAt` is the `stock` row's `fetched_at` and the note counts from the last sync's
+the source's answer and the closes; the calculator knows nothing of the response), the answer's time and the day the
+note counts from; `riskSigns` is `null` when the source gave none of the four figures (not checked, which `[]` would
+hide — an ETF), and `companyInfo` itself `null` while no source ever answered for the holding (not in USD, no key, every
+call failed). For a holding, `answeredAt` is the `stock` row's `fetched_at` and the note counts from the last sync's
 day (`PortfolioReadService.companyInfoOf`). Two more queries: the stored targets and the `stock` rows of every holding. `PortfolioResponse.estimatedAnalysisCost` (appended last, at the top level) is what the Analyze buttons quote
 before a paid run, in place of a figure written by hand: an `EstimatedAnalysisCostResponse(costUsdPerStock,
 tavilyCreditsPerStock, basedOnAnalyses)` — the average over those same latest analyses (`StockAnalysisEntity.costUsd()` /
@@ -1355,7 +1473,7 @@ line, not an error). Not `@Transactional`, like `ScanService`. Its time was not 
 The alerts (MY_HOLDINGS_TODO.md session 5ב, decisions 14–17, 2026-11-11) are a package of their own, `portfolioboss.alerts`
 (console `[alerts]` / `[alerts error]`; the user's ask — "the files spread over the packages is really bad"): its data,
 rules, tables, service, controller and its `request/` and `response/`. It sits **on top**: it uses `api` (only
-`RecommendationsReadService.shortListOfLatestScan`, for the short-list alert), `db`, `calculation`, `ib`, `stocks` and
+`RecommendationsReadService.shortListOfLatestScan`, for the short-list alert), `db`, `calculation`, `ib`, `sources` and
 `model`, and nothing uses it — the sync tells it through a Spring application event (`api.PortfolioSyncedEvent`, published
 by `SyncService`; `alerts.AlertsAfterSync` listens with `@EventListener`, a class of its own because a call from inside
 `AlertService` to its own `@Transactional` method would skip the transaction), and the bell has its own `GET /api/alerts`
@@ -1686,7 +1804,7 @@ Things that are easy to break:
   holding and opens a new one without trades (out of the plan's scope); the tax follows it.
 
 The exchange rates are a package of their own, `portfolioboss.exchangerates` (console `[exchangerates]` /
-`[exchangerates error]`; the user's ask, 2026-11-15): a source of data, like `stocks` — it downloads, stores and answers
+`[exchangerates error]`; the user's ask, 2026-11-15): a source of data, like Finnhub — it downloads, stores and answers
 "which rate does this day take", and knows nothing of trades or the tax. The pieces:
 - `BankOfIsraelClient` (a `@Component`, `RestClient`, no key): `exchangeRates(currency, period)` — the SDMX service's
   `EXR` series `RER_{currency}_ILS`, `startperiod` / `endperiod`, `format=csv` —, read by `BankOfIsraelRatesReader` into
@@ -2047,14 +2165,21 @@ Things that are easy to break:
   storing it, `[db] stored a scan of N stocks` and `[db] stored N analysts' price targets for M stocks`. The holdings'
   (MY_HOLDINGS_TODO.md, session 2) print `[ib] requesting the contract details of N stocks` a second time (for the
   holdings the scan didn't ask about), `[ib] contract details received for N of M holdings`, `[ib] analysts' price
-  targets of the holdings: N for M of K holdings`, then `[stocks] Finnhub answered for N of M holdings in dollars` and
-  `[db] stored Finnhub's data for N holdings`.
+  targets of the holdings: N for M of K holdings`, then `[sources] company figures of N stocks: Finviz 7, Finnhub 2, no
+  answer 1` and `[db] stored the company figures of N holdings`. The Recommendations lists print, before TWS,
+  `[recommendationlists] Finviz: fast growth 38, slow growth 57, value 112 stocks`, or `[recommendationlists] Finviz
+  skipped: the lists were downloaded at 26.11 23:05, after the latest US market close`, or `[recommendationlists error]
+  the lists were not downloaded from Finviz: …` (the sync goes on); in the reading `[ib] requesting the contracts of N
+  stocks by their symbols` and `[ib] contracts found for N of M symbols; not found: XYZ, …`; and every sync's closes
+  `[ib] requesting a year of daily closes for N contracts, in R rounds of up to 50`.
   The
   analysis prints `[ai] analysis ready` (or `[ai] analysis off: … is not set`) at startup, `[ai] analyzed N of M stocks:
   N Tavily credits, N input and N output tokens, $N` per run, and `[ai error] SYMBOL: why` for a stock that failed; the
   Recommendations page's full run then `[ai] recommended ABCD, EFGH, WXYZ (of 7 analyzed; 7 of 41 hot stocks have the
-  analysts' target 15% above the price)` or `[ai] no recommendation: none of 7 qualified (…)`. Finnhub prints `[stocks] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)` at startup
-  when its key is missing, and nothing when it is set; `[stocks error] SYMBOL: why` when a call fails during a run.
+  analysts' target 15% above the price)` or `[ai] no recommendation: none of 7 qualified (…)`. Finnhub prints `[finnhub] Finnhub off: FINNHUB_API_KEY is not set (config/local.env)` at startup
+  when its key is missing, and nothing when it is set; `[finnhub error] SYMBOL: why` when a call fails during a run.
+  Finviz prints `[finviz] Finviz off: FINVIZ_TOKEN is not set (config/local.env)` at startup without its token; a source
+  that fails as a whole, `[sources error] Finviz could not give the company figures: …`.
   The alerts print `[alerts] checked: 2 new (ABCD, WXYZ), 1 no longer true` (or `checked: nothing new, 0 no longer true`)
   after every sync and every save of the settings, and `[alerts error] could not check the alerts: …` when a check after a
   sync fails (the sync stays stored). The Flex reports print `[tax] Flex off: FLEX_TOKEN is not set (config/local.env)`
@@ -2076,7 +2201,8 @@ Things that are easy to break:
   not understood, on every sync, and `[db error] could not store the stock splits: …` when the step fails (the sync stays
   stored).
 - Packages are named after their area, and where the area prints to the console its name is the prefix:
-  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`, `stocks` / `[stocks]`, `alerts` /
+  `ib` / `[ib]`, `api` / `[api]`, `ui` / `[ui]`, `db` / `[db]`, `ai` / `[ai]`, `sources` / `[sources]` — and its folders
+  `finviz` / `[finviz]`, `finnhub` / `[finnhub]` —, `recommendationlists` / `[recommendationlists]`, `alerts` /
   `[alerts]`, `tax` / `[tax]`, `exchangerates` / `[exchangerates]`. `calculation`, `model`, `utils` and `exceptions`
   print nothing.
 - A feature of several files gets a package of its own, named after it, holding all of it — data, rules, entities,
@@ -2086,19 +2212,25 @@ Things that are easy to break:
 - Package dependencies point one way, with no cycle: `utils ← ai ← model ← calculation ← db ← api`, and `ib` — which
   uses none of them — is used by `calculation`, `db` and `api`. `exceptions` (2026-10-26, the user's request: the app's
   own exceptions in one package — `TwsUnavailableException`, `TwsBusyException`) uses nothing and is used by `ib`,
-  `api`, `tax` and `exchangerates`. `stocks` (2026-10-27: Finnhub's client and what it reads) uses only `utils`; like `ib` it is a source of data,
-  used by `calculation`, `db` and `api` (since session 3). `alerts` (2026-11-11) sits on top of them all: it uses `api`
-  (only `RecommendationsReadService`, for the short list), `db`, `calculation`, `ib`, `stocks` and `model`, and no package
+  `api`, `tax` and `exchangerates`. `sources` (2026-11-26, in place of `stocks`, Finnhub's package since 2026-10-27: the
+  sockets and their records at its root, a folder per source — `finviz`, `finnhub` —, each folder using the root and
+  `exceptions` and `utils`, never another folder: `ArchitectureTest` checks its folders for cycles) is a source of data like
+  `ib`, used by `calculation`, `db`, `model` and the flows. `recommendationlists` (2026-11-26, the Recommendations lists'
+  download) is a flow **under** `sync`, like `tax`: `sync.SyncService` calls it, so it must never use `sync` — which is
+  why it isn't in `recommendations`, which uses `sync` (`ScanService`); it uses `db`, `model`, `calculation`
+  (`ScanSchedule`) and `sources.finviz`. `alerts` (2026-11-11) sits on top of them all: it uses `api`
+  (only `RecommendationsReadService`, for the short list), `db`, `calculation`, `ib`, `sources` and `model`, and no package
   uses it — `api.SyncService` announces a sync with `PortfolioSyncedEvent` instead of calling it. `tax` (2026-11-15, the
   capital gains tax) is the other way round, **under** `api`: `api.SyncService` calls `tax.FlexDownloadService` and
   `tax.CapitalGainsTaxService` directly, so it must never use `api` (a cycle) — which is why its endpoints are its own
   `tax.TaxController` (session 4), with `tax.request` and `tax.response`, like `alerts`; it uses `db` (`TradeRepository`, and since session 3 the holdings, manual positions, investors and the account
   state), `model` (`TradeSide`), `exchangerates`, `exceptions` (`FlexReportUnavailableException`) and `utils`. `exchangerates`
-  (2026-11-15, the Bank of Israel's rates) is **under** `tax`: a source of data like `stocks`, it uses only `exceptions`
+  (2026-11-15, the Bank of Israel's rates) is **under** `tax`: a source of data like `sources`, it uses only `exceptions`
   (`ExchangeRatesUnavailableException`), is told which days need a rate (`tax.SettlementDayRatesService`), and must never
   use `tax` or `api` (a cycle: `tax` converts with its `ExchangeRates`). `TwsPortfolioRunner`
   (the root package) uses `api.SyncService`. `calculation` holds only what computes; the
-  data it computes on lives where it comes from — IB's readings in `ib`, Claude's answer in `ai`, Finnhub's in `stocks` —
+  data it computes on lives where it comes from — IB's readings in `ib`, Claude's answer in `ai`, the company figures in
+  `sources` —
   or, when the whole app shares
   it (an enum both an entity and the computation need, like `TradeSide`; a warning; a label), in `model`. `calculation`
   uses nothing of Spring, the database or the IB API — only those packages' records. Before 2026-10-08 three enums sat

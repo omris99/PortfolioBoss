@@ -9,8 +9,8 @@ import portfolioboss.calculation.marketdata.AnalystTargetCalculator;
 import portfolioboss.calculation.marketdata.Momentum;
 import portfolioboss.ib.AnalystPriceTarget;
 import portfolioboss.model.recommendations.NotPickableReason;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.Stock;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -149,7 +149,7 @@ class RecommendationCalculatorTest {
     @Test
     void goodNewsNeverLetsAStockPastTheTargetRule() {
         RecommendationCandidate closeTargetWithAPartnership = new RecommendationCandidate(1, hotStock(1, false),
-                targetOf(110, 110, 110), new Stock("STOCK1", null, HEALTHY_COMPANY),
+                targetOf(110, 110, 110), new Stock("STOCK1", null, HEALTHY_COMPANY, "Finnhub"),
                 analysisWith(PARTNERSHIP_WITH_A_GIANT));
         RecommendationCandidate noNews = candidate(2, 5, HEALTHY_COMPANY, false);
 
@@ -163,7 +163,7 @@ class RecommendationCalculatorTest {
         RecommendationCandidate noTargetAndNoFigures =
                 new RecommendationCandidate(1, hotStock(1, false), targetOf(150, 160), null, null);
         RecommendationCandidate closeTargetAndTooRisky = new RecommendationCandidate(2, hotStock(2, false),
-                targetOf(105, 105, 105), new Stock("STOCK2", null, REVENUE_FALLING), null);
+                targetOf(105, 105, 105), new Stock("STOCK2", null, REVENUE_FALLING, "Finnhub"), null);
         RecommendationCandidate healthy = candidate(3, 3, HEALTHY_COMPANY, false);
         RecommendationCalculator recommendationCalculator = new RecommendationCalculator(
                 List.of(noTargetAndNoFigures, closeTargetAndTooRisky, healthy), AS_OF);
@@ -187,13 +187,13 @@ class RecommendationCalculatorTest {
     private RecommendationCandidate candidate(long candidateId, double percentAboveSma50, CompanyFacts companyFacts,
                                               boolean recovering, StockAnalysisResult analysis) {
         return new RecommendationCandidate(candidateId, hotStock(percentAboveSma50, recovering),
-                targetOf(130, 130, 130), new Stock("STOCK" + candidateId, null, companyFacts), analysis);
+                targetOf(130, 130, 130), new Stock("STOCK" + candidateId, null, companyFacts, "Finnhub"), analysis);
     }
 
     /** A healthy stock with no news, its place in the list by its id. */
     private RecommendationCandidate candidateWithTarget(long candidateId, AnalystTargetCalculator analystTarget) {
         return new RecommendationCandidate(candidateId, hotStock(candidateId, false), analystTarget,
-                new Stock("STOCK" + candidateId, null, HEALTHY_COMPANY), null);
+                new Stock("STOCK" + candidateId, null, HEALTHY_COMPANY, "Finnhub"), null);
     }
 
     /** One target per firm, each a week before the analysis, against the last close of 100. */

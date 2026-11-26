@@ -43,8 +43,8 @@ import portfolioboss.model.portfolio.HoldingStatus;
 import portfolioboss.model.portfolio.HoldingWarning;
 import portfolioboss.model.portfolio.HoldingWarningType;
 import portfolioboss.model.portfolio.TradeSide;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.EarningsDate;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -280,7 +280,8 @@ class PortfolioControllerTest {
                         .value(nullValue()))
                 .andExpect(jsonPath("$.holdings[0].analystTarget.latestTargetOfEachFirm[0].headline")
                         .value("Apple Price Target Raised to $250.00/Share From $220.00 by Firm A"))
-                .andExpect(jsonPath("$.holdings[0].companyInfo.finnhubAnsweredAt").value("2026-10-06T20:30:00Z"))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.answeredBy").value("Finviz"))
+                .andExpect(jsonPath("$.holdings[0].companyInfo.answeredAt").value("2026-10-06T20:30:00Z"))
                 .andExpect(jsonPath("$.holdings[0].companyInfo.nextEarningsDate.date").value("2026-09-30"))
                 .andExpect(jsonPath("$.holdings[0].companyInfo.nextEarningsDate.hour").value("amc"))
                 .andExpect(jsonPath("$.holdings[0].companyInfo.reportsWithin14Days").value(true))
@@ -498,9 +499,9 @@ class PortfolioControllerTest {
                 List.of());
     }
 
-    /** Made-up figures from Finnhub: a P/E above 50 raises the one sign, and the report is 0–14 days away. */
+    /** Made-up figures from Finviz: a P/E above 50 raises the one sign, and the report is 0–14 days away. */
     private CompanyInfoResponse appleCompanyInfo() {
-        return new CompanyInfoResponse(Instant.parse("2026-10-06T20:30:00Z"),
+        return new CompanyInfoResponse("Finviz", Instant.parse("2026-10-06T20:30:00Z"),
                 new EarningsDate(LocalDate.of(2026, 9, 30), "amc"), true, new CompanyFacts(6.0, 25.0, 1.5, 55.0),
                 List.of(RiskSign.EXPENSIVE));
     }

@@ -2,9 +2,9 @@ package portfolioboss.calculation.marketdata;
 
 import org.junit.jupiter.api.Test;
 import portfolioboss.model.marketdata.RiskSign;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.EarningsDate;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
+import portfolioboss.sources.Stock;
 
 import java.time.LocalDate;
 
@@ -68,7 +68,7 @@ class RiskSignsCalculatorTest {
     @Test
     void withoutClosesOnlyFinnhubsFiguresAreChecked() {
         RiskSignsCalculator withoutCloses =
-                new RiskSignsCalculator(new Stock("ABCD", null, new CompanyFacts(10.0, -5.0, 0.5, 30.0)), null);
+                new RiskSignsCalculator(new Stock("ABCD", null, new CompanyFacts(10.0, -5.0, 0.5, 30.0), "Finnhub"), null);
 
         assertThat(withoutCloses.riskSigns()).containsExactly(RiskSign.LOSES_MONEY);
         assertThat(withoutCloses.hasCompanyFacts()).isTrue();
@@ -117,7 +117,7 @@ class RiskSignsCalculatorTest {
         assertThat(calculatorWithReportOn(TODAY.plusDays(14)).reportsWithin14Days(TODAY)).isTrue();
         assertThat(calculatorWithReportOn(TODAY.plusDays(15)).reportsWithin14Days(TODAY)).isFalse();
         assertThat(calculatorWithReportOn(TODAY.minusDays(1)).reportsWithin14Days(TODAY)).isFalse();
-        Stock withoutAReport = new Stock("ABCD", null, HEALTHY_COMPANY);
+        Stock withoutAReport = new Stock("ABCD", null, HEALTHY_COMPANY, "Finnhub");
         assertThat(new RiskSignsCalculator(withoutAReport, momentumWithYearReturn(UP_IN_A_YEAR))
                 .reportsWithin14Days(TODAY)).isFalse();
     }
@@ -129,12 +129,12 @@ class RiskSignsCalculatorTest {
     }
 
     private RiskSignsCalculator calculatorWithFacts(CompanyFacts companyFacts, Double yearReturnPercent) {
-        return new RiskSignsCalculator(new Stock("ABCD", null, companyFacts),
+        return new RiskSignsCalculator(new Stock("ABCD", null, companyFacts, "Finnhub"),
                 momentumWithYearReturn(yearReturnPercent));
     }
 
     private RiskSignsCalculator calculatorWithReportOn(LocalDate reportDate) {
-        Stock stock = new Stock("ABCD", new EarningsDate(reportDate, "amc"), HEALTHY_COMPANY);
+        Stock stock = new Stock("ABCD", new EarningsDate(reportDate, "amc"), HEALTHY_COMPANY, "Finnhub");
         return new RiskSignsCalculator(stock, momentumWithYearReturn(UP_IN_A_YEAR));
     }
 

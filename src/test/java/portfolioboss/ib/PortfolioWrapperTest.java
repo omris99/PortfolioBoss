@@ -162,6 +162,65 @@ class PortfolioWrapperTest {
                 .containsExactlyInAnyOrder(APPLE_CON_ID, MICROSOFT_CON_ID);
     }
 
+    // ── contracts by symbol (the Recommendations page's lists) ──────────────────────────────────
+
+    /** A stock of the lists is known by its symbol alone: its contract on a US stock exchange is kept, with its id. */
+    @Test
+    void keepsTheContractOfASymbolOnAUsStockExchange() throws InterruptedException {
+        int requestId = onlyRequestIdOf(wrapper.contractDetailsBySymbolRequests().expect(List.of("VELQ")));
+
+        wrapper.contractDetails(requestId, contractDetails(7001, "NASDAQ", "VELQUOR BIO INC", "Healthcare",
+                "Biotechnology"));
+        wrapper.contractDetailsEnd(requestId);
+
+        assertThat(wrapper.contractDetailsBySymbolRequests().awaitAllFinished(0, TimeUnit.SECONDS)).isTrue();
+        assertThat(wrapper.contractDetailsBySymbolRequests().answersOfFinishedRequests()).isEqualTo(Map.of("VELQ",
+                List.of(new StockContractDetails(7001, "NASDAQ", "VELQUOR BIO INC", "Healthcare", "Biotechnology"))));
+    }
+
+    /** The same symbol traded over the counter is another security: only the one on a US stock exchange is kept. */
+    @Test
+    void leavesOutAContractOfTheSymbolOffTheUsStockExchanges() {
+        int requestId = onlyRequestIdOf(wrapper.contractDetailsBySymbolRequests().expect(List.of("MRWS")));
+
+        wrapper.contractDetails(requestId, contractDetails(7002, "PINK", "MARROW HOLDINGS", "Industrial", "Misc"));
+        wrapper.contractDetails(requestId, contractDetails(7003, "NYSE", "MARROW STEEL CO", "Basic Materials", "Steel"));
+        wrapper.contractDetailsEnd(requestId);
+
+        assertThat(wrapper.contractDetailsBySymbolRequests().answersOfFinishedRequests().get("MRWS"))
+                .extracting(StockContractDetails::conId).containsExactly(7003);
+    }
+
+    /** IB answers a symbol it doesn't know with an error (200): that request ends, without a contract. */
+    @Test
+    void aSymbolIbDoesNotKnowEndsWithoutAContract() throws InterruptedException {
+        int requestId = onlyRequestIdOf(wrapper.contractDetailsBySymbolRequests().expect(List.of("NONE")));
+
+        wrapper.error(requestId, 0L, 200, "No security definition has been found for the request", "");
+
+        assertThat(wrapper.contractDetailsBySymbolRequests().awaitAllFinished(0, TimeUnit.SECONDS)).isTrue();
+        assertThat(wrapper.contractDetailsBySymbolRequests().answersOfFinishedRequests()).isEmpty();
+    }
+
+    /** The two kinds of contract requests are numbered apart: an answer by contract id never lands among the symbols'. */
+    @Test
+    void aRequestByContractIdAndOneBySymbolStayApart() {
+        wrapper.contractDetailsRequests().expect(List.of(APPLE_CON_ID));
+        int requestId = onlyRequestIdOf(wrapper.contractDetailsBySymbolRequests().expect(List.of("VELQ")));
+
+        wrapper.contractDetails(APPLE_DETAILS_REQUEST_ID, contractDetails(APPLE_CON_ID, "NASDAQ", "APPLE INC",
+                "Technology", "Computers"));
+        wrapper.contractDetailsEnd(APPLE_DETAILS_REQUEST_ID);
+        wrapper.contractDetails(requestId, contractDetails(7001, "NASDAQ", "VELQUOR BIO INC", "Healthcare",
+                "Biotechnology"));
+        wrapper.contractDetailsEnd(requestId);
+
+        assertThat(wrapper.contractDetailsRequests().answersOfFinishedRequests().keySet())
+                .containsExactly(APPLE_CON_ID);
+        assertThat(wrapper.contractDetailsBySymbolRequests().answersOfFinishedRequests().keySet())
+                .containsExactly("VELQ");
+    }
+
     // ── daily closes ────────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -276,6 +335,11 @@ class PortfolioWrapperTest {
 
     private Bar bar(String time, double close) {
         return new Bar(time, close, close, close, close, Decimal.get(0), 0, Decimal.get(0));
+    }
+
+    /** The request id of a batch sent for one key. */
+    private int onlyRequestIdOf(Map<Integer, ?> keyByRequestId) {
+        return keyByRequestId.keySet().iterator().next();
     }
 
     /** What a scan's row carries: little more than the contract id and the symbol. */

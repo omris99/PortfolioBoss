@@ -41,7 +41,7 @@ import portfolioboss.model.portfolio.HoldingStatus;
 import portfolioboss.model.recommendations.HotStockLabel;
 import portfolioboss.recommendations.CandidateWithItsList;
 import portfolioboss.recommendations.ScanListsService;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.Stock;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -219,7 +219,7 @@ public class RecommendationsReadService {
                                                 boolean inShortList) {
         ScanCandidateEntity candidate = candidateWithItsList.candidate();
         HotStockCalculator hotStock = candidateWithItsList.hotStock();
-        Stock finnhubStock = latestAnalysis == null ? null : latestAnalysis.finnhubStock();
+        Stock finnhubStock = latestAnalysis == null ? null : latestAnalysis.companyFigures();
         StockAnalysisResult analysisResult = latestAnalysis == null ? null : latestAnalysis.result();
         RecommendationCandidate recommendationCandidate = new RecommendationCandidate(candidate.id(), hotStock,
                 candidateWithItsList.analystTarget(), finnhubStock, analysisResult);

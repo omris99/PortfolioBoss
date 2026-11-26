@@ -41,9 +41,9 @@ import portfolioboss.model.recommendations.WeighedAnalystMove;
 import portfolioboss.model.recommendations.WeighedNewsEvent;
 import portfolioboss.recommendations.ScanListsService;
 import portfolioboss.recommendations.ShortList;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.EarningsDate;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
+import portfolioboss.sources.Stock;
 import portfolioboss.sync.PortfolioSyncService;
 
 import java.math.BigDecimal;
@@ -195,7 +195,7 @@ class RecommendationsReadServiceTest {
         storeTheScan();
         ScanCandidateEntity hotaOfTheFirstScan = candidateNamed("HOTA");
         Stock finnhubStock = new Stock("HOTA", new EarningsDate(dateOf(NEXT_SCAN).plusDays(10), "bmo"),
-                new CompanyFacts(8.0, 15.0, 2.5, 25.0));
+                new CompanyFacts(8.0, 15.0, 2.5, 25.0), "Finnhub");
         stockAnalysisRepository.save(analysisOf(hotaOfTheFirstScan, null, SYNCED_AT.plusSeconds(3600)));
         stockAnalysisRepository.save(analysisOf(hotaOfTheFirstScan, finnhubStock, SYNCED_AT.plusSeconds(7200)));
         storeTheScanAt(NEXT_SCAN);
@@ -205,7 +205,8 @@ class RecommendationsReadServiceTest {
         assertThat(hota.candidateId()).isNotEqualTo(hotaOfTheFirstScan.id());
         assertThat(hota.analysis().analyzedAt()).isEqualTo(SYNCED_AT.plusSeconds(7200));
         CompanyInfoResponse companyInfo = hota.companyInfo();
-        assertThat(companyInfo.finnhubAnsweredAt()).isEqualTo(SYNCED_AT.plusSeconds(7200));
+        assertThat(companyInfo.answeredBy()).isEqualTo("Finnhub");
+        assertThat(companyInfo.answeredAt()).isEqualTo(SYNCED_AT.plusSeconds(7200));
         assertThat(companyInfo.companyFacts()).isEqualTo(finnhubStock.companyFacts());
         assertThat(companyInfo.nextEarningsDate()).isEqualTo(finnhubStock.nextEarningsDate());
         assertThat(companyInfo.riskSigns()).containsExactly(RiskSign.HIGH_DEBT);
@@ -233,7 +234,7 @@ class RecommendationsReadServiceTest {
                 AnalystActionType.REITERATE, "Buy", "Buy", 110.0, 110.0, "https://example.com/hota-kept", null);
         StockAnalysisResult result = new StockAnalysisResult(List.of(), List.of(upgrade, reiterated), List.of(), null,
                 null, null, List.of(partnership));
-        Stock finnhubStock = new Stock("HOTA", null, new CompanyFacts(8.0, 15.0, 0.5, 60.0));
+        Stock finnhubStock = new Stock("HOTA", null, new CompanyFacts(8.0, 15.0, 0.5, 60.0), "Finnhub");
         stockAnalysisRepository.save(analysisOf(candidateNamed("HOTA"), finnhubStock, analyzedAt, result));
 
         HotStockResponse hota = stockNamed("HOTA");

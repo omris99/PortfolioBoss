@@ -1,4 +1,4 @@
-package portfolioboss.stocks;
+package portfolioboss.sources.finnhub;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -7,6 +7,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
+import portfolioboss.sources.Stock;
 
 import java.time.LocalDate;
 
@@ -80,7 +83,7 @@ class FinnhubClientTest {
         fakeFinnhub.verify();
         assertThat(stock).isEqualTo(new Stock("AAPL",
                 new EarningsDate(LocalDate.of(2026, 11, 2), "amc"),
-                new CompanyFacts(14.24, 27.62, 0.7844, 38.8212)));
+                new CompanyFacts(14.24, 27.62, 0.7844, 38.8212), "Finnhub"));
     }
 
     @Test
@@ -120,7 +123,7 @@ class FinnhubClientTest {
 
         Stock stock = finnhubClient.stock("NOSUCHSYMBOLX", TODAY);
 
-        assertThat(stock).isEqualTo(new Stock("NOSUCHSYMBOLX", null, new CompanyFacts(null, null, null, null)));
+        assertThat(stock).isEqualTo(new Stock("NOSUCHSYMBOLX", null, new CompanyFacts(null, null, null, null), "Finnhub"));
     }
 
     /** A wrong key, or more than 60 calls in a minute: the call fails. */

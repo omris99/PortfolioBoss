@@ -27,7 +27,8 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
  *   <li>{@code db}: what is stored, and only that;</li>
  *   <li>{@code calculation}: the pure rules;</li>
  *   <li>{@code model}: the values stored or sent as they are;</li>
- *   <li>the sources — {@code ib}, {@code stocks}, {@code ai}, {@code exchangerates}, {@code flex}: they fetch and read;</li>
+ *   <li>the sources — {@code ib}, {@code sources} (its sockets, and a folder per source: {@code finviz},
+ *   {@code finnhub}), {@code ai}, {@code exchangerates}, {@code flex}: they fetch and read;</li>
  *   <li>the base: {@code utils}, {@code exceptions}.</li>
  * </ol>
  * Inside a layer a feature folder may use another (in {@code calculation}, {@code investors} uses {@code portfolio}),
@@ -41,8 +42,9 @@ class ArchitectureTest {
             .importPackages("portfolioboss");
 
     private static final String[] FLOW_PACKAGES = {"portfolioboss.sync..", "portfolioboss.recommendations..",
-            "portfolioboss.analysis..", "portfolioboss.alerts..", "portfolioboss.tax.."};
-    private static final String[] SOURCE_PACKAGES = {"portfolioboss.ib..", "portfolioboss.stocks..",
+            "portfolioboss.recommendationlists..", "portfolioboss.analysis..", "portfolioboss.alerts..",
+            "portfolioboss.tax.."};
+    private static final String[] SOURCE_PACKAGES = {"portfolioboss.ib..", "portfolioboss.sources..",
             "portfolioboss.ai..", "portfolioboss.exchangerates..", "portfolioboss.flex.."};
 
     @Test
@@ -76,9 +78,12 @@ class ArchitectureTest {
         slices().matching("portfolioboss.(*)..").should().beFreeOfCycles().check(APP_CLASSES);
     }
 
-    /** Once for each layer with a folder per feature: {@code portfolioboss.db.tax..} is the folder {@code tax} of db. */
+    /**
+     * Once for each layer with a folder per feature: {@code portfolioboss.db.tax..} is the folder {@code tax} of db; in
+     * {@code sources} a folder is a source ({@code finviz}, {@code finnhub}), and no source uses another.
+     */
     @ParameterizedTest
-    @ValueSource(strings = {"api", "db", "calculation", "model"})
+    @ValueSource(strings = {"api", "db", "calculation", "model", "sources"})
     void theFeatureFoldersOfALayerHaveNoCycle(String layer) {
         slices().matching("portfolioboss." + layer + ".(*)..").should().beFreeOfCycles().check(APP_CLASSES);
     }

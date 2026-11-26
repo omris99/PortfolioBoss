@@ -93,10 +93,11 @@ export function NextEarningsDate({
   companyInfo: CompanyInfo | null;
   markPlacement: 'below' | 'beside';
 }) {
-  if (companyInfo === null) return <Hint text="No answer from Finnhub">{EMPTY_VALUE}</Hint>;
+  if (companyInfo === null) return <Hint text="No company figures yet">{EMPTY_VALUE}</Hint>;
   const earningsDate = companyInfo.nextEarningsDate;
   if (earningsDate === null) {
-    return <Hint text="No report in the next four months, in Finnhub’s calendar">{EMPTY_VALUE}</Hint>;
+    const hint = `No report in the next four months, as far as ${companyInfo.answeredBy} knows`;
+    return <Hint text={hint}>{EMPTY_VALUE}</Hint>;
   }
   const date = <Hint text={earningsText(earningsDate)}>{formatDate(earningsDate.date)}</Hint>;
   if (!companyInfo.reportsWithin14Days) return date;

@@ -50,21 +50,30 @@ public class PortfolioWrapper extends DefaultEWrapper {
     private volatile boolean connectionFailed = false;
     private volatile PortfolioSnapshot snapshot;
 
-    // After the portfolio, four kinds of requests: the scans (by scan code), the contract details of the stocks they
-    // found, their Dow Jones headlines and the daily closes (all three by contract id). Each batch numbers its requests
-    // from its own start, far enough apart never to meet: two scans, a contract-details request for each stock found, a
-    // daily-close request for each holding, SPY and stock found, and a round of headline requests for each page.
-    // Nothing else in PortfolioBoss uses request ids.
+    // After the portfolio, five kinds of requests: the scans (by scan code), the contract details of the stocks they
+    // found, their Dow Jones headlines and the daily closes (all three by contract id), and the contracts of the stocks
+    // known only by their symbol (the Recommendations page's lists). Each batch numbers its requests from its own start,
+    // far enough apart never to meet: two scans, a contract-details request for each stock found, a daily-close request
+    // for each holding, SPY and stock found, a round of headline requests for each page (at most 8 rounds), and a
+    // contract request for each symbol. Nothing else in PortfolioBoss uses request ids.
     protected static final int FIRST_SCAN_REQUEST_ID = 100;
     protected static final int FIRST_DAILY_CLOSE_REQUEST_ID = 1000;
     protected static final int FIRST_CONTRACT_DETAILS_REQUEST_ID = 5000;
     protected static final int FIRST_NEWS_REQUEST_ID = 10_000;
     /** Each round of headline requests numbers from its own thousand: a scan finds at most 100 stocks. */
     protected static final int NEWS_REQUEST_IDS_PER_ROUND = 1_000;
+    protected static final int FIRST_CONTRACT_DETAILS_BY_SYMBOL_REQUEST_ID = 30_000;
+    /**
+     * The US stock exchanges: a stock asked for by its symbol is the contract listed on one of them — the exchanges
+     * Finviz covers. A contract of the same symbol elsewhere (over the counter) is another security.
+     */
+    protected static final Set<String> US_STOCK_EXCHANGES = Set.of("NYSE", "NASDAQ", "AMEX");
     private static final String WHAT_A_NEWS_REQUEST_READS = "Dow Jones headlines of contract";
     private final RequestBatch<String, ScanRow> scanRequests = new RequestBatch<>("scan", FIRST_SCAN_REQUEST_ID);
     private final RequestBatch<Integer, StockContractDetails> contractDetailsRequests =
             new RequestBatch<>("contract details of contract", FIRST_CONTRACT_DETAILS_REQUEST_ID);
+    private final RequestBatch<String, StockContractDetails> contractDetailsBySymbolRequests =
+            new RequestBatch<>("contract of symbol", FIRST_CONTRACT_DETAILS_BY_SYMBOL_REQUEST_ID);
     private final RequestBatch<Integer, DailyClose> dailyCloseRequests =
             new RequestBatch<>("daily closes of contract", FIRST_DAILY_CLOSE_REQUEST_ID);
     /** The current round of headline requests — one round per page, each replacing the one before. */
@@ -97,6 +106,11 @@ public class PortfolioWrapper extends DefaultEWrapper {
 
     protected RequestBatch<Integer, StockContractDetails> contractDetailsRequests() {
         return contractDetailsRequests;
+    }
+
+    /** The contracts asked for by symbol: each answer is a contract on a US stock exchange, with its own conId. */
+    protected RequestBatch<String, StockContractDetails> contractDetailsBySymbolRequests() {
+        return contractDetailsBySymbolRequests;
     }
 
     protected RequestBatch<Integer, DailyClose> dailyCloseRequests() {
@@ -198,19 +212,32 @@ public class PortfolioWrapper extends DefaultEWrapper {
 
     // ── contract details (of the stocks the scans found) ────────────────────────────────────────
 
+    /**
+     * One answer to a request by contract id — that contract — or by symbol: every contract of the symbol, of which only
+     * those on a US stock exchange are kept.
+     */
     @Override
     public void contractDetails(int requestId, ContractDetails contractDetails) {
+        Contract contract = contractDetails.contract();
         Integer conId = contractDetailsRequests.keyOf(requestId);
         if (conId != null) {
-            contractDetailsRequests.addAnswer(requestId, new StockContractDetails(conId,
-                    contractDetails.contract().primaryExch(), contractDetails.longName(), contractDetails.industry(),
+            contractDetailsRequests.addAnswer(requestId, new StockContractDetails(conId, contract.primaryExch(),
+                    contractDetails.longName(), contractDetails.industry(), contractDetails.category()));
+            return;
+        }
+        if (contractDetailsBySymbolRequests.keyOf(requestId) != null
+                && US_STOCK_EXCHANGES.contains(contract.primaryExch())) {
+            contractDetailsBySymbolRequests.addAnswer(requestId, new StockContractDetails(contract.conid(),
+                    contract.primaryExch(), contractDetails.longName(), contractDetails.industry(),
                     contractDetails.category()));
         }
     }
 
     @Override
     public void contractDetailsEnd(int requestId) {
-        contractDetailsRequests.finish(requestId);
+        if (!contractDetailsRequests.finish(requestId)) {
+            contractDetailsBySymbolRequests.finish(requestId);
+        }
     }
 
     // ── Dow Jones's headlines (the analysts' price targets of the stocks found) ─────────────────
@@ -279,7 +306,8 @@ public class PortfolioWrapper extends DefaultEWrapper {
         // An error for one request of a batch ends only that request — e.g. 162, no market data permission for one
         // contract, which then keeps the closes of an earlier sync.
         for (RequestBatch<?, ?> requestBatch :
-                List.of(scanRequests, contractDetailsRequests, newsRequests, dailyCloseRequests)) {
+                List.of(scanRequests, contractDetailsRequests, contractDetailsBySymbolRequests, newsRequests,
+                        dailyCloseRequests)) {
             if (requestBatch.finishWithError(requestId, errorCode, errorMessage)) {
                 return;
             }

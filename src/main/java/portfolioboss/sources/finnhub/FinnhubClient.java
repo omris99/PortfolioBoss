@@ -1,4 +1,4 @@
-package portfolioboss.stocks;
+package portfolioboss.sources.finnhub;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -9,6 +9,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
+import portfolioboss.sources.Stock;
 import portfolioboss.utils.Utils;
 
 import java.time.Duration;
@@ -23,10 +26,15 @@ import java.util.List;
  * {@code RestClient}, like {@code ai.TavilyClient}. The key — {@code FINNHUB_API_KEY} in the git-ignored
  * {@code config/local.env}, or an environment variable of the same name, which wins — goes in a header, not in the
  * address, so it is never part of an address an error prints. Without the key Finnhub's part is off and the rest of the
- * app works as usual: callers ask {@link #hasApiKey()} first. The key itself is never printed.
+ * app works as usual: callers ask {@link #hasApiKey()} first. The key itself is never printed. Since
+ * RECOMMENDATIONS_FINVIZ_TODO.md, decision 9, the app asks it only through {@link FinnhubCompanyFigures}, the second
+ * source of the company figures, after Finviz.
  */
 @Component
 public class FinnhubClient {
+
+    /** The name the screens show beside its answer: "From Finnhub, answered …". */
+    public static final String SOURCE_NAME = "Finnhub";
 
     private static final String KEY_NAME = "FINNHUB_API_KEY";
     private static final String KEY_HEADER = "X-Finnhub-Token";
@@ -73,19 +81,19 @@ public class FinnhubClient {
      * comes from the caller, so the answer doesn't depend on the clock.
      */
     public Stock stock(String symbol, LocalDate today) {
-        return new Stock(symbol, nextEarningsDate(symbol, today), companyFacts(symbol));
+        return new Stock(symbol, nextEarningsDate(symbol, today), companyFacts(symbol), SOURCE_NAME);
     }
 
     /**
      * Like {@link #stock}, but never throws: a call that fails — no network, a refused key, a time limit passed — prints
-     * {@code [stocks error] SYMBOL: why} and gives {@code null}, so that one stock's failure leaves the others' answers
+     * {@code [finnhub error] SYMBOL: why} and gives {@code null}, so that one stock's failure leaves the others' answers
      * and the rest of the run as they are.
      */
     public Stock stockOrNullOnFailure(String symbol, LocalDate today) {
         try {
             return stock(symbol, today);
         } catch (RuntimeException e) {
-            System.err.println("[stocks error] " + symbol + ": " + e.getMessage());
+            System.err.println("[finnhub error] " + symbol + ": " + e.getMessage());
             return null;
         }
     }
@@ -113,7 +121,7 @@ public class FinnhubClient {
     @EventListener(ApplicationReadyEvent.class)
     private void printStatus() {
         if (!hasApiKey()) {
-            System.out.println("[stocks] Finnhub off: " + KEY_NAME + " is not set (config/local.env)");
+            System.out.println("[finnhub] Finnhub off: " + KEY_NAME + " is not set (config/local.env)");
         }
     }
 

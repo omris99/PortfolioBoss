@@ -9,9 +9,9 @@ import portfolioboss.calculation.marketdata.AnalystTargetCalculator;
 import portfolioboss.calculation.marketdata.Momentum;
 import portfolioboss.calculation.marketdata.RiskSignsCalculator;
 import portfolioboss.model.marketdata.RiskSign;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.EarningsDate;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.EarningsDate;
+import portfolioboss.sources.Stock;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -36,7 +36,7 @@ class RecommendationCandidateTest {
     @Test
     void theRiskSignsAndTheTimingNoteComeFromFinnhubAndTheCloses() {
         Stock lossMakingCompany = new Stock("ABCD", new EarningsDate(TODAY.plusDays(3), "bmo"),
-                new CompanyFacts(10.0, -5.0, 0.5, 30.0));
+                new CompanyFacts(10.0, -5.0, 0.5, 30.0), "Finnhub");
         RecommendationCandidate candidate =
                 new RecommendationCandidate(1, hotStock(-10.0), NO_TARGETS, lossMakingCompany, null);
 
@@ -52,7 +52,7 @@ class RecommendationCandidateTest {
                 "An expanded partnership with a giant.", "A headline", "https://example.com/news");
         StockAnalysisResult analysis = new StockAnalysisResult(List.of(), List.of(), List.of(), null, null, null,
                 List.of(partnership));
-        Stock stock = new Stock("ABCD", null, HEALTHY_COMPANY);
+        Stock stock = new Stock("ABCD", null, HEALTHY_COMPANY, "Finnhub");
 
         assertThat(new RecommendationCandidate(1, hotStock(UP_IN_A_YEAR), NO_TARGETS, stock, analysis)
                 .newsScore(TODAY))

@@ -31,9 +31,12 @@ import portfolioboss.ib.Scan;
 import portfolioboss.ib.ScanRow;
 import portfolioboss.ib.StockContractDetails;
 import portfolioboss.model.marketdata.RiskSign;
-import portfolioboss.stocks.CompanyFacts;
-import portfolioboss.stocks.FinnhubClient;
-import portfolioboss.stocks.Stock;
+import portfolioboss.sources.CompanyFacts;
+import portfolioboss.sources.finnhub.FinnhubClient;
+import portfolioboss.sources.finnhub.FinnhubCompanyFigures;
+import portfolioboss.sources.finviz.FinvizClient;
+import portfolioboss.sources.finviz.FinvizCompanyFigures;
+import portfolioboss.sources.Stock;
 import portfolioboss.sync.PortfolioSyncService;
 
 import java.math.BigDecimal;
@@ -62,8 +65,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
- * The Recommendations page's paid run against the real PostgreSQL test database, with Tavily, Claude and Finnhub
- * replaced by fixed answers ({@code @MockitoBean}): no test searches, calls Claude or asks Finnhub. A scan of made-up
+ * The Recommendations page's paid run against the real PostgreSQL test database, with Tavily, Claude, Finviz and
+ * Finnhub replaced by fixed answers ({@code @MockitoBean}): no test searches, calls Claude or asks Finviz or Finnhub —
+ * Finviz has no token, so the company figures are Finnhub's, through the real sources in their order. A scan of made-up
  * stocks with a year of closes each, one per calendar day:
  * <ul>
  *   <li>HOT01 … HOT11 — a rise with small waves, each a little steeper than the one before: all HOT, a little more
@@ -78,7 +82,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
 @Import({RecommendationAnalysisService.class, ScanListsService.class, StockAnalysisPipeline.class,
-        PortfolioSyncService.class})
+        PortfolioSyncService.class, FinvizCompanyFigures.class, FinnhubCompanyFigures.class})
 class RecommendationAnalysisServiceTest {
 
     private static final Instant SCANNED_AT = Instant.parse("2026-05-08T21:00:00Z");
@@ -119,6 +123,10 @@ class RecommendationAnalysisServiceTest {
     @MockitoBean
     private StockAnalyzer stockAnalyzer;
 
+    /** Without a token: the company figures go to Finnhub. */
+    @MockitoBean
+    private FinvizClient finvizClient;
+
     @MockitoBean
     private FinnhubClient finnhubClient;
 
@@ -134,7 +142,7 @@ class RecommendationAnalysisServiceTest {
         given(stockAnalyzer.analyze(any(), any(), any())).willReturn(REPLY);
         given(finnhubClient.hasApiKey()).willReturn(true);
         given(finnhubClient.stock(anyString(), any()))
-                .willAnswer(invocation -> new Stock(invocation.getArgument(0), null, HEALTHY_COMPANY));
+                .willAnswer(invocation -> new Stock(invocation.getArgument(0), null, HEALTHY_COMPANY, "Finnhub"));
         // the real one: it calls the stubbed stock(…) and turns its failure into null
         given(finnhubClient.stockOrNullOnFailure(anyString(), any())).willCallRealMethod();
     }
@@ -213,7 +221,8 @@ class RecommendationAnalysisServiceTest {
     @Test
     void aRunThatPicksNoneIsStoredWithNoPicks() {
         given(finnhubClient.stock(anyString(), any()))
-                .willAnswer(invocation -> new Stock(invocation.getArgument(0), null, FALLING_REVENUE_AND_HIGH_DEBT));
+                .willAnswer(invocation ->
+                        new Stock(invocation.getArgument(0), null, FALLING_REVENUE_AND_HIGH_DEBT, "Finnhub"));
 
         RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
         entityManager.flush();
@@ -247,13 +256,14 @@ class RecommendationAnalysisServiceTest {
         entityManager.flush();
 
         assertThat(jdbc.queryForObject("""
-                select finnhub_stock -> 'companyFacts' ->> 'peRatio' from stock_analysis""", String.class))
+                select company_figures -> 'companyFacts' ->> 'peRatio' from stock_analysis""", String.class))
                 .isEqualTo("30.0");
     }
 
     @Test
     void aCandidateWhoseRiskSignsWeighMoreThanTwoIsNotPicked() {
-        given(finnhubClient.stock(eq("HOT01"), any())).willReturn(new Stock("HOT01", null, FALLING_REVENUE_AND_HIGH_DEBT));
+        given(finnhubClient.stock(eq("HOT01"), any()))
+                .willReturn(new Stock("HOT01", null, FALLING_REVENUE_AND_HIGH_DEBT, "Finnhub"));
 
         RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
 
@@ -268,11 +278,11 @@ class RecommendationAnalysisServiceTest {
     @Test
     void theLighterRiskIsPickedFirst() {
         given(finnhubClient.stock(eq("HOT01"), any()))
-                .willReturn(new Stock("HOT01", null, new CompanyFacts(10.0, 20.0, 3.0, 30.0)));
+                .willReturn(new Stock("HOT01", null, new CompanyFacts(10.0, 20.0, 3.0, 30.0), "Finnhub"));
         for (int hotStockNumber = 2; hotStockNumber <= 9; hotStockNumber++) {
             String symbol = "HOT%02d".formatted(hotStockNumber);
             given(finnhubClient.stock(eq(symbol), any()))
-                    .willReturn(new Stock(symbol, null, FALLING_REVENUE_AND_HIGH_DEBT));
+                    .willReturn(new Stock(symbol, null, FALLING_REVENUE_AND_HIGH_DEBT, "Finnhub"));
         }
 
         RecommendationAnalysisRun run = recommendationAnalysisService.analyze(null);
@@ -310,7 +320,7 @@ class RecommendationAnalysisServiceTest {
 
         assertThat(run.analysis().analyzedOutcomes()).hasSize(10);
         assertThat(jdbc.queryForObject("""
-                select stock_analysis.finnhub_stock is null from stock_analysis
+                select stock_analysis.company_figures is null from stock_analysis
                 join scan_candidate on scan_candidate.id = stock_analysis.scan_candidate_id
                 where scan_candidate.symbol = 'HOT01'""", Boolean.class)).isTrue();
         assertThat(run.picks()).extracting(RecommendationPick::symbol)
@@ -349,8 +359,8 @@ class RecommendationAnalysisServiceTest {
 
         assertThatThrownBy(() -> recommendationAnalysisService.analyze(null))
                 .isInstanceOf(AnalysisOffException.class)
-                .hasMessage("The recommendation is off: FINNHUB_API_KEY is not set in config/local.env, and without "
-                        + "the company figures no stock can be picked");
+                .hasMessage("The recommendation is off: neither FINVIZ_TOKEN nor FINNHUB_API_KEY is set in "
+                        + "config/local.env, and without the company figures no stock can be picked");
         verifyNoInteractions(tavilyClient, stockAnalyzer);
 
         recommendationAnalysisService.analyze(candidateIdOf("HOT01"));

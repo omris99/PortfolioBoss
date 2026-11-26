@@ -63,7 +63,7 @@ export function CompanyRow({ label, rule, children }: { label: string; rule?: st
   );
 }
 
-/** When Finnhub answered, then the next report and the four figures; under them why the signs are unknown, if they are. */
+/** Who answered and when, then the next report and the four figures; under them why the signs are unknown, if they are. */
 function CompanyFigures({
   companyInfo,
   finnhubHadNoFiguresHint,
@@ -74,7 +74,9 @@ function CompanyFigures({
   const riskSigns = companyInfo.riskSigns ?? [];
   return (
     <>
-      <p className="mb-4 text-muted">From Finnhub, answered {formatDateTime(companyInfo.finnhubAnsweredAt)}</p>
+      <p className="mb-4 text-muted">
+        From {companyInfo.answeredBy}, answered {formatDateTime(companyInfo.answeredAt)}
+      </p>
       <ul className="divide-y rounded-lg border">
         <CompanyRow label="Next earnings">
           <NextEarnings companyInfo={companyInfo} />

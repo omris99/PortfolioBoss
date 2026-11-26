@@ -9,8 +9,11 @@ import portfolioboss.ib.Holding;
 import portfolioboss.ib.PortfolioSnapshot;
 import portfolioboss.ib.TwsReader;
 import portfolioboss.ib.TwsReading;
-import portfolioboss.stocks.FinnhubClient;
-import portfolioboss.stocks.Stock;
+import portfolioboss.recommendationlists.ListedStocksToRead;
+import portfolioboss.recommendationlists.RecommendationListsDownloadService;
+import portfolioboss.sources.CompanyFiguresSource;
+import portfolioboss.sources.SourcesInOrder;
+import portfolioboss.sources.Stock;
 import portfolioboss.tax.CapitalGainsTaxService;
 import portfolioboss.tax.FlexDownloadService;
 import portfolioboss.tax.SettlementDayRatesService;
@@ -22,23 +25,25 @@ import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 /**
  * One sync from TWS, the same for its two callers — {@code ./run.sh}'s startup and the Sync now button
- * (MY_HOLDINGS_TODO.md, session 5א): whether a scan is due, then the reading from TWS through {@link TwsReader} — the
- * portfolio, the scan when due, the holdings' contract details and Dow Jones targets, the daily closes —, then what
- * Finnhub knows about the holdings in dollars, then all of it stored in one transaction
+ * (MY_HOLDINGS_TODO.md, session 5א): the Recommendations page's lists from Finviz once a trading day
+ * ({@link RecommendationListsDownloadService}, RECOMMENDATIONS_FINVIZ_TODO.md, session 2) — before TWS, so that the same
+ * connection finds their stocks —, whether a scan is due, then the reading from TWS through {@link TwsReader} — the
+ * portfolio, the scan when due, the holdings' contract details and Dow Jones targets, the contracts of the lists' stocks,
+ * the daily closes —, then the
+ * company figures of the holdings in dollars (Finviz first, then Finnhub: RECOMMENDATIONS_FINVIZ_TODO.md, decision 9),
+ * then all of it stored in one transaction
  * ({@link PortfolioSyncService}), then a {@link PortfolioSyncedEvent} for whoever reacts to a sync — the alerts —, then
  * the days of IB's Flex reports not stored yet ({@link FlexDownloadService}, CAPITAL_GAINS_TAX_TODO.md, session 1), then
  * the splits they brought ({@link StockSplitDetectionService}, STOCK_SPLITS_TODO.md), then the Bank of Israel's dollar
  * rates of the settlement days that have none yet ({@link SettlementDayRatesService},
  * session 2), and last the capital gains tax they make, printed ({@link CapitalGainsTaxService}, session 3).
  *
- * <p>Not {@code @Transactional}: reading TWS, asking Finnhub, waiting for IB to prepare a Flex report and asking the Bank
- * of Israel take seconds, and no database connection should wait on them. Each store is a transaction of its own.
+ * <p>Not {@code @Transactional}: reading TWS, asking for the company figures, waiting for IB to prepare a Flex report and
+ * asking the Bank of Israel take seconds, and no database connection should wait on them. Each store is a transaction of
+ * its own.
  */
 @Service
 public class SyncService {
@@ -47,33 +52,40 @@ public class SyncService {
     private static final DateTimeFormatter CONSOLE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault());
     /**
-     * Finnhub is asked only about holdings in dollars: on a foreign exchange IB's symbol is not Finnhub's, and may
-     * belong to another, American company (MY_HOLDINGS_TODO.md, decision 10).
+     * The company figures are asked for only about holdings in dollars: on a foreign exchange IB's symbol is not
+     * Finviz's or Finnhub's, and may belong to another, American company (MY_HOLDINGS_TODO.md, decision 10).
      */
     private static final String US_DOLLAR = "USD";
 
     private final TwsReader twsReader;
     private final PortfolioSyncService portfolioSyncService;
-    private final FinnhubClient finnhubClient;
+    private final SourcesInOrder<Stock> companyFigures;
     private final ApplicationEventPublisher eventPublisher;
     private final FlexDownloadService flexDownloadService;
     private final SettlementDayRatesService settlementDayRatesService;
     private final CapitalGainsTaxService capitalGainsTaxService;
     private final StockSplitDetectionService stockSplitDetectionService;
+    private final RecommendationListsDownloadService recommendationListsDownloadService;
 
-    public SyncService(TwsReader twsReader, PortfolioSyncService portfolioSyncService, FinnhubClient finnhubClient,
+    /**
+     * @param companyFiguresSources every source of the company figures, in their {@code @Order} — Spring hands them so
+     */
+    public SyncService(TwsReader twsReader, PortfolioSyncService portfolioSyncService,
+                       List<CompanyFiguresSource> companyFiguresSources,
                        ApplicationEventPublisher eventPublisher, FlexDownloadService flexDownloadService,
                        SettlementDayRatesService settlementDayRatesService,
                        CapitalGainsTaxService capitalGainsTaxService,
-                       StockSplitDetectionService stockSplitDetectionService) {
+                       StockSplitDetectionService stockSplitDetectionService,
+                       RecommendationListsDownloadService recommendationListsDownloadService) {
         this.twsReader = twsReader;
         this.portfolioSyncService = portfolioSyncService;
-        this.finnhubClient = finnhubClient;
+        this.companyFigures = new SourcesInOrder<>("company figures", companyFiguresSources);
         this.eventPublisher = eventPublisher;
         this.flexDownloadService = flexDownloadService;
         this.settlementDayRatesService = settlementDayRatesService;
         this.capitalGainsTaxService = capitalGainsTaxService;
         this.stockSplitDetectionService = stockSplitDetectionService;
+        this.recommendationListsDownloadService = recommendationListsDownloadService;
     }
 
     /**
@@ -82,14 +94,17 @@ public class SyncService {
      * last sync stored. A database failure of the sync is thrown — the startup exits on it.
      */
     public void syncAtStartup() throws InterruptedException {
-        TwsReading reading = twsReader.readPortfolio(isScanDue());
+        ListedStocksToRead listedStocksToRead = downloadTheListsWhenDue();
+        TwsReading reading = twsReader.readPortfolio(isScanDue(), listedStocksToRead.symbolsToFind(),
+                listedStocksToRead.conIdsToReadClosesOf());
         if (reading == null) {
             // TwsReader already printed why.
             System.out.println("[db] TWS unreachable; serving the portfolio from the last sync, if any");
             storeNewStockSplits();
             return;
         }
-        storeWithFinnhubData(reading);
+        storeWithCompanyFigures(reading);
+        storeTheContractsOfTheListedStocks(listedStocksToRead, reading);
         downloadMissingFlexReports(reading.snapshot());
         storeNewStockSplits();
         downloadMissingDollarRates(reading.snapshot());
@@ -104,13 +119,40 @@ public class SyncService {
      * @throws TwsUnavailableException when TWS can't be read
      */
     public PortfolioSnapshot syncNow() throws InterruptedException {
-        TwsReading reading = twsReader.readPortfolioUnlessBusy(isScanDue());
-        storeWithFinnhubData(reading);
+        ListedStocksToRead listedStocksToRead = downloadTheListsWhenDue();
+        TwsReading reading = twsReader.readPortfolioUnlessBusy(isScanDue(), listedStocksToRead.symbolsToFind(),
+                listedStocksToRead.conIdsToReadClosesOf());
+        storeWithCompanyFigures(reading);
+        storeTheContractsOfTheListedStocks(listedStocksToRead, reading);
         downloadMissingFlexReports(reading.snapshot());
         storeNewStockSplits();
         downloadMissingDollarRates(reading.snapshot());
         printCapitalGainsTax();
         return reading.snapshot();
+    }
+
+    /**
+     * Before TWS: the lists from Finviz when a download is due — never failing the sync —, then what the reading asks IB
+     * for them: the symbols without a contract and the closes, once a trading day, Finviz connected or not.
+     */
+    private ListedStocksToRead downloadTheListsWhenDue() {
+        Instant now = Instant.now();
+        recommendationListsDownloadService.downloadWhenDue(now);
+        return recommendationListsDownloadService.listedStocksToRead(now);
+    }
+
+    /**
+     * After the store, which holds their closes: the contracts found for the lists' symbols, and when their closes were
+     * read. A failure is printed and the sync, already stored, goes on: the next sync after the next US market close
+     * reads them again.
+     */
+    private void storeTheContractsOfTheListedStocks(ListedStocksToRead listedStocksRead, TwsReading reading) {
+        try {
+            recommendationListsDownloadService.storeContractsFound(listedStocksRead, reading.conIdsFoundBySymbol(),
+                    reading.snapshot().asOf());
+        } catch (RuntimeException e) {
+            System.err.println("[db error] could not store the contracts of the lists' stocks: " + e.getMessage());
+        }
     }
 
     /** Once a trading day ({@link ScanSchedule}); when it is not due yet, says why. */
@@ -127,11 +169,11 @@ public class SyncService {
     }
 
     /**
-     * After the connection to TWS has closed: Finnhub, then everything stored together, then the news that a sync is
-     * stored — the alerts are checked on it ({@link PortfolioSyncedEvent}).
+     * After the connection to TWS has closed: the company figures, then everything stored together, then the news that a
+     * sync is stored — the alerts are checked on it ({@link PortfolioSyncedEvent}).
      */
-    private void storeWithFinnhubData(TwsReading reading) {
-        portfolioSyncService.sync(reading, readFinnhubDataOfHoldings(reading.snapshot()));
+    private void storeWithCompanyFigures(TwsReading reading) {
+        portfolioSyncService.sync(reading, readCompanyFiguresOfHoldings(reading.snapshot()));
         eventPublisher.publishEvent(new PortfolioSyncedEvent());
     }
 
@@ -180,43 +222,36 @@ public class SyncService {
     }
 
     /**
-     * The sync's day, by the local calendar: Finnhub's "today", and the day the Flex reports and the exchange rates are
-     * downloaded up to.
+     * The sync's day, by the local calendar: the company figures' "today", and the day the Flex reports and the exchange
+     * rates are downloaded up to.
      */
     private LocalDate syncDateOf(PortfolioSnapshot snapshot) {
         return LocalDate.ofInstant(snapshot.asOf(), ZoneId.systemDefault());
     }
 
     /**
-     * What Finnhub knows about each holding in dollars — its next report and four of the company's figures
-     * (MY_HOLDINGS_TODO.md, decision 10) —, every holding at once. Only the symbol leaves the app. Empty without the
-     * key; a holding whose call failed is left out, and keeps what was stored before.
+     * The company figures of each holding in dollars — its next report and four of the company's figures
+     * (MY_HOLDINGS_TODO.md, decision 10) —, from Finviz first and Finnhub for what Finviz didn't answer
+     * ({@link SourcesInOrder}, which prints who answered). Only the symbols leave the app. Empty while no source is
+     * connected; a holding no source answered for is left out, and keeps what was stored before.
      */
-    private Map<Integer, Stock> readFinnhubDataOfHoldings(PortfolioSnapshot snapshot) {
-        if (!finnhubClient.hasApiKey()) {
+    private Map<Integer, Stock> readCompanyFiguresOfHoldings(PortfolioSnapshot snapshot) {
+        if (!companyFigures.isAnySourceConnected()) {
             return Map.of();
         }
-        LocalDate today = syncDateOf(snapshot);
         List<Holding> holdingsInDollars = snapshot.holdings().stream()
                 .filter(holding -> US_DOLLAR.equals(holding.currency()))
                 .toList();
-        Map<Integer, Future<Stock>> pendingFinnhubDataByConId = new LinkedHashMap<>();
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            for (Holding holding : holdingsInDollars) {
-                pendingFinnhubDataByConId.put(holding.conId(),
-                        executor.submit(() -> finnhubClient.stockOrNullOnFailure(holding.symbol(), today)));
-            }
-        }   // closing the executor waits for every call to end
+        List<String> symbols = holdingsInDollars.stream().map(Holding::symbol).toList();
+        Map<String, Stock> companyFiguresBySymbol = companyFigures.answersFor(symbols, syncDateOf(snapshot));
 
-        Map<Integer, Stock> finnhubDataByConId = new LinkedHashMap<>();
-        pendingFinnhubDataByConId.forEach((conId, pendingFinnhubData) -> {
-            Stock finnhubData = pendingFinnhubData.resultNow();
-            if (finnhubData != null) {
-                finnhubDataByConId.put(conId, finnhubData);
+        Map<Integer, Stock> companyFiguresByConId = new LinkedHashMap<>();
+        for (Holding holding : holdingsInDollars) {
+            Stock companyFiguresOfTheHolding = companyFiguresBySymbol.get(holding.symbol());
+            if (companyFiguresOfTheHolding != null) {
+                companyFiguresByConId.put(holding.conId(), companyFiguresOfTheHolding);
             }
-        });
-        System.out.printf("[stocks] Finnhub answered for %d of %d holdings in dollars%n",
-                finnhubDataByConId.size(), holdingsInDollars.size());
-        return finnhubDataByConId;
+        }
+        return companyFiguresByConId;
     }
 }

@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
  */
 public final class AppMetadata {
 
-    public static final String VERSION = "0.41.1";
+    public static final String VERSION = "0.42.0";
     public static final String APP_NAME = "PortfolioBoss";
 
     private static final String STARTUP_TIME = LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmm"));
@@ -30,6 +30,20 @@ public final class AppMetadata {
 
 /*
  * Changelog:
+ * VERSION 0.42.0: [Finviz first, a socket per kind of data]
+ * sources: a new package of sockets (DataSource, StockDataSource, CompanyFiguresSource) and a folder per source, sources/finviz and sources/finnhub, in place of stocks.
+ * SourcesInOrder: asks the sources of one kind of data in their @Order, Finviz first; one that is off, fails or doesn't know a stock passes it on, a whole stock at a time.
+ * Company figures: the holdings' on every sync and the recommendation analysis' come from Finviz first, Finnhub for the rest; without FINVIZ_TOKEN nothing changes.
+ * FinvizClient: Finviz Elite's screen export with FINVIZ_TOKEN from config/local.env; a 429 is tried once more, and no error prints the address that holds the token.
+ * FinvizScreenerReader: reads a screen's CSV by column names, in either known form of each value; anything else fails the screen naming the column and the line.
+ * FinvizScreen and FinvizScreens: the three screens of the new Recommendations lists, fast growth, slow growth and value, with the user's filters, PEG and P/B among the columns.
+ * RecommendationListsDownloadService: once a trading day, before TWS, the sync downloads the three lists under IB's symbols; one list failing stores none and never fails the sync.
+ * TwsReader: finds the lists' stocks' contracts by symbol on the same connection (NYSE, NASDAQ, AMEX), and reads their closes once a trading day, Finviz connected or not.
+ * TwsReader: daily closes are asked in rounds of at most 50, IB's documented limit of open historical requests; the console says how many rounds.
+ * V21: the stock_lists_download and listed_stock tables; stock.finnhub_data and stock_analysis.finnhub_stock renamed company_figures, since Finviz fills them first.
+ * CompanyInfoResponse: answeredBy says which source answered and answeredAt replaces finnhubAnsweredAt; the Company tab reads "From Finviz, answered …" or "From Finnhub".
+ * Console: Finnhub's lines start with [finnhub] instead of [stocks]; new [finviz], [sources] and [recommendationlists] lines.
+ *
  * VERSION 0.41.1: [Steadier Averaging rows, the bell on the right]
  * WhatToKnowLine: the line under each Averaging row is a box of its own, a light grey from top to bottom, so it no longer reads as a second header row of the table.
  * WhatToKnowLine: Company risks has the widest slot, and each company risk and each Signal warning sign has a line of its own, so none breaks mid-phrase.

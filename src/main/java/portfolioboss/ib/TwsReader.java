@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 /**
  * The one place that connects to TWS. It owns the TWS host, port and client id, opens a new {@link IbGateway} for each
@@ -40,6 +41,13 @@ public class TwsReader {
     private static final int SCAN_TIMEOUT_SECONDS = 10;
     private static final int CONTRACT_DETAILS_TIMEOUT_SECONDS = 15;
     private static final int DAILY_CLOSES_TIMEOUT_SECONDS = 20;
+    /**
+     * IB documents at most 50 historical-data requests open at once; a reading of the Recommendations page's lists asks for
+     * a few hundred contracts' closes, so they are sent in rounds of 50, each waited for (its own timeout).
+     */
+    private static final int DAILY_CLOSE_REQUESTS_AT_ONCE = 50;
+    /** How many symbols not found are named in the console line; the count is always given. */
+    private static final int SYMBOLS_NOT_FOUND_NAMED = 10;
     // Read one at a time on 2026-10-29, a page of headlines took a fifth of a second; a busy stock has some 1,200 Dow
     // Jones headlines in half a year (CRWD) — four pages.
     private static final int NEWS_ROUND_TIMEOUT_SECONDS = 20;
@@ -63,11 +71,16 @@ public class TwsReader {
     /**
      * {@code ./run.sh}'s startup: everything {@link #readEverythingOnOneConnection} reads. Waits for a reading already
      * running to end. {@code null} when the portfolio could not be read; the reason has been printed.
+     *
+     * @param symbolsToFind         stocks known only by their symbol, as IB writes it: their contracts are found, and
+     *                              their closes read
+     * @param moreConIdsToReadClosesOf contracts whose closes are read besides the holdings', SPY's and the scan's
      */
-    public TwsReading readPortfolio(boolean withScan) throws InterruptedException {
+    public TwsReading readPortfolio(boolean withScan, Collection<String> symbolsToFind,
+                                    Collection<Integer> moreConIdsToReadClosesOf) throws InterruptedException {
         oneReadingAtATime.lock();
         try {
-            return readEverythingOnOneConnection(withScan);
+            return readEverythingOnOneConnection(withScan, symbolsToFind, moreConIdsToReadClosesOf);
         } catch (TwsUnavailableException e) {
             System.err.println(e.reason());
             return null;
@@ -82,12 +95,14 @@ public class TwsReader {
      * @throws TwsBusyException        while another reading runs: the startup's, a scan, or another press of the button
      * @throws TwsUnavailableException when TWS can't be read; the reason has been printed
      */
-    public TwsReading readPortfolioUnlessBusy(boolean withScan) throws InterruptedException {
+    public TwsReading readPortfolioUnlessBusy(boolean withScan, Collection<String> symbolsToFind,
+                                              Collection<Integer> moreConIdsToReadClosesOf)
+            throws InterruptedException {
         if (!oneReadingAtATime.tryLock()) {
             throw new TwsBusyException(ANOTHER_READING_RUNS);
         }
         try {
-            return readEverythingOnOneConnection(withScan);
+            return readEverythingOnOneConnection(withScan, symbolsToFind, moreConIdsToReadClosesOf);
         } catch (TwsUnavailableException e) {
             System.err.println(e.reason());
             throw e;
@@ -100,11 +115,15 @@ public class TwsReader {
      * One connection, opened here and closed at the end: the portfolio, then — when {@code withScan} — the scans for hot
      * stocks with the contract details of the stocks they found, then the holdings' contract details, then the analysts'
      * price targets in the Dow Jones headlines of the stocks the scan kept and of the holdings, in the same rounds, then
-     * the daily closes of the holdings, of SPY and of the stocks the scan kept. The caller holds the lock.
+     * the contracts of the stocks known only by their symbol, then the daily closes of the holdings, of SPY, of the stocks
+     * the scan kept, of the stocks found by their symbol and of {@code moreConIdsToReadClosesOf}. The caller holds the
+     * lock.
      *
      * @throws TwsUnavailableException when the portfolio could not be read
      */
-    private TwsReading readEverythingOnOneConnection(boolean withScan) throws InterruptedException {
+    private TwsReading readEverythingOnOneConnection(boolean withScan, Collection<String> symbolsToFind,
+                                                     Collection<Integer> moreConIdsToReadClosesOf)
+            throws InterruptedException {
         IbGateway gateway = new IbGateway();
         try {
             PortfolioSnapshot snapshot = connectAndReadPortfolio(gateway);
@@ -127,14 +146,18 @@ public class TwsReader {
                     analystPriceTargetsOfStocks(companyNamesOfScannedStocks(scan).keySet(),
                             analystPriceTargetsOfAllStocks));
 
+            Map<String, Integer> conIdsFoundBySymbol = findContractsBySymbol(gateway, symbolsToFind);
+
             Set<Integer> conIds = new LinkedHashSet<>();
             snapshot.holdings().forEach(holding -> conIds.add(holding.conId()));
             conIds.add(Benchmark.SPY_CON_ID);
             if (scan != null) {
                 scan.candidates().forEach(candidate -> conIds.add(candidate.conId()));
             }
+            conIds.addAll(conIdsFoundBySymbol.values());
+            conIds.addAll(moreConIdsToReadClosesOf);
             return new TwsReading(snapshot, readDailyCloses(gateway, conIds), scanWithAnalystPriceTargets,
-                    holdingContractDetailsByConId, holdingAnalystPriceTargetsByConId);
+                    holdingContractDetailsByConId, holdingAnalystPriceTargetsByConId, conIdsFoundBySymbol);
         } finally {
             gateway.disconnect();
         }
@@ -227,6 +250,30 @@ public class TwsReader {
             System.out.println("[ib] left out, not on NYSE or NASDAQ: " + String.join(", ", leftOutStocks));
         }
         return scan;
+    }
+
+    /**
+     * Still connected: the contract of each stock known only by its symbol — the Recommendations page's lists
+     * (RECOMMENDATIONS_FINVIZ_TODO.md, session 2) —, on a US stock exchange. Prints how many were found, and names the
+     * ones that weren't. Empty, without a request, for no symbol.
+     */
+    private Map<String, Integer> findContractsBySymbol(IbGateway gateway, Collection<String> symbols)
+            throws InterruptedException {
+        if (symbols.isEmpty()) {
+            return Map.of();
+        }
+        gateway.requestContractsBySymbol(symbols);
+        if (!gateway.awaitContractsBySymbol(CONTRACT_DETAILS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            System.out.println("[ib] contracts still missing after " + CONTRACT_DETAILS_TIMEOUT_SECONDS
+                    + "s; keeping what arrived");
+        }
+        Map<String, Integer> conIdsBySymbol = gateway.conIdsBySymbol();
+        List<String> notFound = symbols.stream().filter(symbol -> !conIdsBySymbol.containsKey(symbol)).toList();
+        String namesNotFound = notFound.stream().limit(SYMBOLS_NOT_FOUND_NAMED).collect(Collectors.joining(", "))
+                + (notFound.size() > SYMBOLS_NOT_FOUND_NAMED ? ", …" : "");
+        System.out.printf("[ib] contracts found for %d of %d symbols%s%n", conIdsBySymbol.size(), symbols.size(),
+                notFound.isEmpty() ? "" : "; not found: " + namesNotFound);
+        return conIdsBySymbol;
     }
 
     /**
@@ -352,10 +399,19 @@ public class TwsReader {
      */
     private Map<Integer, List<DailyClose>> readDailyCloses(IbGateway gateway, Collection<Integer> conIds)
             throws InterruptedException {
-        gateway.requestDailyCloses(conIds);
-        if (!gateway.awaitDailyCloses(DAILY_CLOSES_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            System.out.println("[ib] daily closes still missing after " + DAILY_CLOSES_TIMEOUT_SECONDS
-                    + "s; keeping what arrived");
+        List<Integer> allConIds = List.copyOf(conIds);
+        int roundCount = (allConIds.size() + DAILY_CLOSE_REQUESTS_AT_ONCE - 1) / DAILY_CLOSE_REQUESTS_AT_ONCE;
+        String inRounds = roundCount > 1
+                ? ", in " + roundCount + " rounds of up to " + DAILY_CLOSE_REQUESTS_AT_ONCE
+                : "";
+        System.out.printf("[ib] requesting a year of daily closes for %d contracts%s%n", allConIds.size(), inRounds);
+        for (int start = 0; start < allConIds.size(); start += DAILY_CLOSE_REQUESTS_AT_ONCE) {
+            gateway.requestDailyCloses(
+                    allConIds.subList(start, Math.min(start + DAILY_CLOSE_REQUESTS_AT_ONCE, allConIds.size())));
+            if (!gateway.awaitDailyCloses(DAILY_CLOSES_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                System.out.println("[ib] daily closes still missing after " + DAILY_CLOSES_TIMEOUT_SECONDS
+                        + "s; keeping what arrived");
+            }
         }
         Map<Integer, List<DailyClose>> dailyCloses = gateway.dailyCloses();
         System.out.printf("[ib] daily closes received for %d of %d contracts%n", dailyCloses.size(), conIds.size());
